@@ -87,7 +87,12 @@ def disease(source: Path, destination: Path) -> None:
     # 5. pivoting the values into columns
     # 6. creating a struct with the synonyms, first filling nulls
     # 7. selecting the columns
-    synonym_columns = ['hasExactSynonym', 'hasRelatedSynonym', 'hasNarrowSynonym', 'hasBroadSynonym']
+    synonym_columns = [
+        'hasExactSynonym',
+        'hasRelatedSynonym',
+        'hasNarrowSynonym',
+        'hasBroadSynonym',
+    ]
     synonyms = (
         n_location_ids['id', 'synonyms']
         .explode('synonyms')
@@ -124,7 +129,9 @@ def disease(source: Path, destination: Path) -> None:
         n_location_ids.drop('synonyms')
         .join(synonyms, on='id', how='left')
         .with_columns(
-            synonyms=pl.col('synonyms').fill_null(pl.Series([empty_struct], dtype=pl.Struct(synonym_schema))),
+            synonyms=pl.col('synonyms').fill_null(
+                pl.Series([empty_struct], dtype=pl.Struct(synonym_schema))
+            ),
         )
     )
 
@@ -180,8 +187,12 @@ def disease(source: Path, destination: Path) -> None:
             how='left',
         )
         .with_columns(
-            obsoleteTerms=pl.col('obsoleteTerms').fill_null(pl.Series([[]], dtype=pl.List(pl.String))),
-            obsoleteXRefs=pl.col('obsoleteXRefs').fill_null(pl.Series([[]], dtype=pl.List(pl.String))),
+            obsoleteTerms=pl.col('obsoleteTerms').fill_null(
+                pl.Series([[]], dtype=pl.List(pl.String))
+            ),
+            obsoleteXRefs=pl.col('obsoleteXRefs').fill_null(
+                pl.Series([[]], dtype=pl.List(pl.String))
+            ),
         )
     )
 
@@ -287,7 +298,8 @@ def disease(source: Path, destination: Path) -> None:
         )
     )
 
-    # get descendants by exploding the ancestors column, making it the new id and then aggregating by the old id
+    # get descendants by exploding the ancestors column, making it the new idand then aggregating
+    # by the old id
     descendants_grouped = (
         all_ancestors.select(
             pl.col('ancestor').alias('id'),

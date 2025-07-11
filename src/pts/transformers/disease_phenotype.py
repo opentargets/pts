@@ -15,11 +15,11 @@ def disease_phenotype(source: list[Path], destination: Path) -> None:
     mondo_path = source[2]
 
     # NOTE: This code is horrible. We have to figure out a way to make this in
-    # a better way. Ontologies are very messy. Relationships are all over the
+    # a better way. Ontology links are very messy. Relationships are all over the
     # place, ids have different forms, links are indirect, etc.
     # A good idea would be to first gather all the crossrefs for each entity from
     # the multiple different places they can be, normalize them, and then perform
-    # the join after. Right now it has been down slowly and painfully.
+    # the join after. Right now it has been done slowly and painfully.
     #
     # Abandon all hope, ye who enter here.
 
@@ -51,7 +51,9 @@ def disease_phenotype(source: list[Path], destination: Path) -> None:
         .with_columns(
             id=pl.col('sub').str.split('/').list.last(),
             phenotype=pl.col('obj').str.split('/').list.last(),
-            xrefs=pl.col('meta').struct.field('basicPropertyValues').list.eval(pl.element().struct.field('val')),
+            xrefs=pl.col('meta')
+            .struct.field('basicPropertyValues')
+            .list.eval(pl.element().struct.field('val')),
         )
     )
 
@@ -65,7 +67,9 @@ def disease_phenotype(source: list[Path], destination: Path) -> None:
     )
 
     # extract the short id from mondo_nodes for joining
-    mondo_nodes_with_short_id = mondo_nodes.with_columns(short_id=pl.col('id').str.split('/').list.last())
+    mondo_nodes_with_short_id = mondo_nodes.with_columns(
+        short_id=pl.col('id').str.split('/').list.last()
+    )
 
     # then modify mondo_clean definition to join on the short id
     mondo_clean = (
@@ -86,7 +90,10 @@ def disease_phenotype(source: list[Path], destination: Path) -> None:
                 pl.col('xrefs')
                 .list.eval(pl.element().struct.field('val').str.replace(':', '_').unique())
                 .fill_null([]),
-                pl.col('definition').struct.field('xrefs').list.eval(pl.element().str.replace(':', '_')).fill_null([]),
+                pl.col('definition')
+                .struct.field('xrefs')
+                .list.eval(pl.element().str.replace(':', '_'))
+                .fill_null([]),
                 pl.when(pl.col('phenotype_xrefs').is_not_null())
                 .then(pl.col('phenotype_xrefs').list.eval(pl.element().str.replace(':', '_')))
                 .otherwise(pl.lit([])),
