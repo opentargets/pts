@@ -276,7 +276,10 @@ def process_variants(spark: SparkSession, dataset_path: str) -> DataFrame:
             'exploded_consequences.variantFunctionalConsequenceIds',
             # DO NOT explode ambigious uniprot accessions:
             f.expr(
-                'array_sort(exploded_consequences.uniprotAccessions, (left, right) -> CASE WHEN length(left) <= length(right) THEN -1 ELSE 1 END)'
+                'array_sort(exploded_consequences.uniprotAccessions, '
+                '(left, right) -> CASE '
+                'WHEN length(left) <= length(right) THEN -1 '
+                'ELSE 1 END)'
             ).alias('uniprotAccessions'),
             # Extracting amino acids and positions:
             *parse_amino_acid_change(f.col('exploded_consequences.aminoAcidChange')),
@@ -332,7 +335,7 @@ def order_struct_list(column: str, field: str, ascending: bool = True) -> Column
         Column: A column with the ordered list of structs.
     """
     return f.expr(f"""
-        array_sort({column}, (left, right) -> 
+        array_sort({column}, (left, right) ->
             CASE
                 WHEN left.{field} < right.{field} THEN {1 if ascending else -1}
                 WHEN left.{field} > right.{field} THEN {-1 if ascending else 1}
