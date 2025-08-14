@@ -57,6 +57,17 @@ steps:
 
   ##################################################################################################
 
+  #: CODING VARIANT VIEW STEP :########################################################################
+  coding_variant_view:
+    - name: pyspark generate view on coding variants
+      source:
+        destination: output/
+      destination:
+        output: view/coding_variant_table
+      pyspark: coding_variant_view
+
+  ##################################################################################################
+
   #: OPENFDA STEP :#################################################################################
   openfda:
     - name: explode_glob transform openfda drug events

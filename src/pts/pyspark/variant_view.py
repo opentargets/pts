@@ -13,15 +13,24 @@ if TYPE_CHECKING:
     from pyspark.sql import SparkSession
 
 
-def coding_variant_view(dataset_path: str, output_dataset: str) -> None:
+def coding_variant_view(
+    source: dict[str, str],
+    destination: dict[str, str],
+    properties: dict[str, str] | None,
+) -> None:
     """Generate view on coding variants with their functional context.
 
     Args:
-        dataset_path (str): path where ETL outputs are located.
-        output_dataset (str): output name.
+        source (dict[str, str]): Source paths for input datasets.
+        destination (dict[str, str]): Destination paths for output datasets.
+        properties (dict[str, str] | None): Spark session properties.
     """
     # Starting spark session.
-    session = Session()
+    session = Session(app_name='coding_variant_view', properties=properties)
+
+    # Extracting input dataset location:
+    dataset_path = source['dataset_path']
+    output_dataset = destination['output']
 
     # Extracting variants with amino acid change:
     variants_with_amino_acid_effect = process_variants(session.spark, dataset_path)
@@ -121,7 +130,7 @@ def coding_variant_view(dataset_path: str, output_dataset: str) -> None:
     )
 
 
-def process_target_index(spark: SparkSession, dataset_path) -> DataFrame:
+def process_target_index(spark: SparkSession, dataset_path: str) -> DataFrame:
     """Read target index and extract relevant columns.
 
     Args:
@@ -240,7 +249,15 @@ def parse_variant_effect(variant_effect: Column) -> Column:
 
 
 def process_variants(spark: SparkSession, dataset_path: str) -> DataFrame:
-    """Get all protein coding variants with their consequences."""
+    """Get all protein coding variants with their consequences.
+
+    Args:
+        spark (SparkSession): Spark session.
+        dataset_path (str): Path to the ETL output datasets.
+
+    Returns:
+        DataFrame: DataFrame containing variants with amino acid effects.
+    """
     return (
         spark.read.parquet(f'{dataset_path}/variant')
         # Filter for certain variant consequence types:
@@ -268,6 +285,16 @@ def process_variants(spark: SparkSession, dataset_path: str) -> DataFrame:
 
 
 def process_evidence(spark: SparkSession, diseases: DataFrame, dataset_path: str) -> DataFrame:
+    """Get all evidence supported by variants.
+
+    Args:
+        spark (SparkSession): Spark session.
+        diseases (DataFrame): DataFrame containing diseases.
+        dataset_path (str): Path to the ETL output datasets.
+
+    Returns:
+        DataFrame: DataFrame containing evidence supported by variants.
+    """
     # Extracting variant effect:
     evidence_columns: list[str | Column] = [
         'datasourceId',
