@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -123,6 +123,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ff/ff/6fff20bf2632727af55dc3a24a6f5634dcdf34fd785402a55207ba49d9cc/deptry-0.23.0-cp39-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:9a46f78098f145100dc582a59af8548b26cdfa16cf0fbd85d2d44645e724cb6a", size = 2004755, upload-time = "2025-01-25T17:01:36.842Z" },
     { url = "https://files.pythonhosted.org/packages/41/30/1b6217bdccf2144d4c3e78f89b2a84db82478b2449599c2d3b4b21a89043/deptry-0.23.0-cp39-abi3-win_amd64.whl", hash = "sha256:d53e803b280791d89a051b6183d9dc40411200e22a8ab7e6c32c6b169822a664", size = 1606944, upload-time = "2025-01-25T17:01:54.326Z" },
     { url = "https://files.pythonhosted.org/packages/28/ab/47398041d11b19aa9db28f28cf076dbe42aba3e16d67d3e7911330e3a304/deptry-0.23.0-cp39-abi3-win_arm64.whl", hash = "sha256:da7678624f4626d839c8c03675452cefc59d6cf57d25c84a9711dae514719279", size = 1518394, upload-time = "2025-01-25T17:01:49.099Z" },
+]
+
+[[package]]
+name = "dill"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/80/630b4b88364e9a8c8c5797f4602d0f76ef820909ee32f0bacb9f90654042/dill-0.4.0.tar.gz", hash = "sha256:0633f1d2df477324f53a895b02c901fb961bdbf65a17122586ea7019292cbcf0", size = 186976, upload-time = "2025-04-16T00:41:48.867Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/3d/9373ad9c56321fdab5b41197068e1d8c25883b3fea29dd361f9b55116869/dill-0.4.0-py3-none-any.whl", hash = "sha256:44f54bf6412c2c8464c14e8243eb163690a9800dbe2c367330883b19c7561049", size = 119668, upload-time = "2025-04-16T00:41:47.671Z" },
+]
+
+[[package]]
+name = "fastjsonschema"
+version = "2.21.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
 ]
 
 [[package]]
@@ -265,6 +283,23 @@ wheels = [
 ]
 
 [[package]]
+name = "multiprocess"
+version = "0.70.18"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dill" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/fd/2ae3826f5be24c6ed87266bc4e59c46ea5b059a103f3d7e7eb76a52aeecb/multiprocess-0.70.18.tar.gz", hash = "sha256:f9597128e6b3e67b23956da07cf3d2e5cba79e2f4e0fba8d7903636663ec6d0d", size = 1798503, upload-time = "2025-04-17T03:11:27.742Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/d8/0cba6cf51a1a31f20471fbc823a716170c73012ddc4fb85d706630ed6e8f/multiprocess-0.70.18-py310-none-any.whl", hash = "sha256:60c194974c31784019c1f459d984e8f33ee48f10fcf42c309ba97b30d9bd53ea", size = 134948, upload-time = "2025-04-17T03:11:20.223Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/88/9039f2fed1012ef584751d4ceff9ab4a51e5ae264898f0b7cbf44340a859/multiprocess-0.70.18-py311-none-any.whl", hash = "sha256:5aa6eef98e691281b3ad923be2832bf1c55dd2c859acd73e5ec53a66aae06a1d", size = 144462, upload-time = "2025-04-17T03:11:21.657Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/b6/5f922792be93b82ec6b5f270bbb1ef031fd0622847070bbcf9da816502cc/multiprocess-0.70.18-py312-none-any.whl", hash = "sha256:9b78f8e5024b573730bfb654783a13800c2c0f2dfc0c25e70b40d184d64adaa2", size = 150287, upload-time = "2025-04-17T03:11:22.69Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/25/7d7e78e750bc1aecfaf0efbf826c69a791d2eeaf29cf20cba93ff4cced78/multiprocess-0.70.18-py313-none-any.whl", hash = "sha256:871743755f43ef57d7910a38433cfe41319e72be1bbd90b79c7a5ac523eb9334", size = 151917, upload-time = "2025-04-17T03:11:24.044Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/c3/ca84c19bd14cdfc21c388fdcebf08b86a7a470ebc9f5c3c084fc2dbc50f7/multiprocess-0.70.18-py38-none-any.whl", hash = "sha256:dbf705e52a154fe5e90fb17b38f02556169557c2dd8bb084f2e06c2784d8279b", size = 132636, upload-time = "2025-04-17T03:11:24.936Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/28/dd72947e59a6a8c856448a5e74da6201cb5502ddff644fbc790e4bd40b9a/multiprocess-0.70.18-py39-none-any.whl", hash = "sha256:e78ca805a72b1b810c690b6b4cc32579eba34f403094bbbae962b7b5bf9dfcb8", size = 133478, upload-time = "2025-04-17T03:11:26.253Z" },
+]
+
+[[package]]
 name = "opentargets-otter"
 version = "25.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -283,12 +318,40 @@ wheels = [
 ]
 
 [[package]]
+name = "opentargets-validator"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastjsonschema" },
+    { name = "pathos" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/69/d1/9fb4452139200e3b17286ca1c5c3eaaba4c2b98a836321d85f690a49bb57/opentargets-validator-1.0.0.tar.gz", hash = "sha256:7908b649a82f7d45d2e1e4a32b35e4ae1ffbdd32cb3060e38d2155af45da717f", size = 10183, upload-time = "2023-09-18T09:52:22.68Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/dd/d3452d4ec60568f319b2c724fb23bbdd67e0dcd6d2d5077861679a2d9d10/opentargets_validator-1.0.0-py3-none-any.whl", hash = "sha256:932dc2f4de60858cc2183f67c8548c250e87d3df2800b93cfd702afd3576cca5", size = 10856, upload-time = "2023-09-18T09:52:21.511Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a1/d4/1fc4078c65507b51b96ca8f8c3ba19e6a61c8253c72794544580a7b6c24d/packaging-25.0.tar.gz", hash = "sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f", size = 165727, upload-time = "2025-04-19T11:48:59.673Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/12/38679034af332785aac8774540895e234f4d07f7545804097de4b666afd8/packaging-25.0-py3-none-any.whl", hash = "sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484", size = 66469, upload-time = "2025-04-19T11:48:57.875Z" },
+]
+
+[[package]]
+name = "pathos"
+version = "0.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dill" },
+    { name = "multiprocess" },
+    { name = "pox" },
+    { name = "ppft" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/be/90/fdbe3bbfe79933db439e1844083cb6e9d5a9d3b686738549b3d22d06eae7/pathos-0.3.4.tar.gz", hash = "sha256:bad4912d0ef865654a7cc478da65f2e1d5b69f3d92c4a7d9c9845657783c0754", size = 167076, upload-time = "2025-04-17T03:37:08.234Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/11/0a/daece46e65c821d153746566a1604ac90338f0279b1fb858a3617eb60472/pathos-0.3.4-py3-none-any.whl", hash = "sha256:fe44883448c05c80d518b61df491b496f6190bb6860253f3254d8c9afb53c340", size = 82261, upload-time = "2025-04-17T03:37:06.936Z" },
 ]
 
 [[package]]
@@ -312,6 +375,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/20/e8/a6bdfe7b687c1fe84bceb1f854c43415eaf0d2fdf3c679a9dc9c4776e462/polars-1.31.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:b324e6e3e8c6cc6593f9d72fe625f06af65e8d9d47c8686583585533a5e731e1", size = 32260836, upload-time = "2025-06-18T11:59:52.543Z" },
     { url = "https://files.pythonhosted.org/packages/6e/f6/9d9ad9dc4480d66502497e90ce29efc063373e1598f4bd9b6a38af3e08e7/polars-1.31.0-cp39-abi3-win_amd64.whl", hash = "sha256:3fd874d3432fc932863e8cceff2cff8a12a51976b053f2eb6326a0672134a632", size = 35156211, upload-time = "2025-06-18T11:59:55.805Z" },
     { url = "https://files.pythonhosted.org/packages/40/4b/0673a68ac4d6527fac951970e929c3b4440c654f994f0c957bd5556deb38/polars-1.31.0-cp39-abi3-win_arm64.whl", hash = "sha256:62ef23bb9d10dca4c2b945979f9a50812ac4ace4ed9e158a6b5d32a7322e6f75", size = 31469078, upload-time = "2025-06-18T11:59:59.242Z" },
+]
+
+[[package]]
+name = "pox"
+version = "0.3.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/99/42670d273fd598a6fe98c8b2f593ee425b29e44f2d1a61ff622031204ccd/pox-0.3.6.tar.gz", hash = "sha256:84eeed39600159a62804aacfc00e353edeaae67d8c647ccaaab73a6efed3f605", size = 119393, upload-time = "2025-04-16T00:05:49.811Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/c2/6435789c26661bef699868ee54d2763aea636a1ed21ec8e350b1f9f65888/pox-0.3.6-py3-none-any.whl", hash = "sha256:d48654d0a3dca0c9c02dccae54a53c3870286a5217ad306b2bd94f84e008bc1b", size = 29495, upload-time = "2025-04-16T00:05:48.319Z" },
+]
+
+[[package]]
+name = "ppft"
+version = "1.7.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/46/9e9f2ae7e8e284acbde6ab36f7f4a35b273519a60c0ed419af2da780d49f/ppft-1.7.7.tar.gz", hash = "sha256:f3f77448cfe24c2b8d2296b6d8732280b25041a3f3e1f551856c6451d3e01b96", size = 136272, upload-time = "2025-04-16T01:47:40.925Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/23/6aef7c24f4ee6f765aeaaaa3bf24cfdb0730a20336a02b1a061d227d84be/ppft-1.7.7-py3-none-any.whl", hash = "sha256:fb7524db110682de886b4bb5b08f7bf6a38940566074ef2f62521cbbd3864676", size = 56764, upload-time = "2025-04-16T01:47:39.453Z" },
 ]
 
 [[package]]
@@ -347,6 +428,7 @@ source = { editable = "." }
 dependencies = [
     { name = "loguru" },
     { name = "opentargets-otter" },
+    { name = "opentargets-validator" },
     { name = "polars" },
     { name = "pyspark" },
 ]
@@ -369,6 +451,7 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = "==7.9.1" },
     { name = "loguru", specifier = "==0.7.3" },
     { name = "opentargets-otter", specifier = ">=25.0.4" },
+    { name = "opentargets-validator", specifier = ">=1.0.0" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
