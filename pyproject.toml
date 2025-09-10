@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "loguru==0.7.3",
+  "ontoma>=1.0.0",
   "opentargets-otter>=25.0.4",
   "polars==1.31.0",
   "pyspark>=4.0.0",
+  "requests>=2.31.0",
 ]
 
 [dependency-groups]
