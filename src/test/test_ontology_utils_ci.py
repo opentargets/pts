@@ -6,8 +6,6 @@ might not be available, focusing on the core functionality without Spark depende
 import os
 from unittest.mock import Mock, patch
 
-import pytest
-
 from pts.utils.ontology import (
     ONTOMA_MAX_ATTEMPTS,
     _ontoma_udf,
