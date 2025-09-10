@@ -10,11 +10,25 @@ from pyspark.sql.types import StringType, StructField, StructType
 
 # Check if Java is available for Spark
 
-try:
-    subprocess.run(['java', '-version'], capture_output=True, check=True)
-    SPARK_AVAILABLE = True
-except (subprocess.CalledProcessError, FileNotFoundError):
-    SPARK_AVAILABLE = False
+def _is_java_available():
+    """Check if Java is available for Spark."""
+    # Check if we're in a CI environment that explicitly disables Spark
+    if os.environ.get('SKIP_SPARK_TESTS', '').lower() in ('true', '1', 'yes'):
+        return False
+    
+    # Check for common CI environment variables
+    ci_env_vars = ['CI', 'GITHUB_ACTIONS', 'GITLAB_CI', 'JENKINS_URL', 'BUILDKITE', 'TRAVIS']
+    if any(os.environ.get(var) for var in ci_env_vars):
+        # In CI, be more conservative and check Java availability
+        pass
+    
+    try:
+        result = subprocess.run(['java', '-version'], capture_output=True, check=True, timeout=10)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+SPARK_AVAILABLE = _is_java_available()
 
 from pts.utils.ontology import (
     ONTOMA_MAX_ATTEMPTS,
@@ -184,6 +198,7 @@ class TestOntomaUdf:
 
 
 @pytest.mark.skipif(not SPARK_AVAILABLE, reason='Java not available for Spark')
+@pytest.mark.spark
 class TestAddEfoMapping:
     """Test the add_efo_mapping function."""
 
