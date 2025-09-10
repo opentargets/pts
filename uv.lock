@@ -319,15 +319,15 @@ wheels = [
 
 [[package]]
 name = "opentargets-validator"
-version = "1.0.0"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastjsonschema" },
     { name = "pathos" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/d1/9fb4452139200e3b17286ca1c5c3eaaba4c2b98a836321d85f690a49bb57/opentargets-validator-1.0.0.tar.gz", hash = "sha256:7908b649a82f7d45d2e1e4a32b35e4ae1ffbdd32cb3060e38d2155af45da717f", size = 10183, upload-time = "2023-09-18T09:52:22.68Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/ce/7774066125bf1cd3109d0277f7f93aa552cf34b0c29ee61eaf67efd08b9a/opentargets_validator-1.0.1.tar.gz", hash = "sha256:1f02b5bbb140fefabf39c4fe77dc81a0a23fd03a487d2d2eb4d081d77995f5cd", size = 13528, upload-time = "2025-09-10T08:48:05.007Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/dd/d3452d4ec60568f319b2c724fb23bbdd67e0dcd6d2d5077861679a2d9d10/opentargets_validator-1.0.0-py3-none-any.whl", hash = "sha256:932dc2f4de60858cc2183f67c8548c250e87d3df2800b93cfd702afd3576cca5", size = 10856, upload-time = "2023-09-18T09:52:21.511Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/37/596b35f483d14ce9c7dc2bc31165129e9d905716f0e04d1a7c7cebeffc14/opentargets_validator-1.0.1-py3-none-any.whl", hash = "sha256:5aea06b05cbc350cfd7c22fc19bc290c97f9a0042ef4e9afbd8b86f4f0acb203", size = 11229, upload-time = "2025-09-10T08:48:03.985Z" },
 ]
 
 [[package]]
@@ -451,7 +451,7 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = "==7.9.1" },
     { name = "loguru", specifier = "==0.7.3" },
     { name = "opentargets-otter", specifier = ">=25.0.4" },
-    { name = "opentargets-validator", specifier = ">=1.0.0" },
+    { name = "opentargets-validator", specifier = ">=1.0.1" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
