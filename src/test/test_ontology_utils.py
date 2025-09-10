@@ -1,7 +1,6 @@
 """Tests for the ontology utility module."""
 import os
-import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -204,7 +203,7 @@ class TestAddEfoMapping:
              patch.object(sample_evidence_df, 'select') as mock_select, \
              patch.object(sample_evidence_df, 'distinct') as mock_distinct, \
              patch.object(mock_distinct, 'toPandas', return_value=pd.DataFrame()), \
-             patch('pts.utils.ontology.pandarallel') as mock_pandarallel:
+             patch('pts.utils.ontology.pandarallel'):
 
             # Setup mocks
             mock_ontoma_instance = Mock()
@@ -260,8 +259,9 @@ class TestAddEfoMapping:
              patch.object(sample_evidence_df, 'toPandas', return_value=pd.DataFrame()):
 
             mock_ontoma_class.return_value = Mock()
-            add_efo_mapping(sample_evidence_df, spark_session, ontoma_cache_dir='/tmp/cache')
-            mock_ontoma_class.assert_called_with(cache_dir='/tmp/cache', efo_release='latest')
+            test_cache_dir = '/mock/cache/dir'  # Mock directory for testing
+            add_efo_mapping(sample_evidence_df, spark_session, ontoma_cache_dir=test_cache_dir)
+            mock_ontoma_class.assert_called_with(cache_dir=test_cache_dir, efo_release='latest')
 
     def test_empty_evidence_dataframe(self, spark_session):
         """Test handling of empty evidence DataFrame."""
