@@ -19,7 +19,7 @@ dependencies = [
 dev = ["deptry==0.23.0", "ruff==0.12.2"]
 
 [project.optional-dependencies]
-test = ["pytest==8.4.1", "coverage==7.9.1", "pytest-mock==3.14.1"]
+test = ["pytest==8.4.1", "coverage==7.9.1"]
 
 [project.scripts]
 pts = "pts.core:main"
@@ -177,3 +177,8 @@ parametrize-values-row-type = 'tuple'
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 ignore-decorators = ["pts.tasks.report", "pts.manifest.task_reporter.report"]
+
+[tool.deptry]
+pep621_dev_dependency_groups = ["test"]
+# Ignore coverage (CLI tool in Makefile) and pytest (used in test files)
+per_rule_ignores = { "DEP002" = ["coverage"], "DEP004" = ["pytest"] }
