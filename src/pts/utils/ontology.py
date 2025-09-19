@@ -3,11 +3,11 @@
 This module provides functionality to map disease information to EFO (Experimental Factor Ontology)
 using the OnToma library. It includes retry logic and parallel processing capabilities.
 """
-import logging
 import os
 import random
 import time
 
+from loguru import logger
 from numpy import nan
 from ontoma.interface import OnToma
 from pandarallel import pandarallel
@@ -27,7 +27,7 @@ def _simple_retry(func, **kwargs):
             # If this is not the last attempt, wait until the next one.
             if attempt != ONTOMA_MAX_ATTEMPTS:
                 time.sleep(5 + 10 * random.random())
-    logging.getLogger(__name__).error(f'OnToma lookup failed for {kwargs!r}')
+    logger.error(f'OnToma lookup failed for {kwargs!r}')
     return []
 
 
@@ -54,7 +54,7 @@ def add_efo_mapping(evidence_strings, spark_instance, ontoma_cache_dir=None, efo
     Currently, both source columns (diseaseFromSource and diseaseFromSourceId) need to be present in the original
     schema, although they do not have to be populated for all rows.
     """
-    logging.getLogger(__name__).info('Collect all distinct (disease name, disease ID) pairs.')
+    logger.info('Collect all distinct (disease name, disease ID) pairs.')
     disease_info_to_map = evidence_strings.select('diseaseFromSource', 'diseaseFromSourceId').distinct().toPandas()
 
     # If no EFO version is specified:
@@ -64,13 +64,13 @@ def add_efo_mapping(evidence_strings, spark_instance, ontoma_cache_dir=None, efo
             efo_version = os.environ['EFO_VERSION']
         # Set default version to latest.
         else:
-            logging.getLogger(__name__).warning('No EFO version specified. Using latest version.')
+            logger.warning('No EFO version specified. Using latest version.')
             efo_version = 'latest'
 
-    logging.getLogger(__name__).info(f'Initialise OnToma instance. Using EFO version {efo_version}')
+    logger.info(f'Initialise OnToma instance. Using EFO version {efo_version}')
     ontoma_instance = OnToma(cache_dir=ontoma_cache_dir, efo_release=efo_version)
 
-    logging.getLogger(__name__).info('Map disease information to EFO.')
+    logger.info('Map disease information to EFO.')
     disease_info_to_map['diseaseFromSourceMappedId'] = disease_info_to_map.parallel_apply(
         _ontoma_udf, args=(ontoma_instance,), axis=1
     )
@@ -80,7 +80,7 @@ def add_efo_mapping(evidence_strings, spark_instance, ontoma_cache_dir=None, efo
         .fillna(nan).replace([nan], [None])
     )
 
-    logging.getLogger(__name__).info('Join the resulting information into the evidence strings.')
+    logger.info('Join the resulting information into the evidence strings.')
     schema = StructType(
         [
             StructField('diseaseFromSource_right', StringType(), True),
