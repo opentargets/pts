@@ -535,6 +535,7 @@ dependencies = [
     { name = "ontoma" },
     { name = "opentargets-otter" },
     { name = "pandarallel" },
+    { name = "pandas" },
     { name = "polars" },
     { name = "pyspark" },
 ]
@@ -560,6 +561,7 @@ requires-dist = [
     { name = "ontoma", specifier = ">=1.0.0" },
     { name = "opentargets-otter", specifier = ">=25.0.4" },
     { name = "pandarallel", specifier = ">=1.6.0" },
+    { name = "pandas", specifier = ">=2.3.2" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
