@@ -59,7 +59,9 @@ def clingen(
     )
 
     logger.info('map clingen disease labels')
-    mapped_evidence_df = add_efo_mapping(evidence_strings=evidence_df, spark_instance=spark, efo_version=efo_version)
+    mapped_evidence_df = add_efo_mapping(
+        evidence_strings=evidence_df, spark_instance=spark.spark, efo_version=efo_version
+    )
 
     logger.info(f'write clingen evidence strings to {destination}')
     mapped_evidence_df.write.parquet(destination, mode='overwrite')
