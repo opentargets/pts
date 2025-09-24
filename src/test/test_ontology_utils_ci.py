@@ -25,20 +25,18 @@ class TestSimpleRetryCI:
         assert result == 10
 
     def test_retry_on_failure(self):
-        """Test that the function retries on failure and eventually succeeds."""
+        """Test that the function fails immediately with 1 max attempt."""
         call_count = 0
 
         def mock_func():
             nonlocal call_count
             call_count += 1
-            if call_count < 3:
-                raise Exception('Temporary failure')
-            return 'success'
+            raise Exception('Failure')
 
         with patch('time.sleep'):  # Mock sleep to speed up test
             result = _simple_retry(mock_func)
-            assert result == 'success'
-            assert call_count == 3
+            assert result == []  # Should return empty list after 1 failed attempt
+            assert call_count == 1
 
     def test_max_attempts_reached(self):
         """Test that the function returns empty list after max attempts."""
@@ -177,19 +175,18 @@ class TestEdgeCasesCI:
 
     def test_ontoma_max_attempts_constant(self):
         """Test that ONTOMA_MAX_ATTEMPTS constant is defined correctly."""
-        assert ONTOMA_MAX_ATTEMPTS == 3
+        assert ONTOMA_MAX_ATTEMPTS == 1
 
     def test_retry_sleep_timing(self):
-        """Test that retry includes appropriate sleep timing."""
+        """Test that retry doesn't sleep with 1 max attempt."""
         def mock_func():
             raise Exception('Test exception')
 
         with patch('time.sleep') as mock_sleep, \
              patch('random.random', return_value=0.5):
             _simple_retry(mock_func)
-            # Should sleep 2 times (max attempts - 1 = 3 - 1 = 2)
-            assert mock_sleep.call_count == 2
-            assert all(call[0][0] == 10.0 for call in mock_sleep.call_args_list)
+            # Should not sleep with only 1 attempt
+            assert mock_sleep.call_count == 0
 
     def test_multiple_mappings_explosion(self):
         """Test that multiple mappings are properly handled."""
