@@ -9,61 +9,44 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 def test_module_import():
     """Test that the ontology module can be imported."""
-    try:
-        from pts.utils.ontology import ONTOMA_MAX_ATTEMPTS, _ontoma_udf, _simple_retry, add_efo_mapping
-        assert ONTOMA_MAX_ATTEMPTS == 3
-        assert callable(_simple_retry)
-        assert callable(_ontoma_udf)
-        assert callable(add_efo_mapping)
-        print('✓ All ontology module functions imported successfully')
-        return True
-    except ImportError as e:
-        print(f'✗ Import failed: {e}')
-        return False
+    from pts.utils.ontology import ONTOMA_MAX_ATTEMPTS, _ontoma_udf, _simple_retry, add_efo_mapping
+    assert ONTOMA_MAX_ATTEMPTS == 1
+    assert callable(_simple_retry)
+    assert callable(_ontoma_udf)
+    assert callable(add_efo_mapping)
+    print('✓ All ontology module functions imported successfully')
 
 
 def test_retry_function_basic():
     """Test basic functionality of _simple_retry without external dependencies."""
-    try:
-        from pts.utils.ontology import _simple_retry
+    from pts.utils.ontology import _simple_retry
 
-        # Test successful function
-        def success_func(x):
-            return x * 2
+    # Test successful function
+    def success_func(x):
+        return x * 2
 
-        result = _simple_retry(success_func, x=5)
-        assert result == 10
-        print('✓ _simple_retry works with successful functions')
+    result = _simple_retry(success_func, x=5)
+    assert result == 10
+    print('✓ _simple_retry works with successful functions')
 
-        # Test failing function (should return empty list after max attempts)
-        def fail_func():
-            raise Exception('Test failure')
+    # Test failing function (should return empty list after max attempts)
+    def fail_func():
+        raise Exception('Test failure')
 
-        result = _simple_retry(fail_func)
-        assert result == []
-        print('✓ _simple_retry handles failures correctly')
-
-        return True
-    except Exception as e:
-        print(f'✗ _simple_retry test failed: {e}')
-        return False
+    result = _simple_retry(fail_func)
+    assert result == []
+    print('✓ _simple_retry handles failures correctly')
 
 
 def test_ontoma_udf_basic():
     """Test basic functionality of _ontoma_udf without external dependencies."""
-    try:
-        from pts.utils.ontology import _ontoma_udf
+    from pts.utils.ontology import _ontoma_udf
 
-        # Test with empty row
-        row = {'diseaseFromSource': None, 'diseaseFromSourceId': None}
-        result = _ontoma_udf(row, None)
-        assert result == []
-        print('✓ _ontoma_udf handles empty rows correctly')
-
-        return True
-    except Exception as e:
-        print(f'✗ _ontoma_udf test failed: {e}')
-        return False
+    # Test with empty row
+    row = {'diseaseFromSource': None, 'diseaseFromSourceId': None}
+    result = _ontoma_udf(row, None)
+    assert result == []
+    print('✓ _ontoma_udf handles empty rows correctly')
 
 
 def run_simple_tests():
@@ -81,8 +64,11 @@ def run_simple_tests():
     total = len(tests)
 
     for test in tests:
-        if test():
+        try:
+            test()
             passed += 1
+        except Exception as e:
+            print(f'✗ Test {test.__name__} failed: {e}')
         print()
 
     print('=' * 50)
