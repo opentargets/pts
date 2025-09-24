@@ -131,3 +131,23 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  evidence:
+    - name: pyspark impc
+      source:
+        solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
+        solr_ontology_ontology: input/evidence/impc/impc_solr_ontology_ontology.csv
+        solr_mouse_model: input/evidence/impc/impc_solr_mouse_model.csv
+        solr_disease: input/evidence/impc/impc_solr_disease.csv
+        solr_disease_model_summary: input/evidence/impc/impc_solr_disease_model_summary.csv
+        solr_ontology: input/evidence/impc/impc_solr_ontology.csv
+        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.json
+        mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
+        mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
+        mp_ontology: input/evidence/impc/mp.owl
+      destination: intermediate/evidence/impc.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+        score_cutoff: "0.41"
+      pyspark: impc
