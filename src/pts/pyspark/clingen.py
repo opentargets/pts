@@ -14,7 +14,8 @@ def clingen(
     properties: dict[str, str],
 ) -> DataFrame:
     spark = Session(app_name='clingen', properties=properties)
-    efo_version = properties.get('efo_version')
+    efo_version = properties['efo_version']
+    cores = int(properties.get('ontology_cores', 1))
 
     logger.info(f'load data from {source}')
     # Load CSV without header since we need to skip metadata rows
@@ -60,10 +61,7 @@ def clingen(
 
     logger.info('map clingen disease labels')
     mapped_evidence_df = add_efo_mapping(
-        evidence_strings=evidence_df,
-        spark_instance=spark.spark,
-        efo_version=efo_version,
-        nb_workers=1,  # Force sequential processing to avoid macOS crashes
+        evidence_strings=evidence_df, spark_instance=spark.spark, efo_version=efo_version, cores=cores
     )
 
     logger.info(f'write clingen evidence strings to {destination}')
