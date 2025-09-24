@@ -3,6 +3,7 @@ work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
 pool: 8
+efo_version: v3.81.0
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -131,3 +132,12 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  evidence:
+    - name: pyspark clingen
+      source:
+        evidence: input/evidence/clingen.csv
+      destination: intermediate/evidence/clingen.parquet
+      properties:
+        efo_version: v3.81.0
+      pyspark: clingen
