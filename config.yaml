@@ -52,13 +52,24 @@ steps:
 
   #: MOUSE_PHENOTYPES STEP :########################################################################
   mouse_phenotype:
-    - name: pyspark separate into output and excluded
+    - name: pyspark generate from IMPC and validate with target
       source:
         target: output/target
-        mouse_phenotype: intermediate/mouse_phenotype/mouse_phenotype.parquet
+        # IMPC source files
+        solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
+        solr_mouse_model: input/evidence/impc/impc_solr_mouse_model.csv
+        solr_disease_model_summary: input/evidence/impc/impc_solr_disease_model_summary.csv
+        solr_ontology: input/evidence/impc/impc_solr_ontology.csv
+        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.txt
+        mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
+        mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
+        mp_ontology: input/evidence/impc/mp.owl
       destination:
         output: output/mouse_phenotype
         excluded: excluded/mouse_phenotype
+      properties:
+        spark.driver.memory: 2g
+        spark.executor.memory: 1g
       pyspark: mouse_phenotype
 
   ##################################################################################################
@@ -133,7 +144,7 @@ steps:
   ##################################################################################################
 
   evidence:
-    - name: pyspark impc
+    - name: pyspark impc evidence strings
       source:
         solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
         solr_ontology_ontology: input/evidence/impc/impc_solr_ontology_ontology.csv
@@ -145,9 +156,7 @@ steps:
         mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
         mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
         mp_ontology: input/evidence/impc/mp.owl
-      destination:
-        evidence: intermediate/evidence/impc.parquet
-        mouse_phenotypes: intermediate/mouse_phenotypes.parquet
+      destination: intermediate/evidence/impc.parquet
       properties:
         # Spark params
         spark.driver.memory: 4g
