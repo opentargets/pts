@@ -21,6 +21,23 @@ def impc(
 
     # Load all required datasets
     datasets = _load_impc_datasets(spark, source)
+    datasets['disease_model_summary_transformed'] = _format_disease_model_associations(
+        datasets['disease_model_summary']
+    )
+    datasets['model_mouse_phenotypes_transformed'] = (
+        datasets['model_mouse_phenotypes']
+        .withColumn('mp_id', f.explode(f.expr(r"regexp_extract_all(model_phenotypes, '(MP:\\d+)', 1)")))
+        .select('model_id', 'mp_id')
+        # E. g. 'MGI:3800884', 'MP:0001304'.
+        .persist()
+    )
+    datasets['disease_human_phenotypes_transformed'] = (
+        datasets['disease_human_phenotypes']
+        .withColumn('hp_id', f.explode(f.expr(r"regexp_extract_all(disease_phenotypes, '(HP:\\d+)', 1)")))
+        .select('disease_id', 'hp_id')
+        # E.g. 'OMIM:609258', 'HP:0000545 Myopia'.
+        .distinct()
+    )
 
     # Process ontology terms and classifications
     mp_terms, hp_terms = _process_ontology_terms(datasets['ontology'])
@@ -28,22 +45,26 @@ def impc(
 
     # Build gene mapping from mouse to human
     gene_mapping = _build_gene_mapping(
-        datasets['mgi_gene_mappings'], datasets['mouse_to_human_gene'], datasets['hgnc_mappings']
+        datasets['mgi_gene_id_to_ensembl_mouse_gene_id'],
+        datasets['mouse_to_human_gene'],
+        datasets['hgnc_gene_id_to_ensembl_human_gene_id'],
     )
 
     # Process literature references
     literature = _process_literature_references(
-        datasets['mgi_pubmed'], datasets['disease_model_summary'], datasets['model_phenotypes']
+        datasets['mgi_pubmed'],
+        datasets['disease_model_summary_transformed'],
+        datasets['model_mouse_phenotypes_transformed'],
     )
 
     # Generate evidence strings
     logger.info('generate impc evidence strings')
     evidence = generate_impc_evidence_strings(
-        datasets['model_phenotypes'],
+        datasets['model_mouse_phenotypes_transformed'],
         datasets['mouse_to_human_phenotype'],
         mp_terms,
-        datasets['disease_model_summary'],
-        datasets['disease_phenotypes'],
+        datasets['disease_model_summary_transformed'],
+        datasets['disease_human_phenotypes_transformed'],
         hp_terms,
         gene_mapping,
         literature,
@@ -52,14 +73,14 @@ def impc(
     mapped_evidence_df = add_efo_mapping(
         evidence_strings=evidence, spark_instance=spark.spark, efo_version=efo_version, cores=mapping_cores
     )
-    final_evidence = _finalize_evidence_strings(mapped_evidence_df)
+    final_evidence = _finalise_evidence_strings(mapped_evidence_df)
     logger.info('generate mouse phenotypes dataset')
     mouse_phenotypes = generate_mouse_phenotypes_dataset(
-        datasets['disease_model_summary'],
+        datasets['disease_model_summary_transformed'],
         gene_mapping,
-        datasets['model_mouse_phenotypes'],
+        datasets['model_mouse_phenotypes_transformed'],
         mp_terms,
-        datasets['literature'],
+        literature,
         mp_class,
     )
 
@@ -69,24 +90,50 @@ def impc(
     return final_evidence, mouse_phenotypes
 
 
+def _format_disease_model_associations(disease_model_summary: DataFrame) -> DataFrame:
+    return disease_model_summary.selectExpr(
+        'model_id',
+        'model_genetic_background as biologicalModelGeneticBackground',
+        'model_description as biologicalModelAllelicComposition',
+        'disease_id',
+        'disease_term',
+        'disease_model_avg_norm',
+        'marker_id as targetInModelMgiId',
+        # In Phenodigm, the scores report the association between diseases and animal models, not genes. The
+        # phenotype similarity is computed using an algorithm called OWLSim which expresses the similarity in terms
+        # of the Jaccard Index (simJ) or Information Content (IC). Therefore, to compute the score you can take the
+        # maximum score of both analyses (disease_model_max_norm) or a combination of them both
+        # (disease_model_avg_norm). In the Results and discussion section of the Phenodigm paper, the methods are
+        # compared to a number of gold standards. It is concluded that the geometric mean of both analyses is the
+        # superior metric and should therefore be used as the score.
+        'disease_model_avg_norm as resourceScore',
+    ).distinct()
+
+
 def _load_impc_datasets(spark: Session, source: dict[str, str]) -> dict[str, DataFrame]:
     """Load all required IMPC datasets."""
     logger.info(f'load data from {source}')
     return {
         'mouse_to_human_phenotype': spark.load_data(source['solr_ontology_ontology'], format='csv', header=True),
-        'model_phenotypes': spark.load_data(source['solr_mouse_model'], format='csv', header=True),
-        'disease_phenotypes': spark.load_data(source['solr_disease'], format='csv', header=True),
+        'model_mouse_phenotypes': spark.load_data(source['solr_mouse_model'], format='csv', header=True),
+        'disease_human_phenotypes': spark.load_data(source['solr_disease'], format='csv', header=True),
         'disease_model_summary': spark.load_data(source['solr_disease_model_summary'], format='csv', header=True),
         'ontology': spark.load_data(source['solr_ontology'], format='csv', header=True),
         'mp_ontology': pronto.Ontology(source['mp_ontology']),
         'mgi_pubmed': spark.load_data(
             source['mouse_pubmed_refs'],
             format='csv',
-            schema='_0 string, _1 string, _2 string, mp_id, literature, targetInModelMgiId',
+            schema='_0 string, _1 string, _2 string, mp_id string, literature string, targetInModelMgiId string',
+            nullValue='null',
+            sep='\t',
         ),
-        'mgi_gene_mappings': spark.load_data(source['mp_ontology']),
+        'mgi_gene_id_to_ensembl_mouse_gene_id': spark.load_data(
+            source['mouse_gene_mappings'], format='csv', header=True, nullValue='null', sep='\t'
+        ),
         'mouse_to_human_gene': spark.load_data(source['solr_gene_gene'], format='csv', header=True),
-        'hgnc_mappings': spark.load_data(source['hgnc_gene_mappings']),
+        'hgnc_gene_id_to_ensembl_human_gene_id': spark.load_data(
+            source['hgnc_gene_mappings'], format='csv', header=True, nullValue='null', sep='\t'
+        ),
     }
 
 
@@ -111,7 +158,7 @@ def _create_mp_classification(mp_ontology, spark: Session) -> DataFrame:
         for mp_high_level_class in high_level_classes
         for term in mp_high_level_class.subclasses()
     ]
-    return spark.createDataFrame(
+    return spark.spark.createDataFrame(
         data=mp_class_data,
         schema=['modelPhenotypeId', 'modelPhenotypeClassId', 'modelPhenotypeClassLabel'],
         # E.g. 'MP:0000275', 'MP:0005385', 'cardiovascular system phenotype'
@@ -119,15 +166,17 @@ def _create_mp_classification(mp_ontology, spark: Session) -> DataFrame:
 
 
 def _build_gene_mapping(
-    mgi_gene_mappings: DataFrame, mouse_to_human_gene: DataFrame, hgnc_mappings: DataFrame
+    mgi_gene_id_to_ensembl_mouse_gene_id: DataFrame,
+    mouse_to_human_gene: DataFrame,
+    hgnc_gene_id_to_ensembl_human_gene_id: DataFrame,
 ) -> DataFrame:
     """Build complete gene mapping from MGI gene ID to human Ensembl ID."""
     logger.info('construct gene mapping.')
     return (
-        mgi_gene_mappings.selectExpr(
-            '1. MGI accession id as targetInModelMgiId',
-            '3. marker symbol as targetInModel',
-            '11. Ensembl gene id as targetInModelEnsemblId',
+        mgi_gene_id_to_ensembl_mouse_gene_id.selectExpr(
+            '`1. MGI accession id` as targetInModelMgiId',
+            '`3. marker symbol` as targetInModel',
+            '`11. Ensembl gene id` as targetInModelEnsemblId',
         )
         .filter(f.col('targetInModelEnsemblId').isNotNull())
         .join(
@@ -136,7 +185,9 @@ def _build_gene_mapping(
             how='inner',
         )
         .join(
-            hgnc_mappings.selectExpr('hgnc_id as hgnc_gene_id', 'ensembl_gene_id as targetFromSourceId'),
+            hgnc_gene_id_to_ensembl_human_gene_id.selectExpr(
+                'hgnc_id as hgnc_gene_id', 'ensembl_gene_id as targetFromSourceId'
+            ),
             on='hgnc_gene_id',
             how='inner',
         )
@@ -146,7 +197,7 @@ def _build_gene_mapping(
 
 
 def _process_literature_references(
-    mgi_pubmed: DataFrame, disease_model_summary: DataFrame, model_phenotypes: DataFrame
+    mgi_pubmed: DataFrame, disease_model_summary: DataFrame, model_mouse_phenotypes: DataFrame
 ) -> DataFrame:
     """Process literature references for model-gene combinations."""
     mgi_pubmed_exploded = (
@@ -159,7 +210,7 @@ def _process_literature_references(
     return (
         disease_model_summary.select('model_id', 'targetInModelMgiId')
         .distinct()
-        .join(model_phenotypes, on='model_id', how='inner')
+        .join(model_mouse_phenotypes, on='model_id', how='inner')
         .join(mgi_pubmed_exploded, on=['targetInModelMgiId', 'mp_id'], how='inner')
         .groupby('model_id', 'targetInModelMgiId')
         .agg(f.collect_set(f.col('literature')).alias('literature'))
@@ -167,7 +218,7 @@ def _process_literature_references(
     )
 
 
-def _finalize_evidence_strings(mapped_evidence: DataFrame) -> DataFrame:
+def _finalise_evidence_strings(mapped_evidence: DataFrame) -> DataFrame:
     """Remove duplicates and add final datasource/datatype columns."""
     # Keep only the record with the highest score for each unique combination
     unique_fields = [
@@ -222,7 +273,9 @@ def generate_impc_evidence_strings(
 ) -> DataFrame:
     """Generate the evidence by renaming, transforming and joining the columns."""
     # Prepare phenotype mappings
-    model_human_phenotypes = _map_model_phenotypes_to_human(model_mouse_phenotypes, mouse_phenotype_to_human_phenotype)
+    model_human_phenotypes = _map_model_mouse_phenotypes_to_human(
+        model_mouse_phenotypes, mouse_phenotype_to_human_phenotype
+    )
     all_mouse_phenotypes = _aggregate_mouse_phenotypes(model_mouse_phenotypes, mp_terms)
     matched_human_phenotypes = _find_matched_human_phenotypes(
         disease_model_summary, disease_human_phenotypes, model_human_phenotypes, hp_terms
@@ -248,71 +301,64 @@ def generate_mouse_phenotypes_dataset(
     mp_terms: DataFrame,
     literature: DataFrame,
     mp_class: DataFrame,
-    ):
+):
     """Generate the related mousePhenotypes dataset for the corresponding widget in the target object."""
     mouse_phenotypes = (
         # Extract base model-target associations.
-        disease_model_summary
-        .select('model_id', 'biologicalModelAllelicComposition', 'biologicalModelGeneticBackground',
-                'targetInModelMgiId')
+        disease_model_summary.select(
+            'model_id', 'biologicalModelAllelicComposition', 'biologicalModelGeneticBackground', 'targetInModelMgiId'
+        )
         .distinct()
-
         # Add gene mapping information.
         .join(gene_mapping, on='targetInModelMgiId', how='inner')
-
         # Add mouse phenotypes.
         .join(model_mouse_phenotypes, on='model_id', how='inner')
         .join(mp_terms, on='mp_id', how='inner')
-
         # Add literature references.
         .join(literature, on=['model_id', 'targetInModelMgiId'], how='left')
-
         # Rename fields.
         .withColumnRenamed('mp_id', 'modelPhenotypeId')
         .withColumnRenamed('mp_term', 'modelPhenotypeLabel')
-
         # Join phenotype class information.
         .join(mp_class, on='modelPhenotypeId', how='inner')
-
         # Post-process model ID field.
         .withColumn('biologicalModelId', _cleanup_model_identifier(f.col('model_id')))
     )
 
     return (
         # Convert the schema from flat to partially nested, grouping related models and phenotype classes.
-        mouse_phenotypes
-        .groupby(
-            'targetInModel', 'targetInModelMgiId', 'targetInModelEnsemblId', 'targetFromSourceId',
-            'modelPhenotypeId', 'modelPhenotypeLabel'
-        )
-        .agg(
+        mouse_phenotypes.groupby(
+            'targetInModel',
+            'targetInModelMgiId',
+            'targetInModelEnsemblId',
+            'targetFromSourceId',
+            'modelPhenotypeId',
+            'modelPhenotypeLabel',
+        ).agg(
             f.collect_set(
                 f.struct(
                     f.col('biologicalModelAllelicComposition').alias('allelicComposition'),
                     f.col('biologicalModelGeneticBackground').alias('geneticBackground'),
                     f.col('biologicalModelId').alias('id'),
-                    f.col('literature')
+                    f.col('literature'),
                 )
             ).alias('biologicalModels'),
             f.collect_set(
-                f.struct(
-                    f.col('modelPhenotypeClassId').alias('id'),
-                    f.col('modelPhenotypeClassLabel').alias('label')
-                )
-            ).alias('modelPhenotypeClasses')
+                f.struct(f.col('modelPhenotypeClassId').alias('id'), f.col('modelPhenotypeClassLabel').alias('label'))
+            ).alias('modelPhenotypeClasses'),
         )
     )
 
 
-def _map_model_phenotypes_to_human(model_phenotypes: DataFrame, phenotype_mapping: DataFrame) -> DataFrame:
+def _map_model_mouse_phenotypes_to_human(model_mouse_phenotypes: DataFrame, phenotype_mapping: DataFrame) -> DataFrame:
     """Map mouse model phenotypes into human terms."""
-    return model_phenotypes.join(phenotype_mapping, on='mp_id', how='inner').select('model_id', 'hp_id')
+    return model_mouse_phenotypes.join(phenotype_mapping, on='mp_id', how='inner').select('model_id', 'hp_id')
 
 
-def _aggregate_mouse_phenotypes(model_phenotypes: DataFrame, mp_terms: DataFrame) -> DataFrame:
+def _aggregate_mouse_phenotypes(model_mouse_phenotypes: DataFrame, mp_terms: DataFrame) -> DataFrame:
     """Aggregate all mouse phenotypes for each model."""
     return (
-        model_phenotypes.join(mp_terms, on='mp_id', how='inner')
+        model_mouse_phenotypes.join(mp_terms, on='mp_id', how='inner')
         .groupby('model_id')
         .agg(
             f.collect_set(f.struct(f.col('mp_id').alias('id'), f.col('mp_term').alias('label'))).alias(

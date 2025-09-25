@@ -141,7 +141,7 @@ steps:
         solr_disease: input/evidence/impc/impc_solr_disease.csv
         solr_disease_model_summary: input/evidence/impc/impc_solr_disease_model_summary.csv
         solr_ontology: input/evidence/impc/impc_solr_ontology.csv
-        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.json
+        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.txt
         mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
         mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
         mp_ontology: input/evidence/impc/mp.owl
@@ -149,6 +149,10 @@ steps:
         evidence: intermediate/evidence/impc.parquet
         mouse_phenotypes: intermediate/mouse_phenotype/mouse_phenotypes.parquet
       properties:
+        # Spark params
+        spark.driver.memory: 4g
+        spark.executor.memory: 2g
+        # Other params
         efo_version: v3.81.0
         ontology_cores: "1"
         score_cutoff: "0.41"
