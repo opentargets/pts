@@ -13,7 +13,7 @@ def mouse_phenotype(
 
     # load data from source paths
     logger.debug(f'loading data from: {source}')
-    df = spark.load_data(source['mouse_phenotype'], format='json')
+    df = spark.load_data(source['mouse_phenotype'])
     target_df = spark.load_data(source['target'], format='parquet')
 
     logger.debug('performing left semi join to filter data')
