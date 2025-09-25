@@ -147,7 +147,7 @@ steps:
         mp_ontology: input/evidence/impc/mp.owl
       destination:
         evidence: intermediate/evidence/impc.parquet
-        mouse_phenotypes: intermediate/mouse_phenotype/mouse_phenotypes.parquet
+        mouse_phenotypes: intermediate/mouse_phenotypes.parquet
       properties:
         # Spark params
         spark.driver.memory: 4g

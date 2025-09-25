@@ -21,53 +21,21 @@ def impc(
 
     # Load all required datasets
     datasets = _load_impc_datasets(spark, source)
-    datasets['disease_model_summary_transformed'] = _format_disease_model_associations(
-        datasets['disease_model_summary']
-    )
-    datasets['model_mouse_phenotypes_transformed'] = (
-        datasets['model_mouse_phenotypes']
-        .withColumn('mp_id', f.explode(f.expr(r"regexp_extract_all(model_phenotypes, '(MP:\\d+)', 1)")))
-        .select('model_id', 'mp_id')
-        # E. g. 'MGI:3800884', 'MP:0001304'.
-        .persist()
-    )
-    datasets['disease_human_phenotypes_transformed'] = (
-        datasets['disease_human_phenotypes']
-        .withColumn('hp_id', f.explode(f.expr(r"regexp_extract_all(disease_phenotypes, '(HP:\\d+)', 1)")))
-        .select('disease_id', 'hp_id')
-        # E.g. 'OMIM:609258', 'HP:0000545 Myopia'.
-        .distinct()
-    )
 
-    # Process ontology terms and classifications
-    mp_terms, hp_terms = _process_ontology_terms(datasets['ontology'])
-    mp_class = _create_mp_classification(datasets['mp_ontology'], spark)
-
-    # Build gene mapping from mouse to human
-    gene_mapping = _build_gene_mapping(
-        datasets['mgi_gene_id_to_ensembl_mouse_gene_id'],
-        datasets['mouse_to_human_gene'],
-        datasets['hgnc_gene_id_to_ensembl_human_gene_id'],
-    )
-
-    # Process literature references
-    literature = _process_literature_references(
-        datasets['mgi_pubmed'],
-        datasets['disease_model_summary_transformed'],
-        datasets['model_mouse_phenotypes_transformed'],
-    )
+    # Apply transformations to raw data and add them to the datasets dictionary
+    _apply_dataset_transformations(datasets, spark)
 
     # Generate evidence strings
     logger.info('generate impc evidence strings')
     evidence = generate_impc_evidence_strings(
         datasets['model_mouse_phenotypes_transformed'],
         datasets['mouse_to_human_phenotype'],
-        mp_terms,
+        datasets['mp_terms'],
         datasets['disease_model_summary_transformed'],
         datasets['disease_human_phenotypes_transformed'],
-        hp_terms,
-        gene_mapping,
-        literature,
+        datasets['hp_terms'],
+        datasets['gene_mapping'],
+        datasets['literature'],
         score_cutoff,
     )
     mapped_evidence_df = add_efo_mapping(
@@ -77,11 +45,11 @@ def impc(
     logger.info('generate mouse phenotypes dataset')
     mouse_phenotypes = generate_mouse_phenotypes_dataset(
         datasets['disease_model_summary_transformed'],
-        gene_mapping,
+        datasets['gene_mapping'],
         datasets['model_mouse_phenotypes_transformed'],
-        mp_terms,
-        literature,
-        mp_class,
+        datasets['mp_terms'],
+        datasets['literature'],
+        datasets['mp_class'],
     )
 
     logger.info('write impc datasets')
@@ -90,7 +58,8 @@ def impc(
     return final_evidence, mouse_phenotypes
 
 
-def _format_disease_model_associations(disease_model_summary: DataFrame) -> DataFrame:
+def _transform_disease_model_summary(disease_model_summary: DataFrame) -> DataFrame:
+    """Transform disease_model_summary into the normalized schema used downstream."""
     return disease_model_summary.selectExpr(
         'model_id',
         'model_genetic_background as biologicalModelGeneticBackground',
@@ -108,6 +77,68 @@ def _format_disease_model_associations(disease_model_summary: DataFrame) -> Data
         # superior metric and should therefore be used as the score.
         'disease_model_avg_norm as resourceScore',
     ).distinct()
+
+
+def _transform_model_mouse_phenotypes(model_mouse_phenotypes: DataFrame) -> DataFrame:
+    """Transform model_mouse_phenotypes by extracting MP IDs from model_phenotypes text."""
+    return (
+        model_mouse_phenotypes.withColumn(
+            'mp_id', f.explode(f.expr(r"regexp_extract_all(model_phenotypes, '(MP:\\d+)', 1)"))
+        )
+        .select('model_id', 'mp_id')
+        # E.g. 'MGI:3800884', 'MP:0001304'.
+        .persist()
+    )
+
+
+def _transform_disease_human_phenotypes(disease_human_phenotypes: DataFrame) -> DataFrame:
+    """Transform disease_human_phenotypes by extracting HP IDs from disease_phenotypes text."""
+    return (
+        disease_human_phenotypes.withColumn(
+            'hp_id', f.explode(f.expr(r"regexp_extract_all(disease_phenotypes, '(HP:\\d+)', 1)"))
+        )
+        .select('disease_id', 'hp_id')
+        # E.g. 'OMIM:609258', 'HP:0000545 Myopia'.
+        .distinct()
+    )
+
+
+def _apply_dataset_transformations(datasets: dict[str, DataFrame], spark: Session) -> None:
+    """Apply all dataset transformations and add them to the datasets dictionary.
+
+    This function orchestrates the various transformation functions while keeping
+    them separate and focused on single responsibilities.
+    """
+    # Transform disease model associations
+    datasets['disease_model_summary_transformed'] = _transform_disease_model_summary(datasets['disease_model_summary'])
+
+    # Transform phenotype datasets
+    datasets['model_mouse_phenotypes_transformed'] = _transform_model_mouse_phenotypes(
+        datasets['model_mouse_phenotypes']
+    )
+    datasets['disease_human_phenotypes_transformed'] = _transform_disease_human_phenotypes(
+        datasets['disease_human_phenotypes']
+    )
+
+    # Process ontology terms
+    datasets['mp_terms'], datasets['hp_terms'] = _process_ontology_terms(datasets['ontology'])
+
+    # Create MP classification
+    datasets['mp_class'] = _create_mp_classification(datasets['mp_ontology'], spark)
+
+    # Build gene mapping
+    datasets['gene_mapping'] = _build_gene_mapping(
+        datasets['mgi_gene_id_to_ensembl_mouse_gene_id'],
+        datasets['mouse_to_human_gene'],
+        datasets['hgnc_gene_id_to_ensembl_human_gene_id'],
+    )
+
+    # Process literature references (depends on transformed datasets)
+    datasets['literature'] = _process_literature_references(
+        datasets['mgi_pubmed'],
+        datasets['disease_model_summary_transformed'],
+        datasets['model_mouse_phenotypes_transformed'],
+    )
 
 
 def _load_impc_datasets(spark: Session, source: dict[str, str]) -> dict[str, DataFrame]:
