@@ -131,3 +131,12 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  evidence:
+    - name: pyspark panel_app
+      source: input/evidence/panel_app.tsv
+      destination: intermediate/evidence/panel_app.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: panel_app
