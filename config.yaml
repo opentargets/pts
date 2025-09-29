@@ -3,6 +3,8 @@ work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
 pool: 8
+efo_version: v3.81.0
+ontology_cores: 1  # Number of cores for ontology mapping (1 = sequential, >1 = parallel)
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -214,4 +216,12 @@ steps:
         drugs: output/drug_molecule
       destination: intermediate/evidence/cancer_biomarkers.parquet
       pyspark: cancer_biomarkers
-  ##################################################################################################
+
+    - name: pyspark orphanet
+      source:
+        evidence: input/evidence/orphanet.xml
+      destination: intermediate/evidence/orphanet.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: orphanet
