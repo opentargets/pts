@@ -3,6 +3,8 @@ work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
 pool: 8
+efo_version: v3.81.0
+ontology_cores: 1  # Number of cores for ontology mapping (1 = sequential, >1 = parallel)
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -131,3 +133,12 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  evidence:
+    - name: pyspark orphanet
+      source: input/evidence/orphanet.xml
+      destination: intermediate/evidence/orphanet.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: orphanet
