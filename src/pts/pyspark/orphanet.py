@@ -1,8 +1,8 @@
 """Evidence parser for Orphanet's gene-disease associations."""
 
-import xml.etree.ElementTree as ET
 from itertools import chain
 
+import defusedxml.ElementTree as eT
 from loguru import logger
 from pyspark.sql import DataFrame, Row
 from pyspark.sql.functions import array_distinct, col, create_map, lit, split
@@ -56,11 +56,11 @@ def orphanet(
 
 def parse_orphanet_xml(orphanet_file: str) -> DataFrame:
     """Function to parse Orphanet xml dump and return the parsed data as a list of dictionaries."""
-    tree = ET.parse(orphanet_file)
-    assert isinstance(tree, ET.ElementTree)
+    tree = eT.parse(orphanet_file)
+    assert isinstance(tree, eT.ElementTree)
 
     root = tree.getroot()
-    assert isinstance(root, ET.Element)
+    assert isinstance(root, eT.Element)
 
     # Checking if the basic nodes are in the xml structure:
     logger.info(f'There are {root.find("DisorderList").get("count")} disease in the Orphanet xml file.')
