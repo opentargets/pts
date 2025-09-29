@@ -136,8 +136,7 @@ steps:
 
   evidence:
     - name: pyspark orphanet
-      source:
-        evidence: input/evidence/orphanet.xml
+      source: input/evidence/orphanet.xml
       destination: intermediate/evidence/orphanet.parquet
       properties:
         efo_version: v3.81.0
