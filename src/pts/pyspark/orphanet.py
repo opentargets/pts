@@ -30,11 +30,11 @@ CONSEQUENCE_MAP = {
 
 
 def orphanet(
-    source: dict[str, str],
+    source: str,
     destination: str,
     properties: dict[str, str],
 ) -> DataFrame:
-    spark = Session(app_name='clingen', properties=properties)
+    spark = Session(app_name='orphanet', properties=properties)
     efo_version = properties['efo_version']
     cores = int(properties.get('ontology_cores', 1))
 
@@ -53,14 +53,17 @@ def orphanet(
     logger.info(f'write evidence strings to {destination}')
     evidence_df.write.mode('overwrite').parquet(destination)
 
+    return evidence_df
 
-def parse_orphanet_xml(orphanet_file: str) -> DataFrame:
+
+def parse_orphanet_xml(orphanet_file: str) -> list[dict]:
     """Function to parse Orphanet xml dump and return the parsed data as a list of dictionaries."""
-    tree = eT.parse(orphanet_file)
-    assert isinstance(tree, eT.ElementTree)
+    # defusedxml.ElementTree.parse() returns the root element directly, not an ElementTree object
+    root = eT.parse(orphanet_file)
 
-    root = tree.getroot()
-    assert isinstance(root, eT.Element)
+    # Type checking to ensure we have the correct element
+    if not hasattr(root, 'find'):
+        raise ValueError('Failed to parse XML file - invalid root element')
 
     # Checking if the basic nodes are in the xml structure:
     logger.info(f'There are {root.find("DisorderList").get("count")} disease in the Orphanet xml file.')
@@ -126,7 +129,7 @@ def process_orphanet(orphanet_df: DataFrame) -> DataFrame:
         .select(
             lit('orphanet').alias('datasourceId'),
             lit('genetic_association').alias('datatypeId'),
-            split(lit('germline'), '_').alias('alleleOrigins'),
+            split(lit('germline,somatic'), ',').alias('alleleOrigins'),
             'confidence',
             'diseaseFromSource',
             'diseaseFromSourceId',
