@@ -44,7 +44,9 @@ class PanelAppEvidenceGenerator:
         r'Abruzzo-Erickson;syndrome': r'Abruzzo-Erickson syndrome',
         r'Deafness, autosomal recessive; 12': r'Deafness, autosomal recessive, 12',
         r'Waardenburg syndrome, type; 3': r'Waardenburg syndrome, type 3',
-        r'Ectrodactyly, ectodermal dysplasia, and cleft lip/palate syndrome; 3': r'Ectrodactyly, ectodermal dysplasia, and cleft lip/palate syndrome, 3',
+        r'Ectrodactyly, ectodermal dysplasia, and cleft lip/palate syndrome; 3': (
+            r'Ectrodactyly, ectodermal dysplasia, and cleft lip/palate syndrome, 3'
+        ),
         # Remove curly braces. They are *sometimes* (not consistently) used to separate disease name and OMIM code, for
         # example: "{Bladder cancer, somatic}, 109800", and interfere with regular expressions for extraction.
         r'[{}]': r'',
@@ -99,9 +101,9 @@ class PanelAppEvidenceGenerator:
         logger.info('filter and extract the necessary columns')
         panelapp_df = (
             self.panelapp_df.withColumn(
-                # Panel version can be either a single number (e.g. 1), or two numbers separated by a dot (e.g. 3.14). We cast
-                # either representation to float to ensure correct filtering below. (Note that conversion to float would not
-                # work in the general case, because 3.4 > 3.14, but we only need to compare relative to 1.0.)
+                # Panel version can be either a single number, or two numbers separated by a dot (e.g. 3.14).We cast
+                # either representation to float to ensure correct filtering below. (Note that conversion to float would
+                # not work in the general case, because 3.4 > 3.14, but we only need to compare relative to 1.0.)
                 'Panel Version',
                 f.col('Panel Version').cast('float'),
             )
@@ -163,7 +165,7 @@ class PanelAppEvidenceGenerator:
             .withColumn(
                 'ontology',
                 f.when(
-                    (f.col('ontology_namespace') != '') & (f.col('ontology_id') != ''),
+                    (f.col('ontology_namespace') != '') & (f.col('ontology_id') != ''),  # noqa: PLC1901
                     f.concat(f.col('ontology_namespace'), f.lit(':'), f.col('ontology_id')),
                 ),
             )
@@ -195,7 +197,7 @@ class PanelAppEvidenceGenerator:
             .withColumn('diseaseFromSource', f.trim(f.col('diseaseFromSource')))
             .withColumn(
                 'diseaseFromSource',
-                f.when(f.col('diseaseFromSource') != '', f.col('diseaseFromSource')),
+                f.when(f.col('diseaseFromSource') != '', f.col('diseaseFromSource')),  # noqa: PLC1901
             )
             # Remove low quality records, where the name of the phenotype string starts with a question mark.
             .filter(~((f.col('diseaseFromSource').isNotNull()) & (f.col('diseaseFromSource').startswith('?'))))
@@ -215,7 +217,8 @@ class PanelAppEvidenceGenerator:
         )
 
         logger.info('fetch and join literature references')
-        all_panel_ids = panelapp_df.select('Panel Id').toPandas()['Panel Id'].unique()
+        # Use pure PySpark operations to avoid numpy serialization issues with toPandas()
+        all_panel_ids = [row['Panel Id'] for row in panelapp_df.select('Panel Id').distinct().collect()]
         literature_references = self.fetch_literature_references(all_panel_ids)
         panelapp_df = panelapp_df.join(literature_references, on=['Panel Id', 'Symbol'], how='left')
 
@@ -251,7 +254,7 @@ class PanelAppEvidenceGenerator:
         publications = []  # Contains tuples of (panel ID, gene symbol, PubMed ID).
         for panel_id in all_panel_ids:
             url = f'https://panelapp.genomicsengland.co.uk/api/v1/panels/{panel_id}'
-            panel_data = requests.get(url).json()
+            panel_data = requests.get(url, timeout=60).json()
 
             # The source data and the online data might not be in-sync, due to requesting retired panels.
             # We still keep these entries, but won't try to fetch gene data:
@@ -266,9 +269,21 @@ class PanelAppEvidenceGenerator:
                         for pubmed_id in self.extract_pubmed_ids(publication_string)
                     ])
         # Group by (panel ID, gene symbol) pairs and convert into a PySpark dataframe.
+        # Handle the case where no publications are found
+        if not publications:
+            # Create an empty DataFrame with the correct schema
+            from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+
+            schema = StructType([
+                StructField('Panel Id', StringType(), True),
+                StructField('Symbol', StringType(), True),
+                StructField('literature', ArrayType(StringType()), True),
+            ])
+            return self.spark.spark.createDataFrame([], schema=schema)
+
         return (
-            self.spark.spark.createDataFrame(publications, schema=('Panel ID', 'Symbol', 'literature'))
-            .groupby(['Panel ID', 'Symbol'])
+            self.spark.spark.createDataFrame(publications, schema=['Panel Id', 'Symbol', 'literature'])
+            .groupby(['Panel Id', 'Symbol'])
             .agg(f.collect_set('literature').alias('literature'))
         )
 
