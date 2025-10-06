@@ -46,10 +46,10 @@ def pharmacogenetics(source: dict[str, str], destination: dict[str, str], proper
         updated_phenotypes_df = update_phenotypes_lut(new_phenotypes_df, pgx_phenotypes_df)
         logger.info(f'save updated phenotypes to {destination["phenotypes"]}')
         updated_phenotypes_df.toPandas().to_json(destination['phenotypes'], orient='records')
-        pgx_df = annotate_phenotype(pgx_df, updated_phenotypes_df)
+        annotated_pgx_df = annotate_phenotype(pgx_df, updated_phenotypes_df)
 
     logger.info('parse variantId')
-    pgx_w_variantid_df = add_variantid_column(pgx_df)
+    pgx_w_variantid_df = add_variantid_column(annotated_pgx_df)
     logger.info('add efo mappings')
     mapped_pgx_df = (
         add_efo_mapping(evidence_strings=pgx_w_variantid_df, efo_version=efo_version, cores=cores)
