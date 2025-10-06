@@ -148,7 +148,7 @@ steps:
       source:
         adverse_events: input/target/safety/adverse_effects.tsv
         safety_risks: input/target/safety/safety_risks.tsv
-        brennan: input/target/safety/brennan.json
+        brennan: input/target/safety/secondary_pharmacology.json
         toxcast: input/target/safety/toxcast.tsv
         aopwiki: input/target/safety/aopwiki.json
         pharmacogenetics: intermediate/pharmacogenetics/pharmacogenetics.parquet
