@@ -131,3 +131,18 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  pharmacogenetics    :
+    - name: pyspark pharmacogenetics
+      source:
+        clinpgx: input/pharmacogenetics/clinpgx_annotation.json.gz
+        phenotypes: input/pharmacogenetics/phenotypes.json
+        openai_api_key_filename: tmp/openai_api_key
+      destination:
+        associations: input/pharmacogenetic/pharmacogenetics.parquet
+        phenotypes: input/pharmacogenetics/phenotypes.json
+      properties:
+        efo_version: ${EFO_VERSION}
+        cores: ${CORES}
+      pyspark: pharmacogenetics
+      

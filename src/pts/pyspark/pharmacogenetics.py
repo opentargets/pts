@@ -1,6 +1,7 @@
 """This module adds a more granular description of the phenotype observed in the ClinPGX evidence."""
 
 import json
+from pathlib import Path
 
 import pyspark.sql.functions as f
 from loguru import logger
@@ -14,7 +15,8 @@ from pts.utils.ontology import add_efo_mapping
 
 def pharmacogenetics(source: dict[str, str], destination: dict[str, str], properties: dict[str, str]) -> DataFrame:
     spark = Session(app_name='pharmacogenetics', properties=properties)
-    openai_key = properties['openai_api_key']
+    # Read OpenAI API key from the source path (automatically resolved by PySpark task)
+    openai_key = Path(source['openai_api_key_filename']).read_text().strip()
     efo_version = properties['efo_version']
     cores = int(properties.get('ontology_cores', 1))
 
@@ -23,16 +25,22 @@ def pharmacogenetics(source: dict[str, str], destination: dict[str, str], proper
     pgx_df = spark.load_data(source['clinpgx'], format='json')
 
     logger.info('overwrite phenotypeText column with parsed phenotypes')
-    pgx_df = annotate_phenotype(pgx_df, pgx_phenotypes_df, efo_version, cores)
-    unparsed_texts = pgx_df.filter(f.col('phenotypeText').isNull()).select('genotypeAnnotationText').distinct()
-    if unparsed_texts.count() == 0:
+    annotated_pgx_df = annotate_phenotype(pgx_df, pgx_phenotypes_df)
+    unparsed_texts = (
+        annotated_pgx_df.filter(f.col('phenotypeText').isNull())
+        .select('genotypeAnnotationText')
+        .distinct()
+        .toPandas()['genotypeAnnotationText']
+        .to_list()
+    )
+    if len(unparsed_texts) == 0:
         logger.info('all phenotypes have been parsed')
     else:
-        logger.warning(f'{unparsed_texts.count()} phenotypes have not been parsed')
+        logger.warning(f'{len(unparsed_texts)} phenotypes have not been parsed')
         client = OpenAI(api_key=openai_key)
         new_phenotypes_df = parse_phenotypes(
-            spark=Session,
-            texts_to_parse=unparsed_texts.toPandas()['genotypeAnnotationText'].to_list(),
+            spark=spark,
+            texts_to_parse=unparsed_texts,
             openai_client=client,
         )
         updated_phenotypes_df = update_phenotypes_lut(new_phenotypes_df, pgx_phenotypes_df)
@@ -150,7 +158,9 @@ def annotate_phenotype(pgx_evidence_df: DataFrame, extracted_phenotypes_df: Data
         pgx_evidence_df.drop('phenotypeText', 'phenotypeFromSourceId')
         .join(extracted_phenotypes_df, on='genotypeAnnotationText', how='left')
         .select(
-            '*', f.explode_outer('phenotypeText').alias('diseaseFromSource'), f.lit(None).alias('diseaseFromSourceId')
+            '*',
+            f.explode_outer('phenotypeText').alias('diseaseFromSource'),
+            f.lit(None).cast('string').alias('diseaseFromSourceId'),
         )
         .distinct()
     )
