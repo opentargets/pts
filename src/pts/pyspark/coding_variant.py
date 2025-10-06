@@ -1,64 +1,77 @@
 """Parser to generate view on coding variants and their effects."""
 
-from typing import TYPE_CHECKING
-
-from pyspark.sql import Column, DataFrame
+from loguru import logger
+from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as f
 from pyspark.sql import types as t
 from pyspark.sql.window import Window
 
 from pts.pyspark.common import Session
 
-if TYPE_CHECKING:
-    from pyspark.sql import SparkSession
 
-
-def coding_variant_view(
+def coding_variant(
     source: dict[str, str],
-    destination: dict[str, str],
+    destination: str,
     properties: dict[str, str] | None,
 ) -> None:
     """Generate view on coding variants with their functional context.
 
     Args:
         source (dict[str, str]): Source paths for input datasets.
-        destination (dict[str, str]): Destination paths for output datasets.
+        destination (str): Destination path for output dataset.
         properties (dict[str, str] | None): Spark session properties.
     """
     # Starting spark session.
-    session = Session(app_name='coding_variant_view', properties=properties)
-
-    # Extracting input dataset location:
-    dataset_path = source['dataset_path']
-    output_dataset = destination['output']
+    extra_properties = {
+        'spark.driver.memory': '16g',
+        'spark.executor.memory': '32g',
+        'spark.driver.maxResultSize': '4g',
+    }
+    final_properties = {**(properties or {}), **extra_properties}
+    session = Session(app_name='coding_variant_view', properties=final_properties)
 
     # Extracting variants with amino acid change:
-    variants_with_amino_acid_effect = process_variants(session.spark, dataset_path)
+    variants_with_amino_acid_effect = process_variants(session.spark, source['variant'])
 
     # Getting target/uniprot map:
-    target_uniprot_map = process_target_index(session.spark, dataset_path)
+    target_uniprot_map = process_target_index(session.spark, source['target'])
 
     # Reading disease dataset:
-    diseases = process_diseases(session.spark, dataset_path)
+    diseases = process_diseases(session.spark, source['disease'])
 
     # Extracting evidence:
-    evidence_dataset = process_evidence(session.spark, diseases, dataset_path)
+    evidence_dataset = process_evidence(
+        session.spark,
+        diseases,
+        source['evidence_eva'],
+        source['evidence_eva_somatic'],
+        source['evidence_uniprot_variant'],
+    )
 
     # Extracting GWAS associations:
-    gwas_evidence = process_gwas_associations(session.spark, variants_with_amino_acid_effect, diseases, dataset_path)
+    gwas_evidence = process_gwas_associations(
+        session.spark,
+        variants_with_amino_acid_effect,
+        diseases,
+        source['evidence_gwas_credible_set'],
+        source['credible_set'],
+    )
 
     # Getting molQTL datasets:
-    molqtl_credsets = process_qtls(session.spark, dataset_path)
+    molqtl_credsets = process_qtls(session.spark, source['credible_set'])
 
-    # Extracting pharmacogenomics evidence:
-    pharmacogenomics = process_pharmacogenomics(session.spark, dataset_path)
+    # Extracting pharmacogenetics evidence:
+    pharmacogenetics = process_pharmacogenetics(session.spark, source['pharmacogenetics'])
 
     # Pooling all evidence together:
     variant_evidence = (
         evidence_dataset.unionByName(gwas_evidence, allowMissingColumns=True)
-        .unionByName(pharmacogenomics, allowMissingColumns=True)
+        .unionByName(pharmacogenetics, allowMissingColumns=True)
         .unionByName(molqtl_credsets, allowMissingColumns=True)
     )
+
+    logger.info(f'pooled {variant_evidence.count()} evidences from all sources')
+    logger.info('starting main process')
 
     # this window specification is used to group diseases for each variant and accumulate scores:
     wspec = (
@@ -126,22 +139,22 @@ def coding_variant_view(
         )
         .drop('zeroEvidence', 'refUniprotAccessions')
         .write.mode('overwrite')
-        .parquet(output_dataset)
+        .parquet(destination)
     )
 
 
-def process_target_index(spark: SparkSession, dataset_path: str) -> DataFrame:
+def process_target_index(spark: SparkSession, source: str) -> DataFrame:
     """Read target index and extract relevant columns.
 
     Args:
         spark (SparkSession): Spark session.
-        dataset_path (str): Path to the ETL output datasets.
+        source (str): Path to the target dataset.
 
     Returns:
         DataFrame: DataFrame containing targetId and uniprotAccessions.
     """
-    return (
-        spark.read.parquet(f'{dataset_path}/target')
+    d = (
+        spark.read.parquet(source)
         .select(
             f.col('id').alias('targetId'),
             f.transform(
@@ -150,6 +163,8 @@ def process_target_index(spark: SparkSession, dataset_path: str) -> DataFrame:
         )
         .filter(f.size('refUniprotAccessions') != 0)
     )
+    logger.info(f'processed {d.count()} targets')
+    return d
 
 
 def calculate_harmonic_sum(input_array: Column) -> Column:
@@ -248,18 +263,18 @@ def parse_variant_effect(variant_effect: Column) -> Column:
     return f.when(a_missense.getItem('value').isNotNull(), a_missense).otherwise(vep)
 
 
-def process_variants(spark: SparkSession, dataset_path: str) -> DataFrame:
+def process_variants(spark: SparkSession, source: str) -> DataFrame:
     """Get all protein coding variants with their consequences.
 
     Args:
         spark (SparkSession): Spark session.
-        dataset_path (str): Path to the ETL output datasets.
+        source (str): Path to the variant dataset.
 
     Returns:
         DataFrame: DataFrame containing variants with amino acid effects.
     """
-    return (
-        spark.read.parquet(f'{dataset_path}/variant')
+    d = (
+        spark.read.parquet(source)
         # Filter for certain variant consequence types:
         .withColumn('variantEffect', f.filter('variantEffect', lambda ve: ve.method == 'AlphaMissense'))
         # Exploding transcript consequences to extract amino acid consequences:
@@ -285,15 +300,25 @@ def process_variants(spark: SparkSession, dataset_path: str) -> DataFrame:
             *parse_amino_acid_change(f.col('exploded_consequences.aminoAcidChange')),
         )
     )
+    logger.info(f'processed {d.count()} variants')
+    return d
 
 
-def process_evidence(spark: SparkSession, diseases: DataFrame, dataset_path: str) -> DataFrame:
+def process_evidence(
+    spark: SparkSession,
+    diseases: DataFrame,
+    source_evidence_eva: str,
+    source_evidence_eva_somatic: str,
+    source_evidence_uniprot_variant: str,
+) -> DataFrame:
     """Get all evidence supported by variants.
 
     Args:
         spark (SparkSession): Spark session.
         diseases (DataFrame): DataFrame containing diseases.
-        dataset_path (str): Path to the ETL output datasets.
+        source_evidence_eva (str): Path to the eva evidence dataset.
+        source_evidence_eva_somatic (str): Path to the eva somatic evidence dataset.
+        source_evidence_uniprot_variant (str): Path to the uniprot variants dataset.
 
     Returns:
         DataFrame: DataFrame containing evidence supported by variants.
@@ -309,18 +334,16 @@ def process_evidence(spark: SparkSession, diseases: DataFrame, dataset_path: str
     ]
 
     # Reading evidence dataset:
-    return (
-        spark.read.parquet(*[
-            f'{dataset_path}/evidence/sourceId=eva/',
-            f'{dataset_path}/evidence/sourceId=eva_somatic/',
-            f'{dataset_path}/evidence/sourceId=uniprot_variants/',
-        ])
+    d = (
+        spark.read.parquet(source_evidence_eva, source_evidence_eva_somatic, source_evidence_uniprot_variant)
         # Filtering for evidence supported by variants:
         .filter(f.col('variantId').isNotNull())
         .select(*evidence_columns)
         # Adding therapeutic areas:
         .join(diseases, on='diseaseId', how='left')
     )
+    logger.info(f'processed {d.count()} evidences')
+    return d
 
 
 def order_struct_list(column: str, field: str, ascending: bool = True) -> Column:
@@ -345,18 +368,18 @@ def order_struct_list(column: str, field: str, ascending: bool = True) -> Column
     """)
 
 
-def process_pharmacogenomics(spark: SparkSession, dataset_path: str) -> DataFrame:
-    """Get all pharmacogenomics evidence.
+def process_pharmacogenetics(spark: SparkSession, source: str) -> DataFrame:
+    """Get all pharmacogenetics evidence.
 
     Args:
         spark (SparkSession): Spark session.
-        dataset_path (str): Path to the ETL output datasets.
+        source (str): Path to the pharmacogenetics dataset.
 
     Returns:
-        DataFrame: DataFrame containing pharmacogenomics evidence.
+        DataFrame: DataFrame containing pharmacogenetics evidence.
     """
-    return (
-        spark.read.parquet(f'{dataset_path}/pharmacogenomics')
+    d = (
+        spark.read.parquet(source)
         .select(
             'variantId',
             'datasourceId',
@@ -365,21 +388,23 @@ def process_pharmacogenomics(spark: SparkSession, dataset_path: str) -> DataFram
         )
         .filter(f.col('variantId').isNotNull())
     )
+    logger.info(f'processed {d.count()} pharmacogenetics evidences')
+    return d
 
 
-def process_qtls(spark: SparkSession, dataset_path: str) -> DataFrame:
+def process_qtls(spark: SparkSession, source: str) -> DataFrame:
     """Get all QTL evidence.
 
     Args:
         spark (SparkSession): Spark session.
-        dataset_path (str): Path to the ETL output datasets.
+        source (str): Path to the credible_set dataset.
 
     Returns:
         DataFrame: DataFrame containing QTL evidence.
     """
-    return (
+    d = (
         # Reading credible sets and explode:
-        spark.read.parquet(f'{dataset_path}/credible_set')
+        spark.read.parquet(source)
         .withColumn('col', f.explode('locus'))
         # Selecting only qtl evidence:
         .filter(f.col('studyType') != 'gwas')
@@ -390,10 +415,16 @@ def process_qtls(spark: SparkSession, dataset_path: str) -> DataFrame:
             f.lit(False).alias('zeroEvidence'),
         )
     )
+    logger.info(f'processed {d.count()} qtl evidences')
+    return d
 
 
 def process_gwas_associations(
-    spark: SparkSession, variants_with_amino_acid_effect: DataFrame, diseases: DataFrame, dataset_path: str
+    spark: SparkSession,
+    variants_with_amino_acid_effect: DataFrame,
+    diseases: DataFrame,
+    source_evidence_gwas_credible_set: str,
+    source_credible_set: str,
 ) -> DataFrame:
     """Get all GWAS associations with credible sets.
 
@@ -402,14 +433,15 @@ def process_gwas_associations(
         variants_with_amino_acid_effect (DataFrame): DataFrame containing variants with amino acid
             effects.
         diseases (DataFrame): DataFrame containing diseases.
-        dataset_path (str): Path to the ETL output datasets.
+        source_evidence_gwas_credible_set (str): Path to the gwas credible set evidence dataset.
+        source_credible_set (str): Path to the credible set dataset.
 
     Returns:
         DataFrame: DataFrame containing GWAS associations with credible sets.
     """
-    return (
+    d = (
         # Reading evidence:
-        spark.read.parquet(f'{dataset_path}/evidence/sourceId=gwas_credible_sets')
+        spark.read.parquet(source_evidence_gwas_credible_set)
         # Group by studyLocusId and select to strongest evidence:
         .withColumn(
             'maxScore',
@@ -422,7 +454,7 @@ def process_gwas_associations(
         # Each StudyLocusId/diseaseId pair should have only one max score:
         .filter(f.col('score') == f.col('maxScore'))
         # joining with credible sets:
-        .join(spark.read.parquet(f'{dataset_path}/credible_set'), on='studyLocusId', how='inner')
+        .join(spark.read.parquet(source_credible_set), on='studyLocusId', how='inner')
         # Exploding credible sets:
         .withColumn('locus', f.explode('locus'))
         # Join with variants to get correct gene:
@@ -439,18 +471,20 @@ def process_gwas_associations(
         # Adding therapeutic areas:
         .join(diseases, on='diseaseId', how='left')
     )
+    logger.info(f'processed {d.count()} gwas credible set association evidences')
+    return d
 
 
-def process_diseases(spark: SparkSession, dataset_path) -> DataFrame:
+def process_diseases(spark: SparkSession, source) -> DataFrame:
     """Get all diseases.
 
     Args:
         spark (SparkSession): Spark session.
-        dataset_path (str): Path to the ETL output datasets.
+        source (str): Path to the disease dataset.
 
     Returns:
         DataFrame: DataFrame containing disease IDs and therapeutic areas.
     """
-    return spark.read.parquet(f'{dataset_path}/disease').select(
-        f.col('id').alias('diseaseId'), f.col('therapeuticAreas')
-    )
+    d = spark.read.parquet(source).select(f.col('id').alias('diseaseId'), f.col('therapeuticAreas'))
+    logger.info(f'processed {d.count()} diseases')
+    return d

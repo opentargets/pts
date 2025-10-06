@@ -57,14 +57,21 @@ steps:
 
   ##################################################################################################
 
-  #: CODING VARIANT VIEW STEP :########################################################################
+  #: CODING VARIANT VIEW STEP :#####################################################################
   coding_variant_view:
-    - name: pyspark generate view on coding variants
+    - name: pyspark coding_variant view
       source:
-        destination: output/
-      destination:
-        output: view/coding_variant_table
-      pyspark: coding_variant_view
+        variant: output/variant
+        target: output/target
+        disease: output/disease
+        evidence_eva: output/evidence/sourceId=eva
+        evidence_eva_somatic: output/evidence/sourceId=eva_somatic
+        evidence_uniprot_variant: output/evidence/sourceId=uniprot_variants
+        evidence_gwas_credible_set: output/evidence/sourceId=gwas_credible_sets
+        credible_set: output/credible_set
+        pharmacogenetics: output/pharmacogenetics
+      destination: view/coding_variant
+      pyspark: coding_variant
 
   ##################################################################################################
 

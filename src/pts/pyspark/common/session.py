@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import loguru
+from loguru import logger
+from pyspark import SparkContext
 from pyspark.conf import SparkConf
 from pyspark.sql import SparkSession
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class Session:
-    """This class provides a Spark session and logger."""
+    """This class provides a Spark session."""
 
     def __init__(
         self,
@@ -28,8 +29,7 @@ class Session:
             .appName(app_name)
             .getOrCreate()
         )
-
-        self.logger = loguru.logger
+        self.spark.sparkContext.setLogLevel('WARN')
 
     def _create_config(self, properties: dict[str, str] | None = None) -> SparkConf:
         if properties is None:
@@ -97,4 +97,4 @@ class Session:
     def stop(self) -> None:
         """Stops the Spark session."""
         self.spark.stop()
-        self.logger.info('spark session stopped')
+        logger.info('spark session stopped')
