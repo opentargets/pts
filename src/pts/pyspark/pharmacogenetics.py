@@ -52,9 +52,16 @@ def pharmacogenetics(source: dict[str, str], destination: dict[str, str], proper
     pgx_w_variantid_df = add_variantid_column(annotated_pgx_df)
     logger.info('add efo mappings')
     mapped_pgx_df = (
-        add_efo_mapping(evidence_strings=pgx_w_variantid_df, efo_version=efo_version, cores=cores)
+        add_efo_mapping(
+            evidence_strings=pgx_w_variantid_df.withColumns({
+                'diseaseFromSource': f.col('phenotypeText'),
+                'diseaseFromSourceId': f.lit(None).cast('string'),
+            }),
+            efo_version=efo_version,
+            cores=cores,
+        )
         .withColumnRenamed('diseaseFromSourceMappedId', 'phenotypeFromSourceId')
-        .drop('diseaseFromSource')
+        .drop('diseaseFromSource', 'diseaseFromSourceId')
     )
     logger.info(f'save associations to {destination["associations"]}')
     mapped_pgx_df.write.parquet(destination['associations'], mode='overwrite')
@@ -157,11 +164,7 @@ def annotate_phenotype(pgx_evidence_df: DataFrame, extracted_phenotypes_df: Data
     return (
         pgx_evidence_df.drop('phenotypeText', 'phenotypeFromSourceId')
         .join(extracted_phenotypes_df, on='genotypeAnnotationText', how='left')
-        .select(
-            '*',
-            f.explode_outer('phenotypeText').alias('diseaseFromSource'),
-            f.lit(None).cast('string').alias('diseaseFromSourceId'),
-        )
+        .withColumn('phenotypeText', f.explode_outer('phenotypeText'))
         .distinct()
     )
 

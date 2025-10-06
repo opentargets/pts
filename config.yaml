@@ -139,7 +139,7 @@ steps:
         phenotypes: input/pharmacogenetics/phenotypes.json
         openai_api_key_filename: tmp/openai_api_key
       destination:
-        associations: intermediate/pharmacogenetics/pharmacogenetics.parquet
+        associations: intermediate/pharmacogenetics.parquet
         phenotypes: intermediate/pharmacogenetics/phenotypes.json
       properties:
         efo_version: ${EFO_VERSION}
