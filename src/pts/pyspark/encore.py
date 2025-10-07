@@ -44,6 +44,63 @@ class EncoreEvidenceGenerator:
         self.release_date = shared_parameters['releaseDate']
 
     @staticmethod
+    def _generate_unpivot_expression(cell_lines: list[str]) -> str:
+        """Generate unpivot expression for stacking cell line data.
+
+        Args:
+            cell_lines: List of cell line identifiers
+
+        Returns:
+            SQL expression string for unpivoting cell line data
+        """
+        return (
+            f"stack({len(cell_lines)}, {', '.join([f"'{x}', {x}" for x in cell_lines])} ) "
+            f"as (cellLineName, cellLineData)"
+        )
+
+    def _process_tabular_data(
+        self,
+        file_path: str,
+        stats_fields: list[str],
+        cell_line_extractor: callable,
+        additional_processing: callable | None = None,
+    ) -> tuple[DataFrame, list[str]]:
+        """Base method for processing tabular data files with cell line columns.
+
+        Args:
+            file_path: Path to the data file
+            stats_fields: List of statistical field names to extract
+            cell_line_extractor: Function to extract cell lines from column names
+            additional_processing: Optional function for additional DataFrame processing
+
+        Returns:
+            Tuple of (processed_dataframe, cell_lines_list)
+        """
+        # Read the data file
+        df = self.spark.load_data(file_path, format='csv', sep='\t', header=True)
+
+        # Apply additional processing if provided (e.g., for gemini data validation)
+        if additional_processing:
+            df, cell_lines = additional_processing(df)
+        else:
+            # Extract cell lines from column headers
+            cell_lines = list(cell_line_extractor(df.columns))
+
+        # Generate struct expressions for each cell line
+        expressions = (
+            (
+                cell,
+                f.struct([f.col(f'{cell}_{x}').alias(x) for x in stats_fields]),
+            )
+            for cell in cell_lines
+        )
+
+        # Apply struct expressions to dataframe
+        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, df)
+
+        return res_df, cell_lines
+
+    @staticmethod
     @f.udf(
         t.ArrayType(
             t.StructType([
@@ -104,18 +161,17 @@ class EncoreEvidenceGenerator:
         # Fixed statistical field names:
         stats_fields = ['p-value', 'fdr', 'lfc']
 
-        # Reading the data into a single dataframe:
-        lfc_df = self.spark.load_data(lfc_file, format='csv', sep='\t', header=True)
+        # Define cell line extractor function
+        def extract_cell_lines(columns):
+            return {'_'.join(x.split('_')[:-1]) for x in columns[4:]}
 
-        # Collect the cell lines from the lfc file header:
-        cell_lines = {'_'.join(x.split('_')[:-1]) for x in lfc_df.columns[4:]}
+        # Use base processing method with custom struct generation for float casting
+        df = self.spark.load_data(lfc_file, format='csv', sep='\t', header=True)
+        cell_lines = list(extract_cell_lines(df.columns))
 
-        # Generating struct for each cell lines:
+        # Generating struct for each cell lines with float casting:
         # SIDM are Sanger model identifiers, while CSID are replicate identifiers.
-        # SIDM00049_CSID1053_p-value
-        # SIDM00049_CSID1053_fdr
-        # SIDM00049_CSID1053_lfc
-        # Into: SIDM00049_CSID1053: struct(p-value, fdr, lfc)
+        # SIDM00049_CSID1053_p-value -> SIDM00049_CSID1053: struct(p-value, fdr, lfc)
         expressions = (
             (
                 cell,
@@ -124,13 +180,11 @@ class EncoreEvidenceGenerator:
             for cell in cell_lines
         )
 
-        # Applying map on the dataframe:
-        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, lfc_df)
+        # Apply struct expressions to dataframe
+        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, df)
 
-        # Stack the previously generated columns:
-        unpivot_expression = (
-            f"""stack({len(cell_lines)}, {', '.join([f"'{x}', {x}" for x in cell_lines])} ) as (cellLineName, cellLineData)"""
-        )
+        # Generate unpivot expression and apply transformation
+        unpivot_expression = self._generate_unpivot_expression(cell_lines)
 
         return (
             res_df
@@ -173,26 +227,15 @@ class EncoreEvidenceGenerator:
             'pval',
             'zscore',
         ]
-        # Read bliss file:
-        bliss_df = self.spark.load_data(bliss_file, format='csv', sep='\t', header=True)
 
-        # Collect cell-line/recplicate pairs from the headers:
-        cell_lines = {'_'.join(x.split('_')[0:2]) for x in bliss_df.columns[4:] if x.startswith('SID')}
+        # Define cell line extractor function for bliss data
+        def extract_cell_lines(columns):
+            return {'_'.join(x.split('_')[0:2]) for x in columns[4:] if x.startswith('SID')}
 
-        # Generating struct for each cell lines:
-        expressions = (
-            (
-                cell,
-                f.struct([f.col(f'{cell}_{x}').alias(x) for x in stats_fields]),
-            )
-            for cell in cell_lines
-        )
-
-        # Applying map on the dataframe:
-        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, bliss_df)
-
-        # Stack the previously generated columns:
-        unpivot_expression = f"""stack({len(cell_lines)}, {', '.join([f"'{x}', {x}" for x in cell_lines])} ) as (cellLineName, cellLineData)"""
+        # Use base processing method
+        res_df, cell_lines = self._process_tabular_data(bliss_file, stats_fields, extract_cell_lines)
+        # Generate unpivot expression and apply bliss-specific transformations
+        unpivot_expression = self._generate_unpivot_expression(cell_lines)
 
         return (
             res_df.select(
@@ -249,42 +292,39 @@ class EncoreEvidenceGenerator:
         # Fixed statistical field names:
         stats_fields = ['score', 'pval', 'FDR']
 
-        # Reading the data into a single dataframe:
-        gemini_df = self.spark.load_data(gemini_file, format='csv', sep='\t', header=True)
+        # Define additional processing function for gemini-specific data validation
+        def gemini_additional_processing(df):
+            # Extract cell lines from headers
+            cell_lines = {'_'.join(x.split('_')[:-1]) for x in df.columns[4:] if x.startswith('SID')}
+            # Handle gene column naming issue and store for later use
+            if 'Gene_Pair' in df.columns:
+                gene_column = 'Gene_Pair'
+            elif 'Gene_Pair0' in df.columns:
+                gene_column = 'Gene_Pair0'
+            else:
+                raise ValueError(f"No 'Gene_Pair' column in Gemini data: {','.join(df.columns)}")
+            # Check for missing columns and filter out incomplete cell lines
+            missing_columns = [
+                f'{cell}_{stat}' for cell in cell_lines for stat in stats_fields if f'{cell}_{stat}' not in df.columns
+            ]
+            cells_to_drop = {'_'.join(x.split('_')[:-1]) for x in missing_columns}
+            # If there are missingness, remove the relevant cell lines
+            if missing_columns:
+                logger.warning(f'missing columns: {", ".join(missing_columns)}')
+                logger.warning(f'dropping cell_lines: {", ".join(cells_to_drop)}')
+                cell_lines = [x for x in cell_lines if x not in cells_to_drop]
+            # Store gene column info in a non-conflicting way
+            return df, list(cell_lines), gene_column
 
-        # Collect the cell lines from the lfc file header:
-        cell_lines = {'_'.join(x.split('_')[:-1]) for x in gemini_df.columns[4:] if x.startswith('SID')}
+        # Define cell line extractor function (not used due to additional processing)
+        def extract_cell_lines(columns):
+            return {'_'.join(x.split('_')[:-1]) for x in columns[4:] if x.startswith('SID')}
 
-        # There are some problems in joining gemini files on Encore side. It causes a serious issues:
-        # 1. Multiple Gene_Pair columns in the file -> these will be indexed in the pyspark dataframe
-        # 2. Some columns for some cell lines will be missing eg. pvalue for SIDM00049_CSID1053
-        #
-        # To mitigate these issue we have to check for gene pair header and remove cell lines with incomplete data.
-        if 'Gene_Pair' in gemini_df.columns:
-            gene_column = 'Gene_Pair'
-        elif 'Gene_Pair0' in gemini_df.columns:
-            gene_column = 'Gene_Pair0'
-        else:
-            raise ValueError(f"No 'Gene_Pair' column in Gemini data: {','.join(gemini_df.columns)}")
+        # Handle gemini-specific processing manually due to additional return value
+        df = self.spark.load_data(gemini_file, format='csv', sep='\t', header=True)
+        df, cell_lines, gene_column = gemini_additional_processing(df)
 
-        # We check if all stats columns available for all cell lines (this coming from a data joing bug at encore):
-        missing_columns = [
-            f'{cell}_{stat}'
-            for cell in cell_lines
-            for stat in stats_fields
-            if f'{cell}_{stat}' not in gemini_df.columns
-        ]
-        cells_to_drop = {'_'.join(x.split('_')[:-1]) for x in missing_columns}
-
-        # If there are missingness, the relevant cell lines needs to be removed from the analysis:
-        if missing_columns:
-            logger.warning(f'Missing columns: {", ".join(missing_columns)}')
-            logger.warning(f'Dropping cell_lines: {", ".join(cells_to_drop)}')
-
-            # Removing missing cell lines:
-            cell_lines = [x for x in cell_lines if x not in cells_to_drop]
-
-        # Generating struct for each cell lines:
+        # Generate struct expressions for each cell line
         expressions = (
             (
                 cell,
@@ -293,15 +333,15 @@ class EncoreEvidenceGenerator:
             for cell in cell_lines
         )
 
-        # Applying map on the dataframe:
-        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, gemini_df)
+        # Apply struct expressions to dataframe
+        res_df = reduce(lambda df, value: df.withColumn(*value), expressions, df)
 
-        # Stack the previously generated columns:
-        unpivot_expression = f"""stack({len(cell_lines)}, {', '.join([f"'{x}', {x}" for x in cell_lines])} ) as (cellLineName, cellLineData)"""
+        # Generate unpivot expression and apply gemini-specific transformations
+        unpivot_expression = self._generate_unpivot_expression(cell_lines)
 
         return (
             res_df
-            # Create a consistent id column:
+            # Create a consistent id column using the determined gene column:
             .withColumn('id', f.regexp_replace(f.col(gene_column), ';', '~'))
             # Unpivot:
             .select('id', f.expr(unpivot_expression))
@@ -344,32 +384,27 @@ class EncoreEvidenceGenerator:
         disease_from_source = parameters['diseaseFromSource']
         disease_from_source_mapped_id = parameters['diseaseFromSourceMappedId']
         dataset = parameters['dataset']
-        
+
         # Resolve relative paths to absolute paths from the working directory
-        log_fold_change_file = os.path.join(encore_data_path, parameters['logFoldChangeFile']) if parameters['logFoldChangeFile'] else None
+        log_fold_change_file = (
+            os.path.join(encore_data_path, parameters['logFoldChangeFile']) if parameters['logFoldChangeFile'] else None
+        )
         bliss_file = os.path.join(encore_data_path, parameters['blissFile']) if parameters['blissFile'] else None
         # gemini_file = parameters["geminiFile"] # <= Removed as genini method is dropped for now.
 
         # Testing if experiment needs to be skipped:
         if parameters['skipStudy'] is True:
-            logger.info(f'Skipping study: {dataset}')
+            logger.info(f'skip study: {dataset}')
             return None
 
-        logger.info(f'Parsing experiment: {dataset}')
+        logger.info(f'parse experiment: {dataset}')
 
         # if no log fold change file is provided, we will not generate any evidence.
         if log_fold_change_file is None:
-            logger.warning(f'No log fold change file provided for {dataset}.')
+            logger.warning(f'no log fold change file provided for {dataset}.')
             return None
 
-        # Reading lfc data:
         lfc_df = self.get_lfc_data(log_fold_change_file)
-
-        logger.info(f'Number of gene pairs in the log(fold change) dataset: {lfc_df.select("id").distinct().count()}')
-        logger.info(
-            f'Number cell lines in the log(fold change) dataset: {lfc_df.select("cellLineName").distinct().count()}'
-        )
-
         bliss_df = self.get_bliss_data(bliss_file)
 
         # Merging lfc + gemini:
@@ -391,10 +426,6 @@ class EncoreEvidenceGenerator:
                 on='cellId',
                 how='left',
             )
-        )
-        logger.info(f'Number of gene pairs in the merged dataset: {merged_dataset.select("id").count()}')
-        logger.info(
-            f'Number of cell lines in the merged dataset: {merged_dataset.select("cellLineName").distinct().count()}'
         )
 
         evidence_df = (
@@ -449,15 +480,18 @@ def encore(source: dict[str, str], destination: str, properties: dict[str, str])
     # Load the required data files
     cell_passport_data = spark.load_data(source['cell_passport'], format='csv', header=True)
     cell_line_to_uberon_mapping = spark.load_data(source['cell_line_to_uberon'], format='csv', header=True)
-    
+
     cell_passport_df = GenerateDiseaseCellLines(
         cell_passport_data, cell_line_to_uberon_mapping
     ).generate_disease_cell_lines()
 
     evidence_generator = EncoreEvidenceGenerator(spark, cell_passport_df, parameters['sharedMetadata'])
 
-    # Create evidence for all experiments. Dataframes are collected in a list:
-    evidence_dfs = [evidence_generator.parse_experiment(experiment, source['encore_data']) for experiment in parameters['experiments']]
+    logger.info(f'generate evidence for {len(parameters["experiments"])} experiments')
+    evidence_dfs = [
+        evidence_generator.parse_experiment(experiment, source['encore_data'])
+        for experiment in parameters['experiments']
+    ]
 
     # Filter out None values, so only dataframes with evidence are kept:
     evidence_dfs = list(filter(None, evidence_dfs))
