@@ -84,7 +84,14 @@ def target_safety(source: dict[str, str], destination: str, properties: dict[str
 def process_aop(aopwik_df: DataFrame) -> DataFrame:
     """Loads and processes the AOPWiki input JSON."""
     return (
-        aopwik_df.withColumn('study', f.struct(f.lit('cell-based').alias('type')))
+        aopwik_df.withColumn(
+            'study',
+            f.struct(
+                f.lit(None).cast('string').alias('description'),
+                f.lit(None).cast('string').alias('name'),
+                f.lit('cell-based').alias('type'),
+            ),
+        )
         # data bug: some events have the substring "NA" at the start - removal and trim the string
         .withColumn('event', f.trim(f.regexp_replace(f.col('event'), '^NA', '')))
         # data bug: effects.direction need to be in lowercase, this field is an enum
@@ -108,6 +115,7 @@ def process_aop(aopwik_df: DataFrame) -> DataFrame:
         )
         # Convert biosamples array into struct for consistent parsing with other sources
         .withColumn('biosample', f.explode_outer('biosamples'))
+        .withColumn('supporting_variation', f.lit(None).cast('string'))  # Add missing column for schema consistency
     )
 
 
@@ -188,7 +196,11 @@ def process_adverse_events(adverse_events_df: DataFrame) -> DataFrame:
 
     # Multiple dosing effects need to be grouped in the same record.
     effects_df = ae_df.groupBy('id', 'event', 'datasource').agg(f.collect_set(f.col('effects')).alias('effects'))
-    return ae_df.drop('effects').join(effects_df, on=['id', 'event', 'datasource'], how='left')
+    return (
+        ae_df.drop('effects')
+        .join(effects_df, on=['id', 'event', 'datasource'], how='left')
+        .withColumn('supporting_variation', f.lit(None).cast('string'))  # Add missing column for schema consistency
+    )
 
 
 def process_brennan(brennan_df: DataFrame) -> DataFrame:
@@ -212,9 +224,18 @@ def process_brennan(brennan_df: DataFrame) -> DataFrame:
                 )
             ),
         )
-        .withColumnRenamed('studies', 'study')
+        # Explicitly create the study struct with the correct field names to prevent schema inference issues
+        .withColumn(
+            'study',
+            f.struct(
+                f.col('studies.description').alias('description'),
+                f.col('studies.name').alias('name'),
+                f.col('studies.type').alias('type'),
+            ),
+        )
         .withColumnRenamed('biosamples', 'biosample')
-        .drop('Type')
+        .withColumn('supporting_variation', f.lit(None).cast('string'))  # Add missing column for schema consistency
+        .drop('Type', 'studies')  # Drop the original studies column
     )
 
 
@@ -277,6 +298,7 @@ def process_safety_risk(safety_risk_df: DataFrame) -> DataFrame:
                 f.col('datasource').contains('Lamore'), 'EFO_0004269'
             ),
         )
+        .withColumn('supporting_variation', f.lit(None).cast('string'))  # Add missing column for schema consistency
     )
 
 
@@ -317,11 +339,11 @@ def process_toxcast(toxcast_df: DataFrame) -> DataFrame:
         f.lit('ToxCast').alias('datasource'),
         f.lit('https://www.epa.gov/chemical-research/exploring-toxcast-data-downloadable-data').alias('url'),
         f.struct(
-            f.col('assay_component_endpoint_name').alias('name'),
             f.col('assay_component_desc').alias('description'),
+            f.col('assay_component_endpoint_name').alias('name'),
             f.col('assay_format_type').alias('type'),
         ).alias('study'),
-    )
+    ).withColumn('supporting_variation', f.lit(None).cast('string'))  # Add missing column for schema consistency
 
 
 def process_pharmacogenetics(pgx_df: DataFrame) -> DataFrame:
@@ -352,16 +374,20 @@ def process_pharmacogenetics(pgx_df: DataFrame) -> DataFrame:
         .select(
             f.col('targetFromSourceId').alias('id'),
             'event',
+            f.lit(None).cast('string').alias('eventId'),  # Add missing eventId column
             f.lit('ClinPGx').alias('datasource'),
             f.concat(f.lit(clinpgx_url_template), f.col('targetFromSourceId')).alias('url'),
             # To build study metadata later - each study is a drug after which the phenotype was observed
             f.explode(f.col('drugs.drugFromSource')).alias('drugFromSource'),
             'supporting_variation',
-            f.col('diseaseFromSourceMappedId').alias('eventId'),
+        )
+        .withColumn(
+            'study',
             f.struct(
+                f.lit(None).cast('string').alias('description'),
                 f.concat(f.col('drugFromSource'), f.lit(' induced effect')).alias('name'),
                 f.lit('clinical').alias('type'),
-            ).alias('study'),
+            ),
         )
     )
 
