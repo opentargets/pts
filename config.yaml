@@ -131,3 +131,14 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+
+  evidence_ppp:
+    - name: pyspark encore
+      source:
+        config: input/evidence/encore/config.json
+        cell_passport: input/evidence/cell_passport.csv.gz
+        cell_line_to_uberon: input/ot_curation/mappings/biosystem/depmap_uberon_mapping.csv
+        encore_data: input/evidence/encore
+      destination: intermediate/evidence/encore.parquet
+      pyspark: encore
+      
