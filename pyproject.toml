@@ -10,6 +10,8 @@ dependencies = [
   "pandas>=2.3.2",
   "numpy>=1.24.0",
   "ontoma>=1.0.0",
+  "opentargets-otter>=25.0.9",
+  "pandas>=2.3.2",
   "pandarallel>=1.6.0",
   "polars==1.31.0",
   "psutil>=7.1.1",
