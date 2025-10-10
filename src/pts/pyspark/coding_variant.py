@@ -383,7 +383,7 @@ def process_pharmacogenetics(spark: SparkSession, source: str) -> DataFrame:
         .select(
             'variantId',
             'datasourceId',
-            f.monotonically_increasing_id().alias('evidenceId'),
+            f.monotonically_increasing_id().cast(t.StringType()).alias('evidenceId'),
             f.lit(False).alias('zeroEvidence'),
         )
         .filter(f.col('variantId').isNotNull())
@@ -411,7 +411,7 @@ def process_qtls(spark: SparkSession, source: str) -> DataFrame:
         .select(
             f.col('col.variantId').alias('VariantId'),
             f.lit('mol_qtl').alias('datasourceId'),
-            f.monotonically_increasing_id().alias('evidenceId'),
+            f.monotonically_increasing_id().cast(t.StringType()).alias('evidenceId'),
             f.lit(False).alias('zeroEvidence'),
         )
     )
