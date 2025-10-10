@@ -222,3 +222,11 @@ steps:
         efo_version: v3.81.0
         ontology_cores: "1"
       pyspark: orphanet
+
+  evidence_ppp:
+    - name: pyspark ot_crispr
+      source:
+        study_table: input/evidence/ot_crispr/config.tsv
+        ot_crispr_data: input/evidence/ot_crispr
+      destination: intermediate/evidence/ot_crispr.parquet
+      pyspark: ot_crispr
