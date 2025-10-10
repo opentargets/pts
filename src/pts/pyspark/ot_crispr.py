@@ -210,7 +210,7 @@ class EvidenceParser:
         elif '.' in raw_data.columns[3]:
             label_separator = '.'
         else:
-            raise ValueError(f'Unrecognized label separator in {raw_data.columns[2]}')
+            raise ValueError(f'Unrecognized label separator in {raw_data.columns[3]}')
 
         # Updating column names according to the identified label separator:
         return reduce(
