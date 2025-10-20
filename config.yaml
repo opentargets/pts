@@ -131,7 +131,7 @@ steps:
   go:
     - name: pyspark transform go
       source:
-        go: input/go/go-basic.obo
+        go: input/go/go.obo
       destination:
         go: output/go/go.parquet
       pyspark: go

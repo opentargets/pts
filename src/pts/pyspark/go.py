@@ -14,13 +14,25 @@ except Exception:
 
 def _rows_from_obo(graph) -> list[Row]:
     rows: list[Row] = []
+    obsolete_count = 0
     for go_id, data in graph.nodes(data=True):
         if not go_id.startswith('GO:'):
             continue
         label = data.get('name')
         namespace = data.get('namespace')
         alt_ids = data.get('alt_id') or []
-        is_obsolete = bool(data.get('is_obsolete', False))
+        # robust parse: obonet stores 'is_obsolete' as 'true' (str) when present
+        obs_value = data.get('is_obsolete', False)
+        if isinstance(obs_value, str):
+            is_obsolete = obs_value.lower() == 'true'
+        else:
+            is_obsolete = bool(obs_value)
+        if is_obsolete:
+            obsolete_count += 1
+            if obsolete_count <= 3:
+                logger.debug(
+                    f'obsolete term found: {go_id}, raw value: {obs_value!r}, type: {type(obs_value).__name__}'
+                )
         is_a = data.get('is_a') or []
         # relationships may come as strings 'rel TARGET' or tuples ('rel', 'TARGET')
         relationships = data.get('relationship') or []
@@ -60,6 +72,7 @@ def _rows_from_obo(graph) -> list[Row]:
                 obsolete=is_obsolete,
             )
         )
+    logger.info(f'parsed {len(rows)} GO terms, {obsolete_count} obsolete')
     return rows
 
 
@@ -67,7 +80,7 @@ def _parse_go_obo(path: str, spark: SparkSession) -> DataFrame:
     if obonet is None:
         raise RuntimeError('Missing dependency obonet. Add obonet and networkx to project dependencies.')
     logger.debug(f'parsing GO OBO from: {path}')
-    graph = obonet.read_obo(path)
+    graph = obonet.read_obo(path, ignore_obsolete=False)
     rows = _rows_from_obo(graph)
     return spark.createDataFrame(rows, schema=go_schema)
 
