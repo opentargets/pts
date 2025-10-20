@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -265,6 +265,27 @@ wheels = [
 ]
 
 [[package]]
+name = "networkx"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/4f/ccdb8ad3a38e583f214547fd2f7ff1fc160c43a75af88e6aec213404b96a/networkx-3.5.tar.gz", hash = "sha256:d4c6f9cf81f52d69230866796b82afbccdec3db7ae4fbd1b65ea750feed50037", size = 2471065, upload-time = "2025-05-29T11:35:07.804Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/8d/776adee7bbf76365fdd7f2552710282c79a4ead5d2a46408c9043a2b70ba/networkx-3.5-py3-none-any.whl", hash = "sha256:0030d386a9a06dee3565298b4a734b68589749a544acbb6c412dc9e2489ec6ec", size = 2034406, upload-time = "2025-05-29T11:35:04.961Z" },
+]
+
+[[package]]
+name = "obonet"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "networkx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a9/2a/d2129fbb8f8015df90f9755bd8cd3cf63ab53ca21a07b6371875716b31a3/obonet-1.1.1.tar.gz", hash = "sha256:0dbc742f078d5a9bb89c7ae8dc66535e944de08dd4ead24854d340d882cfa275", size = 25656, upload-time = "2025-03-26T01:51:08.746Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/86/ae23b7033126c05b7a75b06796b3627a8dc866df2de2f4a30b8796863675/obonet-1.1.1-py3-none-any.whl", hash = "sha256:0513a589e27fd29856a3e6d4660f53cbdecf601319aaae4635b59a9795e68bc7", size = 9248, upload-time = "2025-03-26T01:51:07.315Z" },
+]
+
+[[package]]
 name = "opentargets-otter"
 version = "25.0.6"
 source = { registry = "https://pypi.org/simple" }
@@ -346,6 +367,8 @@ version = "25.2.2.dev1"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
+    { name = "networkx" },
+    { name = "obonet" },
     { name = "opentargets-otter" },
     { name = "polars" },
     { name = "pyspark" },
@@ -368,6 +391,8 @@ dev = [
 requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = "==7.9.1" },
     { name = "loguru", specifier = "==0.7.3" },
+    { name = "networkx", specifier = ">=3.2" },
+    { name = "obonet", specifier = ">=0.3.1" },
     { name = "opentargets-otter", specifier = ">=25.0.4" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
