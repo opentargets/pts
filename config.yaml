@@ -54,11 +54,10 @@ steps:
         output: output/mouse_phenotype
         excluded: excluded/mouse_phenotype
       pyspark: mouse_phenotype
-
   ##################################################################################################
 
-  #: CODING VARIANT VIEW STEP :#####################################################################
-  coding_variant_view:
+  #: CODING VARIANT STEP :##########################################################################
+  coding_variant:
     - name: pyspark coding_variant view
       source:
         variant: output/variant
@@ -72,7 +71,6 @@ steps:
         pharmacogenetics: output/pharmacogenetics
       destination: view/coding_variant
       pyspark: coding_variant
-
   ##################################################################################################
 
   #: OPENFDA STEP :#################################################################################

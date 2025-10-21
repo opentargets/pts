@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import psutil
 from loguru import logger
-from pyspark import SparkContext
 from pyspark.conf import SparkConf
 from pyspark.sql import SparkSession
 
@@ -35,7 +35,15 @@ class Session:
         if properties is None:
             properties = {}
 
+        mem_stats = psutil.virtual_memory()
+        available_gb = mem_stats.available // (1024**3)
+        gigs_overhead = max(1, int(available_gb * 0.7))
+        spark_memory = f'{gigs_overhead}g'
+
+        logger.info(f'using {spark_memory} memory for the spark driver')
+
         default_properties = {
+            'spark.driver.memory': spark_memory,
             'spark.driver.maxResultSize': '0',
             'spark.debug.maxToStringFields': '2000',
             'spark.sql.broadcastTimeout': '3000',

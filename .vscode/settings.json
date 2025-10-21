@@ -25,13 +25,5 @@
       "config.yaml"
     ]
   },
-  "github.copilot.enable": {
-    "*": true,
-    "python": true
-  },
-  "github.copilot.editor.enableAutoCompletions": true,
-  "github.copilot.advanced": {
-    "inlineSuggestEnable": true
-  },
   "yaml.format.singleQuote": true,
 }

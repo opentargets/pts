@@ -21,14 +21,7 @@ def coding_variant(
         destination (str): Destination path for output dataset.
         properties (dict[str, str] | None): Spark session properties.
     """
-    # Starting spark session.
-    extra_properties = {
-        'spark.driver.memory': '16g',
-        'spark.executor.memory': '32g',
-        'spark.driver.maxResultSize': '4g',
-    }
-    final_properties = {**(properties or {}), **extra_properties}
-    session = Session(app_name='coding_variant_view', properties=final_properties)
+    session = Session(app_name='coding_variant_view', properties=properties)
 
     # Extracting variants with amino acid change:
     variants_with_amino_acid_effect = process_variants(session.spark, source['variant'])
