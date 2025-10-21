@@ -1,13 +1,11 @@
 """Helper function to enable testing spark functions."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
+from pyspark.sql import SparkSession
 
 from pts.pyspark.common.session import Session
-
-if TYPE_CHECKING:
-    from pyspark.sql import SparkSession
 
 
 @pytest.fixture(scope='session')
