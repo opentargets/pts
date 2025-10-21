@@ -1,11 +1,14 @@
 """Tests for timeseries association processing."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from pts.pyspark.timeseries_utils import Association
 
 import pytest
-from pyspark.sql import types as t, SparkSession, functions as f
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as f
+
+from pts.pyspark.timeseries_utils import Association
 
 
 class TestAssociation:
@@ -23,8 +26,10 @@ class TestAssociation:
     def _setup(self: TestAssociation, spark: SparkSession) -> None:
         self.association = Association(
             spark.createDataFrame(
-                self.DATASET, 
-                'diseaseId STRING, targetId STRING, year INTEGER, yearlyEvidenceScores ARRAY<FLOAT>, retrospectiveEvidenceScores  ARRAY<FLOAT>, yearlyAssociationScore FLOAT, aggregationType STRING, aggregationValue STRING'
+                self.DATASET,
+                'diseaseId STRING, targetId STRING, year INTEGER,'
+                'yearlyEvidenceScores ARRAY<FLOAT>, retrospectiveEvidenceScores  ARRAY<FLOAT>,'
+                'yearlyAssociationScore FLOAT, aggregationType STRING, aggregationValue STRING',
             )
         )
 
@@ -37,10 +42,10 @@ class TestAssociation:
         with pytest.raises(ValueError) as exception:
             # Dropping mandatory column from data:
             Association(self.association.df.drop('diseaseId'))
-        assert exception.value.__str__() == "Required column: diseaseId is missing from dataset!"
+        assert str(exception.value) == 'Required column: diseaseId is missing from dataset!'
 
     @pytest.mark.parametrize(
-        "target_id, disease_id, first_year",
+        ('target_id', 'disease_id', 'first_year'),
         [
             ('t1', 'd1', 2007),
             ('t2', 'd1', 1975),
@@ -52,19 +57,15 @@ class TestAssociation:
         exploded_filtered_df = (
             # Explode evidence for years:
             Association._create_yearly_view(self.association.df, ['diseaseId', 'targetId'])
-            .filter(
-                (f.col('diseaseId') == disease_id) &
-                (f.col("targetId") == target_id)
-            )
+            .filter((f.col('diseaseId') == disease_id) & (f.col('targetId') == target_id))
             .orderBy(f.col('year').asc())
         )
 
         # Assert df is not empty:
         assert exploded_filtered_df.first() is not None
-        
+
         # Assert the first year:
         assert exploded_filtered_df.first().year == first_year
 
         # Assert the number of years:
         assert exploded_filtered_df.count() == this_year - first_year + 1
-
