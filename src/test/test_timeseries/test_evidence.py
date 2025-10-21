@@ -42,7 +42,7 @@ class TestEvidence:
 
         self.datasource_weights = spark.createDataFrame(self.DATASOURCE_WEIGHTS, 'datasourceId STRING, weight FLOAT')
 
-    def test_lenght(self: TestEvidence) -> None:
+    def test_length(self: TestEvidence) -> None:
         """Testing if the creation of the Evidence object leads to data loss."""
         assert self.evidence.df.count() == len(self.DATASET)
 
@@ -51,7 +51,7 @@ class TestEvidence:
         assert isinstance(self.evidence.apply_datasource_weight(self.datasource_weights), Evidence)
 
     def test_weighting_columns(self: TestEvidence) -> None:
-        """Testing if applyting weights results in chaning list of columns."""
+        """Testing if applying weights results in changing list of columns."""
         assert set(self.evidence.df.columns) == set(
             self.evidence.apply_datasource_weight(self.datasource_weights).df.columns
         )

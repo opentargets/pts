@@ -1,7 +1,6 @@
 """Definition of Association class."""
 
 from __future__ import annotations
-from functools import reduce
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -12,7 +11,6 @@ from pyspark.sql import types as t
 from pyspark.sql.window import Window, WindowSpec
 
 from .dataset import Dataset
-
 
 
 @dataclass
@@ -29,7 +27,7 @@ class Association(Dataset):
             'retrospectiveEvidenceScores',
             'yearlyAssociationScore',
             'aggregationType',
-            'aggregationValue'
+            'aggregationValue',
         ]
     )
 
@@ -74,32 +72,32 @@ class Association(Dataset):
         """
         peak_value = scores - f.lag(scores, offset=1).over(window)
 
-        return f.when(
-            peak_value.isNull(), f.lit(0)
-        ).otherwise(peak_value)
+        return f.when(peak_value.isNull(), f.lit(0)).otherwise(peak_value)
 
     @staticmethod
     def _create_yearly_view(df, groupby_columns: list[str]) -> DataFrame:
-        """Create yearly view on Assocations. 
+        """Create yearly view on Assocations.
 
         A sequence of all years generated between (first evidence - 5 year) and (current year).
 
         Args:
             df (DataFrame): evidence dataframe
-            window_columns (list[str]): Column list for windowing data.
+            groupby_columns (list[str]): Column list for grouping data.
 
         Returns:
             DataFrame:
         """
         last_year = datetime.now().year
-        window_spec = Window.partitionBy('targetId', 'diseaseId').orderBy('year').rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        window_spec = (
+            Window.partitionBy('targetId', 'diseaseId')
+            .orderBy('year')
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        )
 
         return (
             df.select(*groupby_columns, 'year')
             .distinct()
-            .withColumn(
-                'first_evidence_year', f.min('year').over(window_spec)
-            )
+            .withColumn('first_evidence_year', f.min('year').over(window_spec))
             .select(*groupby_columns, 'first_evidence_year')
             .distinct()
             .withColumn(
@@ -113,15 +111,16 @@ class Association(Dataset):
             )
             .select(*groupby_columns, f.explode('years').alias('year'))
         )
-    
+
     @staticmethod
     def _back_fill_missing_years(association_df: DataFrame, groupby_columns: list[str]) -> DataFrame:
         """Fill in data for years where no evidence has arrived.
-        
-        In the association dataset scores are only available for years when evidence is available. 
+
+        In the association dataset scores are only available for years when evidence is available.
         For missing years, association and evidence data is propagated from earlier years.
-        This will create a complete dataset telling the association score in any given year from the first year with evidence.
-        
+        This will create a complete dataset telling the association score in any given year
+        from the first year with evidence.
+
         Args:
             association_df (DataFrame): association dataframe to be processed.
             groupby_columns (list[str]): list of columns to group data by
@@ -137,35 +136,33 @@ class Association(Dataset):
             # Join with the complete association table - this join will leave multiple rows without association score.
             .join(association_df, on=[*groupby_columns, 'year'], how='left')
             # Filling missing association scores from previous non-null years:
-            .withColumns(
-                {
-                    # Propagating non-null association scores from erlier years:
-                    'yearlyAssociationScore': f.coalesce(
-                        f.last('yearlyAssociationScore', ignorenulls=True).over(
-                            window_spec.rowsBetween(Window.unboundedPreceding, 0)
-                        ),
-                        f.lit(0),
+            .withColumns({
+                # Propagating non-null association scores from earlier years:
+                'yearlyAssociationScore': f.coalesce(
+                    f.last('yearlyAssociationScore', ignorenulls=True).over(
+                        window_spec.rowsBetween(Window.unboundedPreceding, 0)
                     ),
-                    # Propagating non-null evidence scores from earlier years:
-                    'retrospectiveEvidenceScores': f.coalesce(
-                        f.last('retrospectiveEvidenceScores', ignorenulls=True).over(
-                            window_spec.rowsBetween(Window.unboundedPreceding, 0)
-                        ),
-                        f.array().cast(t.ArrayType(t.FloatType())),
+                    f.lit(0),
+                ),
+                # Propagating non-null evidence scores from earlier years:
+                'retrospectiveEvidenceScores': f.coalesce(
+                    f.last('retrospectiveEvidenceScores', ignorenulls=True).over(
+                        window_spec.rowsBetween(Window.unboundedPreceding, 0)
                     ),
-                }
-            )
+                    f.array().cast(t.ArrayType(t.FloatType())),
+                ),
+            })
         )
-    
+
     @staticmethod
     def _get_novelty(
-        intermediate_dataset: DataFrame, 
-        groupby_columns: list[str], 
-        novelty_window: int, 
-        novelty_shift: int, 
-        novelty_scale:int
+        intermediate_dataset: DataFrame,
+        groupby_columns: list[str],
+        novelty_window: int,
+        novelty_shift: int,
+        novelty_scale: int,
     ) -> DataFrame:
-        """""Calculate novelty values.
+        """Calculate novelty values.
 
         Args:
             intermediate_dataset (DataFrame): backfilled association dataset.
@@ -173,7 +170,7 @@ class Association(Dataset):
             novelty_window (int): size of the window.
             novelty_shift (int): Novelty shift
             novelty_scale (int): how quickly the novelty decays.
-        
+
         Returns:
             DataFrame: novelty dataset.
         """
@@ -213,16 +210,12 @@ class Association(Dataset):
         """
         # Generate a complete dataset with filled data for missing years:
         intermediate_dataset = self._back_fill_missing_years(
-            self.df.na.fill({"aggregationValue": "NA"}), self.GROUPBY_COLUMNS
+            self.df.na.fill({'aggregationValue': 'NA'}), self.GROUPBY_COLUMNS
         )
 
         # Calculate novelty based on subsequent years:
         novelty = self._get_novelty(
-            intermediate_dataset, 
-            self.GROUPBY_COLUMNS,
-            novelty_window,
-            novelty_shift,
-            novelty_scale
+            intermediate_dataset, self.GROUPBY_COLUMNS, novelty_window, novelty_shift, novelty_scale
         )
 
         return (
@@ -238,20 +231,13 @@ class Association(Dataset):
             .groupby(self.GROUPBY_COLUMNS)
             .agg(
                 f.max(f.col('yearlyAssociationScore')).alias('associationScore'),
-                f.collect_list(
-                    f.struct(
-                        'year', 
-                        'yearlyAssociationScore', 
-                        'novelty', 
-                        'yearlyEvidenceScores'
-                    )
-                ).alias('timeseries'),
+                f.collect_list(f.struct('year', 'yearlyAssociationScore', 'novelty', 'yearlyEvidenceScores')).alias(
+                    'timeseries'
+                ),
             )
             # Adding current novelty, which allows for quick filtering:
-            .withColumns(
-                {
-                    'currentNovelty': f.filter('timeseries', lambda x: x.year == datetime.now().year)[0].novelty,
-                    'aggregationValue': f.when(f.col('aggregationValue')!= 'NA', f.col('aggregationValue'))
-                } 
-            )
+            .withColumns({
+                'currentNovelty': f.filter('timeseries', lambda x: x.year == datetime.now().year)[0].novelty,
+                'aggregationValue': f.when(f.col('aggregationValue') != 'NA', f.col('aggregationValue')),
+            })
         )

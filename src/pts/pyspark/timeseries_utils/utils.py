@@ -5,7 +5,7 @@ from typing import Any
 import yaml
 
 
-def read_yaml_config(path:str) -> dict[str, Any]:
+def read_yaml_config(path: str) -> dict[str, Any]:
     """Read yaml configuration.
 
     Args:
@@ -21,11 +21,12 @@ def read_yaml_config(path:str) -> dict[str, Any]:
         config = yaml.safe_load(f)
 
     if config is None:
-        raise ValueError("Configuarion is empty.")
+        raise ValueError('Configurarion is empty.')
 
     return config
 
-def get_weight_for_datasource(data_sources: list[dict[str,Any]]) -> list[tuple[str, float]]:
+
+def get_weight_for_datasource(data_sources: list[dict[str, Any]]) -> list[tuple[str, float]]:
     """Get list of data sources' weights for overall score.
 
     Args:
@@ -34,4 +35,4 @@ def get_weight_for_datasource(data_sources: list[dict[str,Any]]) -> list[tuple[s
     Returns:
         list[tuple[str, float]]:
     """
-    return [(datasource["id"], datasource["weight"]) for datasource in data_sources]
+    return [(datasource['id'], datasource['weight']) for datasource in data_sources]
