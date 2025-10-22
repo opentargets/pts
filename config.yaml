@@ -129,6 +129,7 @@ steps:
   #: MOUSE_PHENOTYPES STEP :########################################################################
   timeseries:
     - name: pyspark timeseries
+      pyspark: timeseries
       source:
         evidence: output/evidence
         disease: output/disease
@@ -189,5 +190,5 @@ steps:
             weight: 0.2
           - id: impc
             weight: 0.2
-      pyspark: timeseries
+
   ##################################################################################################

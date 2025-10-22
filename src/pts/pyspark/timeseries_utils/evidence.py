@@ -255,6 +255,8 @@ class Evidence(Dataset):
                 'yearlyAssociationScore',
                 self._get_harmonic_sum(f.col('retrospectiveEvidenceScores'), self.MAX_SCORE),
             )
+            # Dropping the combined evidence column, as we no longer need it:
+            .drop('retrospectiveEvidenceScores')
             .orderBy(f.col('aggregationValue'), f.col('year'))
             # Reconverting Nulls in the aggregation column:
             .repartition(200, f.col('year'))

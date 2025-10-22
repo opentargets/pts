@@ -15,9 +15,6 @@ class Dataset:
 
     _df: DataFrame
 
-    # This is the default set of columns we group evidence by, used for overall associations:
-    GROUPBY_COLUMNS: list[str] = field(default_factory=lambda: ['diseaseId', 'targetId', 'year'])
-
     # This is the default set of columns we window over when combining scores from different years:
     WINDOW_COLUMNS: list[str] = field(default_factory=lambda: ['diseaseId', 'targetId'])
 

@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
+from pyspark.sql.window import Window
 
 from pts.pyspark.timeseries_utils import Association
 
@@ -16,10 +17,10 @@ class TestAssociation:
 
     # Association dataset:
     DATASET = [
-        ('d1', 't1', 2012, [0.2, 0.9], [0.2, 0.9], 0.7, 'overall', None),
-        ('d1', 't1', 2022, [0.5], [0.2, 0.9, 0.5], 0.8, 'overall', None),
-        ('d1', 't2', 1980, [0.6, 0.6, 0.1], [0.6, 0.6, 0.1], 0.5, 'overall', None),
-        ('d1', 't2', 2012, [0.1], [0.6, 0.6, 0.1, 0.1], 0.51, 'overall', None),
+        ('d1', 't1', 2012, [0.2, 0.9], 0.7, 'agg', 'agg_1'),
+        ('d1', 't1', 2022, [0.5], 0.8, 'agg', 'agg_1'),
+        ('d1', 't2', 1980, [0.6, 0.6, 0.1], 0.5, 'agg', 'agg_1'),
+        ('d1', 't2', 2012, [0.1], 0.51, 'agg', 'agg_1'),
     ]
 
     @pytest.fixture(autouse=True)
@@ -27,9 +28,13 @@ class TestAssociation:
         self.association = Association(
             spark.createDataFrame(
                 self.DATASET,
-                'diseaseId STRING, targetId STRING, year INTEGER,'
-                'yearlyEvidenceScores ARRAY<FLOAT>, retrospectiveEvidenceScores  ARRAY<FLOAT>,'
-                'yearlyAssociationScore FLOAT, aggregationType STRING, aggregationValue STRING',
+                'diseaseId STRING, '
+                'targetId STRING, '
+                'year INTEGER, '
+                'yearlyEvidenceScores ARRAY<FLOAT>, '
+                'yearlyAssociationScore FLOAT, '
+                'aggregationType STRING, '
+                'aggregationValue STRING',
             )
         )
 
@@ -56,7 +61,7 @@ class TestAssociation:
         # Exploding years:
         exploded_filtered_df = (
             # Explode evidence for years:
-            Association._create_yearly_view(self.association.df, ['diseaseId', 'targetId'])
+            Association._create_yearly_view(self.association.df)
             .filter((f.col('diseaseId') == disease_id) & (f.col('targetId') == target_id))
             .orderBy(f.col('year').asc())
         )
@@ -69,3 +74,28 @@ class TestAssociation:
 
         # Assert the number of years:
         assert exploded_filtered_df.count() == this_year - first_year + 1
+
+    def test_data_propagation_to_missing_years__type(self: TestAssociation) -> None:
+        """Test if the data propagation after explosion is good."""
+        propagated_data = Association._back_fill_missing_years(self.association.df)
+
+        assert isinstance(propagated_data, type(self.association.df))
+
+    def test_data_propagation_to_missing_years__no_missing_association(self: TestAssociation) -> None:
+        """Test if the data propagation after explosion is good."""
+        propagated_data = Association._back_fill_missing_years(self.association.df)
+
+        assert propagated_data.filter(f.col('yearlyAssociationScore').isNull()).count() == 0
+        assert propagated_data.filter(f.col('yearlyEvidenceScores').isNull()).count() > 0
+
+    def test_data_propagation_to_missing_years__association_score_always_grow(self: TestAssociation) -> None:
+        """Test if yearlyAssociation score never decreases in subsequent years.  Within the same association window."""
+        # Create window:
+        association_window = Window.partitionBy(Association.GROUPBY_COLUMNS).orderBy('year')
+
+        propagated_data = Association._back_fill_missing_years(self.association.df).withColumn(
+            'scoreDiff',
+            f.col('yearlyAssociationScore') - f.lag(f.col('yearlyAssociationScore'), offset=1).over(association_window),
+        )
+
+        assert propagated_data.filter(f.col('scoreDiff') < 0).count() == 0

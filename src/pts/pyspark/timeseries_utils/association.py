@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
+from typing import ClassVar
 
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as f
-from pyspark.sql import types as t
 from pyspark.sql.window import Window, WindowSpec
 
 from .dataset import Dataset
@@ -18,23 +18,18 @@ class Association(Dataset):
     """Definition of associations."""
 
     # Mandatory association column:
-    MANDATORY_COLUMNS: list[str] = field(
-        default_factory=lambda: [
-            'diseaseId',
-            'targetId',
-            'year',
-            'yearlyEvidenceScores',
-            'retrospectiveEvidenceScores',
-            'yearlyAssociationScore',
-            'aggregationType',
-            'aggregationValue',
-        ]
-    )
+    MANDATORY_COLUMNS: ClassVar[list[str]] = [
+        'diseaseId',
+        'targetId',
+        'year',
+        'yearlyEvidenceScores',
+        'yearlyAssociationScore',
+        'aggregationType',
+        'aggregationValue',
+    ]
 
     # This is the default set of columns we group evidence by, used for association calculation:
-    GROUPBY_COLUMNS: list[str] = field(
-        default_factory=lambda: ['diseaseId', 'targetId', 'aggregationType', 'aggregationValue']
-    )
+    GROUPBY_COLUMNS: ClassVar[list[str]] = ['diseaseId', 'targetId', 'aggregationType', 'aggregationValue']
 
     @staticmethod
     def _get_peak(scores: Column, window: WindowSpec) -> Column:
@@ -75,14 +70,13 @@ class Association(Dataset):
         return f.when(peak_value.isNull(), f.lit(0)).otherwise(peak_value)
 
     @staticmethod
-    def _create_yearly_view(df, groupby_columns: list[str]) -> DataFrame:
+    def _create_yearly_view(df) -> DataFrame:
         """Create yearly view on Assocations.
 
         A sequence of all years generated between (first evidence - 5 year) and (current year).
 
         Args:
             df (DataFrame): evidence dataframe
-            groupby_columns (list[str]): Column list for grouping data.
 
         Returns:
             DataFrame:
@@ -95,10 +89,10 @@ class Association(Dataset):
         )
 
         return (
-            df.select(*groupby_columns, 'year')
+            df.select(*Association.GROUPBY_COLUMNS, 'year')
             .distinct()
             .withColumn('first_evidence_year', f.min('year').over(window_spec))
-            .select(*groupby_columns, 'first_evidence_year')
+            .select(*Association.GROUPBY_COLUMNS, 'first_evidence_year')
             .distinct()
             .withColumn(
                 'years',
@@ -109,11 +103,11 @@ class Association(Dataset):
                     f.lit(last_year),
                 ),
             )
-            .select(*groupby_columns, f.explode('years').alias('year'))
+            .select(*Association.GROUPBY_COLUMNS, f.explode('years').alias('year'))
         )
 
     @staticmethod
-    def _back_fill_missing_years(association_df: DataFrame, groupby_columns: list[str]) -> DataFrame:
+    def _back_fill_missing_years(association_df: DataFrame) -> DataFrame:
         """Fill in data for years where no evidence has arrived.
 
         In the association dataset scores are only available for years when evidence is available.
@@ -128,30 +122,24 @@ class Association(Dataset):
         Return:
             DataFrame: where each missing year from the first year with evidence to current year is filled.
         """
-        window_spec = Window.partitionBy(groupby_columns).orderBy('year')
+        window_spec = Window.partitionBy(Association.GROUPBY_COLUMNS).orderBy('year')
 
         return (
             # Create a table with all possible target/disease/{optional aggregation column}/year
-            Association._create_yearly_view(association_df, groupby_columns)
+            Association._create_yearly_view(association_df)
             # Join with the complete association table - this join will leave multiple rows without association score.
-            .join(association_df, on=[*groupby_columns, 'year'], how='left')
+            .join(association_df, on=[*Association.GROUPBY_COLUMNS, 'year'], how='left')
             # Filling missing association scores from previous non-null years:
-            .withColumns({
+            .withColumn(
                 # Propagating non-null association scores from earlier years:
-                'yearlyAssociationScore': f.coalesce(
+                'yearlyAssociationScore',
+                f.coalesce(
                     f.last('yearlyAssociationScore', ignorenulls=True).over(
                         window_spec.rowsBetween(Window.unboundedPreceding, 0)
                     ),
                     f.lit(0),
                 ),
-                # Propagating non-null evidence scores from earlier years:
-                'retrospectiveEvidenceScores': f.coalesce(
-                    f.last('retrospectiveEvidenceScores', ignorenulls=True).over(
-                        window_spec.rowsBetween(Window.unboundedPreceding, 0)
-                    ),
-                    f.array().cast(t.ArrayType(t.FloatType())),
-                ),
-            })
+            )
         )
 
     @staticmethod
@@ -209,9 +197,7 @@ class Association(Dataset):
             DataFrame: novelty dataset.
         """
         # Generate a complete dataset with filled data for missing years:
-        intermediate_dataset = self._back_fill_missing_years(
-            self.df.na.fill({'aggregationValue': 'NA'}), self.GROUPBY_COLUMNS
-        )
+        intermediate_dataset = self._back_fill_missing_years(self.df.na.fill({'aggregationValue': 'NA'}))
 
         # Calculate novelty based on subsequent years:
         novelty = self._get_novelty(
