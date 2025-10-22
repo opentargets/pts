@@ -540,7 +540,6 @@ dependencies = [
     { name = "polars" },
     { name = "psutil" },
     { name = "pyspark" },
-    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -569,7 +568,6 @@ requires-dist = [
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
     { name = "pytest-mock", marker = "extra == 'test'", specifier = "==3.14.1" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 provides-extras = ["test"]
 
