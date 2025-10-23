@@ -80,7 +80,17 @@ def _parse_go_obo(path: str, spark: SparkSession) -> DataFrame:
     if obonet is None:
         raise RuntimeError('Missing dependency obonet. Add obonet and networkx to project dependencies.')
     logger.debug(f'parsing GO OBO from: {path}')
-    graph = obonet.read_obo(path, ignore_obsolete=False)
+
+    # Use smart_open for gs:// URLs to stream from GCS to driver memory
+    if path.startswith('gs://'):
+        from smart_open import open as smart_open
+
+        logger.debug('detected GCS path, using smart_open for streaming')
+        with smart_open(path, 'r') as fh:
+            graph = obonet.read_obo(fh, ignore_obsolete=False)
+    else:
+        graph = obonet.read_obo(path, ignore_obsolete=False)
+
     rows = _rows_from_obo(graph)
     return spark.createDataFrame(rows, schema=go_schema)
 

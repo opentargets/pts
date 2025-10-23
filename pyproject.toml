@@ -10,7 +10,8 @@ dependencies = [
   "polars==1.31.0",
   "pyspark>=4.0.0",
   "obonet>=0.3.1",
-  "networkx>=3.2"
+  "networkx>=3.2",
+  "smart-open[gcs]>=7.0.0",
 ]
 
 [dependency-groups]

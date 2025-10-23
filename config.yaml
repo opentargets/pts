@@ -1,7 +1,7 @@
 ---
 work_path: ./work
 log_level: DEBUG
-# release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
+# release_uri: gs://ot-team/polina/go-migration_test
 pool: 8
 
 steps:
