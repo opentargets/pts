@@ -86,7 +86,7 @@ def _parse_go_obo(path: str, spark: SparkSession) -> DataFrame:
         from smart_open import open as smart_open
 
         logger.debug('detected GCS path, using smart_open for streaming')
-        with smart_open(path, 'r') as fh:
+        with smart_open(path, 'r') as fh:  # type: ignore[attr-defined]
             graph = obonet.read_obo(fh, ignore_obsolete=False)
     else:
         graph = obonet.read_obo(path, ignore_obsolete=False)

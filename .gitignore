@@ -19,5 +19,6 @@ htmlcov
 # output working directory
 work/
 
-# GO comparison local cache
-work/local_go_ref/
+# tools to compare go old and go new
+tools/inspect_go/
+tools/compare_go/
