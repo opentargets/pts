@@ -69,7 +69,7 @@ def _rows_from_obo(graph) -> list[Row]:
                 regulates=regulates,
                 negatively_regulates=negatively_regulates,
                 positively_regulates=positively_regulates,
-                obsolete=is_obsolete,
+                isObsolete=is_obsolete,
             )
         )
     logger.info(f'parsed {len(rows)} GO terms, {obsolete_count} obsolete')

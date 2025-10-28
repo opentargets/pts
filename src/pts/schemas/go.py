@@ -10,5 +10,5 @@ go_schema = StructType([
     StructField('regulates', ArrayType(StringType(), containsNull=False), True),
     StructField('negatively_regulates', ArrayType(StringType(), containsNull=False), True),
     StructField('positively_regulates', ArrayType(StringType(), containsNull=False), True),
-    StructField('obsolete', BooleanType(), True),
+    StructField('isObsolete', BooleanType(), True),
 ])
