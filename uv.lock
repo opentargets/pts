@@ -527,7 +527,7 @@ wheels = [
 
 [[package]]
 name = "pts"
-version = "25.3.0rc1"
+version = "25.3.0rc2"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
@@ -537,6 +537,7 @@ dependencies = [
     { name = "pandarallel" },
     { name = "pandas" },
     { name = "polars" },
+    { name = "pronto" },
     { name = "pyspark" },
 ]
 
@@ -562,6 +563,7 @@ requires-dist = [
     { name = "pandarallel", specifier = ">=1.6.0" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "polars", specifier = "==1.31.0" },
+    { name = "pronto", specifier = ">=2.7.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
 ]
