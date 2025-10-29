@@ -318,6 +318,14 @@ steps:
 
   #: EVIDENCE PPP STEP :############################################################################
   evidence_ppp:
+    - name: pyspark panel_app
+      source: input/evidence/panel_app.tsv
+      destination: intermediate/evidence/panel_app.parquet
+      properties:
+        efo_version: ${efo_version}
+        ontology_cores: 1
+      pyspark: panel_app
+
     - name: pyspark crispr screens
       pyspark: crispr_screens
       source:
