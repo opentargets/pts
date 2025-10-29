@@ -11,7 +11,7 @@ def clingen(
     source: dict[str, str],
     destination: str,
     properties: dict[str, str],
-) -> DataFrame:
+) -> None:
     spark = Session(app_name='clingen', properties=properties)
     efo_version = properties['efo_version']
     cores = int(properties.get('ontology_cores', 1))
