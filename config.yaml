@@ -183,6 +183,22 @@ steps:
           transformer: homology
   ##################################################################################################
 
+  #: PHARMACOGENETICS STEP :#######################################################################
+  pharmacogenetics    :
+    - name: pyspark pharmacogenetics
+      source:
+        clinpgx: input/pharmacogenetics/clinpgx_annotation.json.gz
+        phenotypes: input/pharmacogenetics/phenotypes.json
+        openai_api_key_filename: tmp/openai_api_key
+      destination:
+        associations: intermediate/pharmacogenetics.parquet
+        phenotypes: intermediate/pharmacogenetics/phenotypes.json
+      properties:
+        efo_version: ${EFO_VERSION}
+        cores: ${CORES}
+      pyspark: pharmacogenetics
+  ##################################################################################################      
+  
   #: TARGET/DISEASE EVIDENCE STEP :#################################################################
   evidence:
     - name: pyspark project_score
