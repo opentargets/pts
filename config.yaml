@@ -132,8 +132,9 @@ steps:
           source: ${match_prefix}/${match_path}${match_stem}.${match_ext}
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
-  ##################################################################################################
-
+  ####################################################################################################
+  
+  #: TARGET/DISEASE STEP :############################################################################
   evidence:
     - name: pyspark clingen
       source:
@@ -143,3 +144,11 @@ steps:
         efo_version: v3.81.0
         ontology_cores: "1"
       pyspark: clingen
+      
+  evidence_ppp:
+    - name: pyspark ot_crispr
+      source:
+        study_table: input/evidence/ot_crispr/config.tsv
+        ot_crispr_data: input/evidence/ot_crispr
+      destination: intermediate/evidence/ot_crispr.parquet
+      pyspark: ot_crispr

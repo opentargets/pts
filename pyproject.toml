@@ -1,6 +1,6 @@
 [project]
 name = "PTS"
-version = "25.3.6-rc.1"
+version = "25.3.2-rc.1"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -8,7 +8,7 @@ dependencies = [
   "loguru==0.7.3",
   "numpy>=1.24.0",
   "ontoma>=1.0.0",
-  "opentargets-otter>=25.0.4",
+  "opentargets-otter>=25.0.9",
   "pandas>=2.3.2",
   "pandarallel>=1.6.0",
   "polars==1.31.0",
