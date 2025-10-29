@@ -25,7 +25,7 @@ def crispr_screens(
     destination: str,
     properties: dict[str, str] | None,
 ) -> None:
-    """Process CRISPR Brain inputs materialized by PIS into target/disease evidence.
+    """Process CRISPR Brain inputs into target/disease evidence.
 
     Expected `source` keys:
       - screens: path to gzipped JSON screens payload
@@ -44,12 +44,12 @@ def crispr_screens(
 
     logger.info('processing crispr screens into evidence')
     screen_rows = [{**v, **v.get('metadata', {})} for v in screens_obj.values() if isinstance(v, dict)]
-    screens_df = spark.createDataFrame(screen_rows)
+    screens_df = spark.spark.createDataFrame(screen_rows)
     screens_df = screens_df.withColumn('studySummary', _parsing_experiment(f.col('Description')))
     studies_df = (
         screens_df.join(
             # Build literature references
-            spark.createDataFrame(
+            spark.spark.createDataFrame(
                 LITERATURE_MAPPING,
                 ['Reference Link', 'literature'],
             ),
