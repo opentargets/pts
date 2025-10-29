@@ -179,7 +179,7 @@ class Association(Dataset):
             .withColumnRenamed('year', 'associationYear')
             # Drawing around the window:
             .select(
-                '*', Association._windowing_around_peak(f.col('associationYear'), novelty_window).alias('year-peakYear')
+                '*', Association._windowing_around_peak(f.col('associationYear'), novelty_window)
             )
             # Grouping data again:
             .groupBy([*groupby_columns, 'year'])

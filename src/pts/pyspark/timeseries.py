@@ -36,7 +36,10 @@ def timeseries(
     disease_df = session.load_data(source['disease'])
 
     # Extracting datasource weights:
-    datasource_weights = session.spark.createDataFrame(settings['datasource_weights'])
+    datasource_weights = (
+        session.spark.createDataFrame(settings['datasource_weights'])
+        .withColumnRenamed('id', 'datasourceId')
+    )
 
     # We might not request all outputs:
     for data_output, output_path in destination.items():
