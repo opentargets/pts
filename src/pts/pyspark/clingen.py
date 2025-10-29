@@ -2,7 +2,6 @@
 
 import pyspark.sql.functions as f
 from loguru import logger
-from pyspark.sql import DataFrame
 
 from pts.pyspark.common.session import Session
 from pts.utils.ontology import add_efo_mapping
