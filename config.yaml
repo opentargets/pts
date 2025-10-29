@@ -267,6 +267,14 @@ steps:
         ontology_cores: "1"
         score_cutoff: "0.41"
       pyspark: impc
+
+    - name: pyspark panel_app
+      source: input/evidence/panel_app.tsv
+      destination: intermediate/evidence/panel_app.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: panel_app
       
   evidence_ppp:
     - name: pyspark ot_crispr
