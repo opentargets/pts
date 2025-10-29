@@ -275,6 +275,14 @@ steps:
         efo_version: v3.81.0
         ontology_cores: "1"
       pyspark: panel_app
+
+    - name: pyspark crispr screens
+      source:
+        screens: input/evidence/crispr_screens/brain_screens.json.gz
+        studies_dir: input/evidence/crispr_screens/brain_studies
+        disease_mapping: input/ot_curation/mappings/disease/brain_crispr_studies.tsv
+      destination: output/crispr_screens
+      pyspark: crispr_screens
       
   evidence_ppp:
     - name: pyspark ot_crispr
