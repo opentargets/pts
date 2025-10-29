@@ -3,6 +3,8 @@ work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
 pool: 8
+efo_version: v3.81.0
+ontology_cores: 1  # Number of cores for ontology mapping (1 = sequential, >1 = parallel)
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -141,9 +143,18 @@ steps:
           source: ${match_prefix}/${match_path}${match_stem}.${match_ext}
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
-  ##################################################################################################
-
+  ####################################################################################################
+  
+  #: TARGET/DISEASE STEP :############################################################################
   evidence:
+    - name: pyspark clingen
+      source:
+        evidence: input/evidence/clingen.csv
+      destination: intermediate/evidence/clingen.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: clingen
     - name: pyspark impc evidence strings
       source:
         solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
@@ -166,3 +177,11 @@ steps:
         ontology_cores: "1"
         score_cutoff: "0.41"
       pyspark: impc
+      
+  evidence_ppp:
+    - name: pyspark ot_crispr
+      source:
+        study_table: input/evidence/ot_crispr/config.tsv
+        ot_crispr_data: input/evidence/ot_crispr
+      destination: intermediate/evidence/ot_crispr.parquet
+      pyspark: ot_crispr
