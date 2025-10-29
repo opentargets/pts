@@ -3,6 +3,8 @@ work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
 pool: 8
+efo_version: v3.81.0
+ontology_cores: 1  # Number of cores for ontology mapping (1 = sequential, >1 = parallel)
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -170,7 +172,7 @@ steps:
           transformer: homology
   ##################################################################################################
 
-  #: EVIDENCE STEP :################################################################################
+  #: TARGET/DISEASE EVIDENCE STEP :#################################################################
   evidence:
     - name: pyspark project_score
       source:
@@ -222,6 +224,15 @@ steps:
         efo_version: v3.81.0
         ontology_cores: "1"
       pyspark: orphanet
+
+    - name: pyspark clingen
+      source:
+        evidence: input/evidence/clingen.csv
+      destination: intermediate/evidence/clingen.parquet
+      properties:
+        efo_version: v3.81.0
+        ontology_cores: "1"
+      pyspark: clingen
 
   evidence_ppp:
     - name: pyspark ot_crispr
