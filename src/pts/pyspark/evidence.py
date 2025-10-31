@@ -16,11 +16,11 @@ from pts.pyspark.common.utils import update_quality_flag
 
 
 class EvidenceFlags(Enum):
-    INVALID_DISEASE = 'Evidence has no valid disease'
-    INVALID_TARGET = 'Evidence has no valid target'
-    DUPLICATED = 'Evidence is duplicated'
-    NO_VALID_SCORE = 'Evidence has no valid score'
-    INVALID_BIOTYPE = 'Evidence has invalid biotype'
+    INVALID_DISEASE = 'No valid disease'
+    INVALID_TARGET = 'No valid target'
+    DUPLICATED = 'Duplicated'
+    NO_VALID_SCORE = 'No valid score'
+    INVALID_BIOTYPE = 'Invalid biotype'
 
 
 @dataclass
@@ -32,7 +32,6 @@ class Evidence:
     QC_COLUMN: str = 'qualityControls'
 
     # List of columns that are used for generate evidence identifier:
-    UNIQUE_FIELDS: list[str] = field(default_factory=list)
     DEFAULT_UNIQUE_FIELDS: list[str] = field(
         default_factory=lambda: [
             'targetId',
@@ -53,8 +52,9 @@ class Evidence:
 
     def __post_init__(self: Evidence) -> None:
         """Initial process of the evidence."""
-        # Initialise QC column:
-        self.evidence_df = self.evidence_df.withColumn(self.QC_COLUMN, f.lit([]).cast(t.ArrayType(t.StringType())))
+        # Initialise QC column if not given:
+        if self.QC_COLUMN not in self.evidence_df.columns:
+            self.evidence_df = self.evidence_df.withColumn(self.QC_COLUMN, f.lit([]).cast(t.ArrayType(t.StringType())))
 
     def validate_target(self: Evidence, target_lut: DataFrame, invalid_biotypes: list[str] | None) -> Evidence:
         """Validation of targets.
@@ -70,7 +70,7 @@ class Evidence:
         if not invalid_biotypes:
             invalid_biotypes = []
 
-        self.evidence_df = (
+        return Evidence(
             self.evidence_df
             # Resolve target identifiers:
             .join(f.broadcast(target_lut), on='targetFromSourceId', how='leftouter')
@@ -83,13 +83,11 @@ class Evidence:
             .withColumn(
                 self.QC_COLUMN,
                 update_quality_flag(
-                    f.col(self.QC_COLUMN), f.col('targetId').isin(invalid_biotypes), EvidenceFlags.INVALID_TARGET
+                    f.col(self.QC_COLUMN), f.col('biotype').isin(invalid_biotypes), EvidenceFlags.INVALID_BIOTYPE
                 ),
             )
             .drop('biotype')
         )
-
-        return self
 
     def validate_diseases(self: Evidence, disease_lut: DataFrame) -> Evidence:
         """Validation of diseases.
@@ -100,7 +98,7 @@ class Evidence:
         Returns:
             Evidence: evidence with mapped targets, and flaggeed evidence without target.
         """
-        self.evidence_df = (
+        return Evidence(
             self.evidence_df
             # Resolve target identifiers:
             .join(disease_lut, on='diseaseFromSourceMappedId', how='leftouter')
@@ -111,8 +109,6 @@ class Evidence:
             )
         )
 
-        return self
-
     def validate_uniqueness(self: Evidence) -> Evidence:
         """Validate uniqueness of evidence.
 
@@ -122,7 +118,7 @@ class Evidence:
         Returns:
             Evidence: where non-unique evidence is flagged.
         """
-        self.evidence_df = (
+        return Evidence(
             self.evidence_df.withColumn(
                 'evidence_unique_rank', f.rank().over(Window.partitionBy('id').orderBy(f.rand()))
             )
@@ -134,17 +130,14 @@ class Evidence:
             )
             .drop('evidence_unique_rank')
         )
-        return self
 
-    def assign_evidence_identifier(self: Evidence) -> Evidence:
+    def assign_evidence_identifier(self: Evidence, unique_fields: list[str]) -> Evidence:
         """Adding unique identifier to each evidence based on source specific fields."""
-        hash_columns = self.DEFAULT_UNIQUE_FIELDS + self.UNIQUE_FIELDS
+        hash_columns = self.DEFAULT_UNIQUE_FIELDS + unique_fields
 
         hash_expression = f.sha1(f.concat(*[f.col(col).cast(t.StringType()) for col in hash_columns]))
 
-        self.evidence_df = self.evidence_df.withColumn('id', hash_expression)
-
-        return self
+        return Evidence(self.evidence_df.withColumn('id', hash_expression))
 
     def hash_long_variant_identifiers(self: Evidence) -> Evidence:
         """Hash long variant identifier.
@@ -154,11 +147,11 @@ class Evidence:
         if 'variantId' not in self.evidence_df.columns:
             return self
 
-        self.evidence_df = self.evidence_df.withColumn(
-            'variantId', self._hash_long_variant_ids(f.col('variantId'), self.VARIANT_HASH_LENGHT)
+        return Evidence(
+            self.evidence_df.withColumn(
+                'variantId', self._hash_long_variant_ids(f.col('variantId'), self.VARIANT_HASH_LENGHT)
+            )
         )
-
-        return self
 
     def calculate_evidence_score(self: Evidence, score_expression: str) -> Evidence:
         """Using the provided score expression, assign evidence score to evidence.
@@ -169,7 +162,7 @@ class Evidence:
         Returns:
             Evidence: with assigned score
         """
-        self.evidence_df = (
+        return Evidence(
             self.evidence_df
             # Calculate evidence score and make sure the type is consistent across different datasets:
             .withColumn('score', f.expr(score_expression).cast(t.DoubleType()))
@@ -185,7 +178,6 @@ class Evidence:
                 ),
             )
         )
-        return self
 
     def resolve_publication_date(self: Evidence, publication_date_lut: DataFrame) -> Evidence:
         # Return self if publication column is not present in the dataset:
@@ -217,9 +209,7 @@ class Evidence:
         # 4. Broadcast for efficiency and join back to main evidence
         dated_evidence_lut = f.broadcast(dated_evidence.orderBy(f.col('id').asc()))
 
-        self.evidence_df = self.evidence_df.join(dated_evidence_lut, on='id', how='left_outer')
-
-        return self
+        return Evidence(self.evidence_df.join(dated_evidence_lut, on='id', how='left_outer'))
 
     def resolve_evidence_date(self: Evidence) -> Evidence:
         """Generate evidenceDate for each evidence based on a number of columns.
@@ -234,8 +224,7 @@ class Evidence:
             dating_columns = [f.lit(None).cast(t.StringType())]
 
         # Assign date:
-        self.evidence_df = self.evidence_df.withColumn('evidenceDate', f.array_min(f.array(dating_columns)))
-        return self
+        return Evidence(self.evidence_df.withColumn('evidenceDate', f.array_min(f.array(dating_columns))))
 
     def resolve_direction_of_effect(self: Evidence, mechanism_of_action: DataFrame) -> Evidence:
         raise NotImplementedError
