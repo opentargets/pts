@@ -8,9 +8,9 @@ from otter.task.task_reporter import report
 
 PYSPARK_PACKAGE = 'pts.pyspark'
 
-type path_or_paths = str | dict[str, str]
+path_or_paths = str | dict[str, str]
 
-type pyspark_entrypoint = Callable[
+pyspark_entrypoint = Callable[
     [path_or_paths, path_or_paths, dict[str, str] | None],
     None,
 ]
