@@ -824,7 +824,6 @@ dependencies = [
     { name = "pandas" },
     { name = "polars" },
     { name = "pronto" },
-    { name = "psutil" },
     { name = "pyspark" },
     { name = "requests" },
 ]
@@ -858,7 +857,6 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pronto", specifier = ">=2.7.0" },
-    { name = "psutil", specifier = ">=7.1.1" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
     { name = "requests", specifier = ">=2.32.4" },
