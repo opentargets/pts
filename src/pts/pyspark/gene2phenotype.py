@@ -48,7 +48,7 @@ G2P_INPUT_SCHEMA = (
 
 def gene2phenotype(
     source: dict[str, str],
-    destination: dict[str, str],
+    destination: str,
     properties: dict[str, str] | None,
 ) -> None:
     spark = Session(app_name='gene2phenotype', properties=properties)
