@@ -1,20 +1,20 @@
 [project]
 name = "PTS"
-version = "25.3.0-dev.8"
+version = "25.3.0-dev.11"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
-requires-python = "==3.13.*"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "loguru==0.7.3",
-  "opentargets-otter==25.0.12",
+  "openpyxl>=3.1.5",
+  "opentargets-otter==25.0.15",
   "pandas>=2.3.2",
   "polars==1.31.0",
-  "psutil>=7.1.1",
   "pyspark>=4.0.0",
 ]
 
 [dependency-groups]
-dev = ["deptry==0.23.0", "ruff==0.12.2"]
+dev = ["deptry==0.23.0", "pre-commit>=4.3.0", "pytest>=8.4.1", "ruff==0.12.2"]
 
 [project.optional-dependencies]
 test = ["pytest==8.4.1", "coverage==7.9.1", "pytest-mock==3.14.1"]
@@ -146,6 +146,10 @@ extend-safe-fixes = [
 
 [tool.deptry]
 pep621_dev_dependency_groups = ['test']
+exclude = ["src/test/**", "src/conftest.py"]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ['openpyxl']
 
 [tool.deptry.package_module_name_map]
 opentargets-otter = 'otter'
