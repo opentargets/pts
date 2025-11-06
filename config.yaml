@@ -83,7 +83,7 @@ steps:
       destination:
         output: intermediate/chemical_probes_evidence.parquet
       properties:
-        spark.driver.memory: 8g
+        spark.driver.memory: '8g'
   ##################################################################################################
 
   #: CODING VARIANT STEP :##########################################################################
@@ -99,8 +99,11 @@ steps:
         evidence_uniprot_variant: output/evidence/sourceId=uniprot_variants
         evidence_gwas_credible_set: output/evidence/sourceId=gwas_credible_sets
         credible_set: output/credible_set
-        pharmacogenetics: output/pharmacogenetics
+        pharmacogenetics: output/pharmacogenomics
       destination: view/coding_variant
+      properties:
+        spark.driver.memory: '10g'
+        spark.executor.memory: '10g'
   ##################################################################################################
 
   #: OPENFDA STEP :#################################################################################
