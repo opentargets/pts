@@ -2,7 +2,11 @@
 work_path: ./work
 log_level: DEBUG
 # release_uri: gs://open-targets-pre-data-releases/jferrer/test-pts-pyspark
+
 pool_size: 8
+scratchpad:
+  efo_version: 'v3.81.0'
+  ontology_cores: '1'   # Number of cores for ontology mapping (1 = sequential, >1 = parallel)
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -11,10 +15,12 @@ steps:
       source: input/disease/efo_otar_slim.json
       destination: output/disease/disease.parquet
       transformer: disease
+
     - name: transform disease_hpo
       source: input/disease/hp-full.json
       destination: output/disease_hpo/disease_hpo.parquet
       transformer: disease_hpo
+
     - name: transform disease_phenotype
       requires:
         - transform disease_efo
@@ -24,7 +30,6 @@ steps:
         - input/disease/mondo.json
       destination: output/disease_phenotype/disease_phenotype.parquet
       transformer: disease_phenotype
-
   ##################################################################################################
 
   #: EXPRESSION STEP :##############################################################################
@@ -32,6 +37,7 @@ steps:
     - name: unzip normal tissue
       source: input/expression/normal_tissue.tsv.zip
       destination: intermediate/expression/normal_tissue.tsv
+
     - name: gzip normal tissue
       requires:
         - unzip normal tissue
@@ -46,14 +52,25 @@ steps:
 
   #: MOUSE_PHENOTYPES STEP :########################################################################
   mouse_phenotype:
-    - name: pyspark separate into output and excluded
+    - name: pyspark generate from IMPC and validate with target
       pyspark: mouse_phenotype
       source:
         target: output/target
-        mouse_phenotype: input/mouse_phenotype/mouse_phenotypes.json.gz
+        # IMPC source files
+        solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
+        solr_mouse_model: input/evidence/impc/impc_solr_mouse_model.csv
+        solr_disease_model_summary: input/evidence/impc/impc_solr_disease_model_summary.csv
+        solr_ontology: input/evidence/impc/impc_solr_ontology.csv
+        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.txt
+        mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
+        mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
+        mp_ontology: input/evidence/impc/mp.owl
       destination:
         output: output/mouse_phenotype
         excluded: excluded/mouse_phenotype
+      properties:
+        spark.driver.memory: '2g'
+        spark.executor.memory: '1g'
   ##################################################################################################
 
   #: CHEMICAL PROBES STEP :#########################################################################
@@ -65,7 +82,6 @@ steps:
         drugs_csv: input/target/chemicalprobes/probes_links.csv
       destination:
         output: intermediate/chemical_probes_evidence.parquet
-
   ##################################################################################################
 
   #: CODING VARIANT STEP :##########################################################################
@@ -133,6 +149,9 @@ steps:
       destination: intermediate/target/gene-essentiality/essentiality.parquet
       settings:
         keep_only_essentials: true
+      properties:
+        spark.driver.memory: '4g'
+        spark.executor.memory: '2g'
 
     - name: unzip essentiality matrix
       source: input/target/project-scores/essentiality_matrices.zip
@@ -166,12 +185,38 @@ steps:
           source: ${match_prefix}/${match_path}${match_stem}.${match_ext}
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
+
+    - name: pyspark safety
+      pyspark: target_safety
+      source:
+        adverse_events: input/target/safety/adverse_effects.tsv
+        safety_risks: input/target/safety/safety_risks.tsv
+        brennan: input/target/safety/secondary_pharmacology.json
+        toxcast: input/target/safety/toxcast.tsv
+        aopwiki: input/target/safety/aopwiki.json
+        pharmacogenetics: intermediate/pharmacogenetics.parquet
+      destination: intermediate/target/safety.parquet
   ##################################################################################################
 
-  #: EVIDENCE STEP :################################################################################
+  #: PHARMACOGENETICS STEP :#######################################################################
+  pharmacogenetics:
+    - name: pyspark pharmacogenetics
+      pyspark: pharmacogenetics
+      source:
+        clinpgx: input/pharmacogenetics/clinpgx_annotation.json.gz
+        phenotypes: input/pharmacogenetics/phenotypes.json
+        openai_api_key_filename: tmp/openai_api_key
+      destination:
+        associations: intermediate/pharmacogenetics.parquet
+        phenotypes: intermediate/pharmacogenetics/phenotypes.json
+      settings:
+        efo_version: "${efo_version}"
+        cores: "${ontology_cores}"
+  ##################################################################################################      
+
+  #: TARGET/DISEASE EVIDENCE STEP :#################################################################
   evidence:
     - name: pyspark project_score
-      pyspark: project_score
       source:
         gene_scores: input/evidence/project_score/mapped_diseases.tsv
         cell_types: input/evidence/project_score/cell_types.tsv
@@ -194,7 +239,7 @@ steps:
         disease_mappings: input/ot_curation/mappings/disease/manual_string.tsv
       destination: intermediate/evidence/gene_burden.parquet
       settings:
-        finngen_release: R12
+        finngen_release: 'R12'
 
     - name: pyspark chembl
       pyspark: chembl
@@ -212,9 +257,86 @@ steps:
         disease: input/evidence/cancerbiomarkers/diseases.jsonl
         drugs: output/drug_molecule
       destination: intermediate/evidence/cancer_biomarkers.parquet
-  ##################################################################################################
+ 
+    - name: pyspark orphanet
+      pyspark: orphanet
+      source: input/evidence/orphanet.xml
+      destination: intermediate/evidence/orphanet.parquet
+      settings:
+        efo_version: '${efo_version}'
+        cores: '${ontology_cores}'
 
-  #: TIMESERIES STEP :########################################################################
+    - name: pyspark clingen
+      pyspark: clingen
+      source:
+        evidence: input/evidence/clingen.csv
+      destination: intermediate/evidence/clingen.parquet
+      settings:
+        efo_version: '${efo_version}'
+        cores: '${ontology_cores}'
+
+    - name: pyspark impc evidence strings
+      pyspark: impc
+      source:
+        solr_gene_gene: input/evidence/impc/impc_solr_gene_gene.csv
+        solr_ontology_ontology: input/evidence/impc/impc_solr_ontology_ontology.csv
+        solr_mouse_model: input/evidence/impc/impc_solr_mouse_model.csv
+        solr_disease: input/evidence/impc/impc_solr_disease.csv
+        solr_disease_model_summary: input/evidence/impc/impc_solr_disease_model_summary.csv
+        solr_ontology: input/evidence/impc/impc_solr_ontology.csv
+        hgnc_gene_mappings: input/target/genenames/hgnc_complete_set.txt
+        mouse_gene_mappings: input/evidence/impc/MGI_Gene_Model_Coord.rpt
+        mouse_pubmed_refs: input/evidence/impc/MGI_PhenoGenoMP.rpt
+        mp_ontology: input/evidence/impc/mp.owl
+      destination: intermediate/evidence/impc.parquet
+      properties:
+        spark.driver.memory: '4g'
+        spark.executor.memory: '2g'
+      settings:
+        efo_version: '${efo_version}'
+        cores: '${ontology_cores}'
+        score_cutoff: "0.41"
+
+    - name: pyspark panel_app
+      pyspark: panel_app
+      source: input/evidence/panel_app.tsv
+      destination: intermediate/evidence/panel_app.parquet
+      settings:
+        efo_version: '${efo_version}'
+        cores: '${ontology_cores}'
+
+    - name: pyspark crispr screens
+      pyspark: crispr_screens
+      source:
+        screens: input/evidence/crispr_screens/brain_screens.json.gz
+        studies_dir: input/evidence/crispr_screens/brain_studies
+        disease_mapping: input/ot_curation/mappings/disease/brain_crispr_studies.tsv
+      destination: output/crispr_screens
+
+    - name: pyspark gene2phenotype
+      pyspark: gene2phenotype
+      source:
+        cancer_panel: input/evidence/gene2phenotype/cancer.csv
+        cardiac_panel: input/evidence/gene2phenotype/cardiac.csv
+        developmental_panel: input/evidence/gene2phenotype/dd.csv
+        ear_panel: input/evidence/gene2phenotype/ear.csv
+        eye_panel: input/evidence/gene2phenotype/eye.csv
+        skeletal_panel: input/evidence/gene2phenotype/skeletal.csv
+        skin_panel: input/evidence/gene2phenotype/skin.csv
+      destination: intermediate/evidence/gene2phenotype.parquet
+      settings:
+        efo_version: '${efo_version}'
+        cores: '${ontology_cores}'
+      
+  evidence_ppp:
+    - name: pyspark ot_crispr
+      pyspark: ot_crispr
+      source:
+        study_table: input/evidence/ot_crispr/config.tsv
+        ot_crispr_data: input/evidence/ot_crispr
+      destination: intermediate/evidence/ot_crispr.parquet
+
+ #: TIMESERIES STEP :########################################################################
   timeseries:
     - name: pyspark timeseries
       pyspark: timeseries

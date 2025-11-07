@@ -66,8 +66,7 @@ class DepMapEssentiality:
         self.damaging_mutation = damaging_mutation
         self.tissue_mapping = tissue_mapping
         self.keep_only_essentials = keep_only_essentials
-
-        self.essentials = None
+        self.essentials: DataFrame | None = None
 
     def transform(self):
         """Transform raw data and join before aggregation."""
@@ -82,6 +81,7 @@ class DepMapEssentiality:
         gene_effect_df_trans = self._melt(self.gene_effect_df, 'geneEffect')
 
         # Join all the data together:
+        assert self.essentials is None, 'transform() has already been called on this instance.'
         self.essentials = (
             # The melted effect table:
             gene_effect_df_trans
@@ -151,6 +151,7 @@ class DepMapEssentiality:
             |    |    |    |    |-- expression: float (nullable = true)
         """
         # Return grouped essentiality data:
+        assert self.essentials is not None, 'transform() must be called before aggregate().'
         return (
             # Aggregating data by gene:
             self.essentials.groupBy(
@@ -185,12 +186,6 @@ class DepMapEssentiality:
             )
             .persist()
         )
-
-    def get_stats(self) -> None:
-        """Print statistics on the essentiality dataset."""
-        logger.info(f'Number of entries: {self.essentials.count()}')
-        logger.info(f'Number of essential genes: {self.essentials.select("targetSymbol").distinct().count()}')
-        logger.info(f'Number of unique diseases: {self.essentials.select("diseaseFromSource").distinct().count()}')
 
     def _melt(self, df: DataFrame, value_name: str) -> DataFrame:
         """Melt a wide dataframe into a long format.

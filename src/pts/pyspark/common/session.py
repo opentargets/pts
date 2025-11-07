@@ -72,7 +72,10 @@ class Session:
             'spark.hadoop.fs.gs.auth.type': 'APPLICATION_DEFAULT',
         }
 
-        properties = {**(dataproc_properties if self.is_dataproc else local_properties), **properties}
+        properties = {
+            **(dataproc_properties if self.is_dataproc else local_properties),
+            **properties,
+        }
 
         return SparkConf().setAll(list(properties.items()))
 

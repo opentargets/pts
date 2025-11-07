@@ -63,6 +63,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
       - name: install uv
         uses: astral-sh/setup-uv@v4
         with:
