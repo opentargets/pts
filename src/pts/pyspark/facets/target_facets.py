@@ -122,6 +122,7 @@ def compute_tractability_facets(
             ).otherwise(F.col('category'))
         )
         .withColumn('datasourceId', F.lit(None).cast('string'))
+        .select('label', 'category', 'entityIds', 'datasourceId')
         .distinct()
     )
 
@@ -228,6 +229,7 @@ def compute_subcellular_locations_facets(
         )
         .groupBy('label', 'category', 'datasourceId')
         .agg(F.collect_set('id').alias('entityIds'))
+        .select('label', 'category', 'entityIds', 'datasourceId')
         .distinct()
     )
 
@@ -272,6 +274,7 @@ def compute_target_class_facets(
         .groupBy('label', 'category')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn('datasourceId', F.lit(None).cast('string'))
+        .select('label', 'category', 'entityIds', 'datasourceId')
         .distinct()
     )
 
@@ -317,6 +320,7 @@ def compute_pathways_facets(
         )
         .groupBy('label', 'category', 'datasourceId')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
+        .select('label', 'category', 'entityIds', 'datasourceId')  # ← ADD THIS!
         .distinct()
     )
 
@@ -393,6 +397,7 @@ def compute_go_facets(
                 go_aspect_mappings[F.col('category')]
             ).otherwise(F.col('category'))
         )
+        .select('label', 'category', 'entityIds', 'datasourceId')
         .distinct()
     )
 
