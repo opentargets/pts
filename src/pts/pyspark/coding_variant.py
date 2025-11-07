@@ -12,7 +12,7 @@ from pts.pyspark.common import Session
 def coding_variant(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Generate view on coding variants with their functional context.
 

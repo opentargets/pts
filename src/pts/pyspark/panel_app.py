@@ -14,11 +14,12 @@ from pts.utils.ontology import add_efo_mapping
 def panel_app(
     source: str,
     destination: str,
-    properties: dict[str, str],
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     spark = Session(app_name='panel_app', properties=properties)
-    efo_version = properties['efo_version']
-    cores = int(properties.get('ontology_cores', 1))
+    efo_version = settings['efo_version']
+    cores = int(settings.get('ontology_cores', 1))
 
     logger.info(f'load data from {source}')
     panelapp_df = spark.load_data(source, format='csv', sep=r'\t', header=True)

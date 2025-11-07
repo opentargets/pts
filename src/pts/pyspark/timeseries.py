@@ -12,7 +12,7 @@ def timeseries(
     source: dict[str, str],
     destination: dict[str, str],
     settings: dict[str, Any],
-    properties: dict[str, Any],
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Main function to generate timeseries data.
 
@@ -36,9 +36,8 @@ def timeseries(
     disease_df = session.load_data(source['disease'])
 
     # Extracting datasource weights:
-    datasource_weights = (
-        session.spark.createDataFrame(settings['datasource_weights'])
-        .withColumnRenamed('id', 'datasourceId')
+    datasource_weights = session.spark.createDataFrame(settings['datasource_weights']).withColumnRenamed(
+        'id', 'datasourceId'
     )
 
     # We might not request all outputs:

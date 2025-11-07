@@ -310,7 +310,7 @@ class EvidenceParser:
 def ot_crispr(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     spark = Session(app_name='ot_crispr', properties=properties)
 

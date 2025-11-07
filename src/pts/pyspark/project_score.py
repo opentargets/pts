@@ -80,7 +80,7 @@ def get_disease_cell_lines(
 def project_score(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Main function for parsing Project Score v2 data."""
     spark = Session(app_name='chemical_probes', properties=properties)

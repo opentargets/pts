@@ -13,7 +13,7 @@ def gene_essentiality(
     source: dict[str, str],
     destination: str,
     settings: dict[str, Any],
-    properties: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Loads and processes inputs to generate the Gene Essentiality annotation."""
     spark = Session(app_name='chemical_probes', properties=properties)

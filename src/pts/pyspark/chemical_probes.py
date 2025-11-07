@@ -33,7 +33,7 @@ PROBES_SETS = [
 def chemical_probes(
     source: dict[str, str],
     destination: dict[str, str],
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Process chemical probes data and generate evidence.
 

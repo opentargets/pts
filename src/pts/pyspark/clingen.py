@@ -10,11 +10,12 @@ from pts.utils.ontology import add_efo_mapping
 def clingen(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str],
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> None:
     spark = Session(app_name='clingen', properties=properties)
-    efo_version = properties['efo_version']
-    cores = int(properties.get('ontology_cores', 1))
+    efo_version = settings['efo_version']
+    cores = int(settings.get('ontology_cores', 1))
 
     logger.info(f'load data from {source}')
     # Load CSV without header since we need to skip metadata rows

@@ -23,7 +23,7 @@ LITERATURE_MAPPING = [
 def crispr_screens(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Process CRISPR Brain inputs into target/disease evidence.
 

@@ -42,7 +42,7 @@ def gene_burden(
     source: dict[str, str],
     destination: str,
     settings: dict[str, Any],
-    properties: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     spark = Session(app_name='gene_burden', properties=properties)
 

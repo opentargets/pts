@@ -40,7 +40,7 @@ GENENAMESOVERRIDE: dict = {
 def cancer_biomarkers(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Loads and processes inputs to generate the Cancer Biomarkers evidence strings."""
     spark = Session(app_name='chemical_probes', properties=properties)

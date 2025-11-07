@@ -22,13 +22,14 @@ from pts.utils.ontology import add_efo_mapping
 def impc(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str],
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     """Generate IMPC evidence strings."""
     spark = Session(app_name='impc', properties=properties)
-    score_cutoff = float(properties['score_cutoff'])
-    efo_version = properties['efo_version']
-    mapping_cores = int(properties.get('ontology_cores', 1))
+    score_cutoff = float(settings['score_cutoff'])
+    efo_version = settings['efo_version']
+    mapping_cores = int(settings.get('ontology_cores', 1))
 
     # Load and prepare all required datasets for evidence generation
     datasets = _load_impc_datasets_for_evidence(spark, source)

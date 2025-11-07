@@ -19,7 +19,7 @@ from pts.pyspark.impc_utils import (
 def mouse_phenotype(
     source: dict[str, str],
     destination: dict[str, str],
-    properties: dict[str, str] | None,
+    properties: dict[str, str] | None = None,
 ) -> None:
     """Generate mouse phenotypes dataset from IMPC data and filter by target."""
     # start spark session

@@ -10,7 +10,7 @@ from pts.pyspark.common.session import Session
 def chembl(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     """This module adds the studyStopReasonCategories to the ChEMBL evidence as a result of the.
 

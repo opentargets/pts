@@ -9,7 +9,7 @@ from pyspark.sql import Column, DataFrame
 from pts.pyspark.common.session import Session
 
 
-def target_safety(source: dict[str, str], destination: str, properties: dict[str, str]) -> DataFrame:
+def target_safety(source: dict[str, str], destination: str, properties: dict[str, str] | None = None) -> DataFrame:
     """This module puts together data from different sources that describe target safety liabilities."""
     spark = Session(app_name='target_safety', properties=properties)
 

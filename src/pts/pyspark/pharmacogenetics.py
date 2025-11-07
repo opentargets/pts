@@ -13,12 +13,17 @@ from pts.pyspark.common.session import Session
 from pts.utils.ontology import add_efo_mapping
 
 
-def pharmacogenetics(source: dict[str, str], destination: dict[str, str], properties: dict[str, str]) -> DataFrame:
+def pharmacogenetics(
+    source: dict[str, str],
+    destination: dict[str, str],
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
+) -> DataFrame:
     spark = Session(app_name='pharmacogenetics', properties=properties)
     # Read OpenAI API key from the source path (automatically resolved by PySpark task)
     openai_key = Path(source['openai_api_key_filename']).read_text().strip()
-    efo_version = properties['efo_version']
-    cores = int(properties.get('ontology_cores', 1))
+    efo_version = settings['efo_version']
+    cores = int(settings.get('cores', 1))
 
     logger.info(f'load data from {source}')
     pgx_phenotypes_df = spark.load_data(source['phenotypes'], format='json')
@@ -57,6 +62,7 @@ def pharmacogenetics(source: dict[str, str], destination: dict[str, str], proper
                 'diseaseFromSource': f.col('phenotypeText'),
                 'diseaseFromSourceId': f.lit(None).cast('string'),
             }),
+            spark_instance=spark,
             efo_version=efo_version,
             cores=cores,
         )
@@ -65,6 +71,7 @@ def pharmacogenetics(source: dict[str, str], destination: dict[str, str], proper
     )
     logger.info(f'save associations to {destination["associations"]}')
     mapped_pgx_df.write.parquet(destination['associations'], mode='overwrite')
+    return mapped_pgx_df
 
 
 def parse_phenotype_with_gpt(
@@ -119,13 +126,16 @@ def parse_phenotype_with_gpt(
         ],
         seed=42,
     )
+
+    generated_text = completion.choices[0].message.content
     try:
-        generated_text = completion.choices[0].message.content
-        json_obj = json.loads(generated_text)
-        return json_obj.get('gptExtractedPhenotype', [])
+        if not generated_text:
+            logger.error('No content returned from OpenAI API.')
+            raise ValueError('No content returned from OpenAI API.')
+        return json.loads(generated_text)
     except Exception as e:
         logger.error(f'Error parsing phenotype: {e}')
-        return None
+        raise
 
 
 def parse_phenotypes(spark: Session, texts_to_parse: list[str], openai_client: OpenAI) -> DataFrame:

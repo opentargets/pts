@@ -32,11 +32,12 @@ CONSEQUENCE_MAP = {
 def orphanet(
     source: str,
     destination: str,
-    properties: dict[str, str],
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> DataFrame:
     spark = Session(app_name='orphanet', properties=properties)
-    efo_version = properties['efo_version']
-    cores = int(properties.get('ontology_cores', 1))
+    efo_version = settings['efo_version']
+    cores = int(settings.get('cores', 1))
 
     logger.info(f'parse XML from {source} into a list of dictionaries')
     orphanet_disorders = parse_orphanet_xml(source)

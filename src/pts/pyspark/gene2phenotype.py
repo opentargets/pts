@@ -21,39 +21,40 @@ G2P_mutationCsq2functionalCsq = OrderedDict([
 ])
 
 G2P_INPUT_SCHEMA = (
-        t.StructType()
-        .add('g2p id', t.StringType())
-        .add('gene symbol', t.StringType())
-        .add('gene mim', t.IntegerType())
-        .add('hgnc id', t.IntegerType())
-        .add('previous gene symbols', t.StringType())
-        .add('disease name', t.StringType())
-        .add('disease mim', t.StringType())
-        .add('disease MONDO', t.StringType())
-        .add('allelic requirement', t.StringType())
-        .add('cross cutting modifier', t.StringType())
-        .add('confidence', t.StringType())
-        .add('variant consequence', t.StringType())
-        .add('variant types', t.StringType())
-        .add('molecular mechanism', t.StringType())
-        .add('molecular mechanism categorisation', t.StringType())
-        .add('molecular mechanism evidence', t.StringType())
-        .add('phenotypes', t.StringType())
-        .add('publications', t.StringType())
-        .add('panel', t.StringType())
-        .add('comments', t.StringType())
-        .add('date of last review', t.StringType())
-    )
+    t.StructType()
+    .add('g2p id', t.StringType())
+    .add('gene symbol', t.StringType())
+    .add('gene mim', t.IntegerType())
+    .add('hgnc id', t.IntegerType())
+    .add('previous gene symbols', t.StringType())
+    .add('disease name', t.StringType())
+    .add('disease mim', t.StringType())
+    .add('disease MONDO', t.StringType())
+    .add('allelic requirement', t.StringType())
+    .add('cross cutting modifier', t.StringType())
+    .add('confidence', t.StringType())
+    .add('variant consequence', t.StringType())
+    .add('variant types', t.StringType())
+    .add('molecular mechanism', t.StringType())
+    .add('molecular mechanism categorisation', t.StringType())
+    .add('molecular mechanism evidence', t.StringType())
+    .add('phenotypes', t.StringType())
+    .add('publications', t.StringType())
+    .add('panel', t.StringType())
+    .add('comments', t.StringType())
+    .add('date of last review', t.StringType())
+)
 
 
 def gene2phenotype(
     source: dict[str, str],
     destination: str,
-    properties: dict[str, str] | None,
+    settings: dict[str, str],
+    properties: dict[str, str] | None = None,
 ) -> None:
     spark = Session(app_name='gene2phenotype', properties=properties)
-    efo_version = properties['efo_version']
-    cores = int(properties.get('ontology_cores', 1))
+    efo_version = settings['efo_version']
+    cores = int(settings.get('ontology_cores', 1))
 
     logger.info(f'load data from {source}')
     g2p_panel_files = list(source.values())
