@@ -28,27 +28,27 @@ This module has been migrated from Scala to Python, providing the same functiona
 ### Facet Types Computed
 
 1. **Tractability Facets**: Druggability across different therapeutic modalities
-   - Small Molecule (SM)
-   - Antibody (AB)
-   - Protac (PR)
-   - Other Clinical (OC)
+   - Small Molecule (SM) → category: "Tractability Small Molecule"
+   - Antibody (AB) → category: "Tractability Antibody"
+   - PROTAC (PR) → category: "Tractability PROTAC"
+   - Other Modalities (OC) → category: "Tractability Other Modalities"
 
-2. **Target ID Facets**: Ensembl gene IDs
+2. **Target ID Facets**: Ensembl gene IDs (category: "Target ID")
 
-3. **Approved Symbol Facets**: HGNC gene symbols (e.g., TP53, BRCA1)
+3. **Approved Symbol Facets**: HGNC gene symbols (e.g., TP53, BRCA1) (category: "Approved Symbol")
 
-4. **Approved Name Facets**: Full gene names
+4. **Approved Name Facets**: Full gene names (category: "Approved Name")
 
-5. **Subcellular Location Facets**: Protein cellular localization
+5. **Subcellular Location Facets**: Protein cellular localization (category: "Subcellular Location")
 
-6. **Target Class Facets**: Molecular function categories (e.g., Enzyme, Transporter)
+6. **Target Class Facets**: Molecular function categories (e.g., Enzyme, Transporter) (category: "ChEMBL Target Class")
 
-7. **Pathway Facets**: Reactome pathway associations
+7. **Pathway Facets**: Reactome pathway associations (category: "Reactome")
 
 8. **Gene Ontology Facets**: GO terms across three aspects
-   - Molecular Function (F)
-   - Biological Process (P)
-   - Cellular Component (C)
+   - Molecular Function (F) → category: "GO:MF"
+   - Biological Process (P) → category: "GO:BP"
+   - Cellular Component (C) → category: "GO:CC"
 
 ### Storage Support
 
@@ -106,11 +106,18 @@ properties = {
 
 # Custom category names
 category_config = {
-    'SM': 'Small Molecule',
-    'AB': 'Antibody',
-    'goF': 'GO Molecular Function',
-    'goP': 'GO Biological Process',
-    'goC': 'GO Cellular Component',
+    'SM': 'Tractability Small Molecule',
+    'AB': 'Tractability Antibody',
+    'PR': 'Tractability PROTAC',
+    'OC': 'Tractability Other Modalities',
+    'goF': 'GO:MF',
+    'goP': 'GO:BP',
+    'goC': 'GO:CC',
+    'approvedSymbol': 'Approved Symbol',
+    'approvedName': 'Approved Name',
+    'subcellularLocation': 'Subcellular Location',
+    'targetClass': 'ChEMBL Target Class',
+    'pathways': 'Reactome',
 }
 
 target_facets(
@@ -187,7 +194,7 @@ root
 
 **Fields:**
 - `label`: The facet label (e.g., gene symbol, GO term name, pathway name)
-- `category`: The facet category (e.g., "Target Symbol", "GO Biological Process")
+- `category`: The facet category (e.g., "Approved Symbol", "GO:BP", "Tractability Small Molecule")
 - `entityIds`: Array of Ensembl gene IDs associated with this facet
 - `datasourceId`: Optional ID referencing the data source (used for GO, pathways, etc.)
 

@@ -37,23 +37,23 @@ class FacetSearchCategories:
             config = {}
 
         # Tractability modalities
-        self.SM = config.get('SM', 'Small Molecule')
-        self.AB = config.get('AB', 'Antibody')
-        self.PR = config.get('PR', 'Protac')
-        self.OC = config.get('OC', 'Other Clinical')
+        self.SM = config.get('SM', 'Tractability Small Molecule')
+        self.AB = config.get('AB', 'Tractability Antibody')
+        self.PR = config.get('PR', 'Tractability PROTAC')
+        self.OC = config.get('OC', 'Tractability Other Modalities')
 
         # Gene Ontology aspects
-        self.goF = config.get('goF', 'GO Molecular Function')
-        self.goP = config.get('goP', 'GO Biological Process')
-        self.goC = config.get('goC', 'GO Cellular Component')
+        self.goF = config.get('goF', 'GO:MF')
+        self.goP = config.get('goP', 'GO:BP')
+        self.goC = config.get('goC', 'GO:CC')
 
         # Simple facets
         self.target_id = config.get('targetId', 'Target ID')
-        self.approved_symbol = config.get('approvedSymbol', 'Target Symbol')
-        self.approved_name = config.get('approvedName', 'Target Name')
+        self.approved_symbol = config.get('approvedSymbol', 'Approved Symbol')
+        self.approved_name = config.get('approvedName', 'Approved Name')
         self.subcellular_location = config.get('subcellularLocation', 'Subcellular Location')
-        self.target_class = config.get('targetClass', 'Target Class')
-        self.pathways = config.get('pathways', 'Pathways')
+        self.target_class = config.get('targetClass', 'ChEMBL Target Class')
+        self.pathways = config.get('pathways', 'Reactome')
 
 
 def compute_tractability_facets(
@@ -68,7 +68,7 @@ def compute_tractability_facets(
     2. Explode tractability array to individual rows
     3. Filter for tractability values that are True
     4. Group by tractability modality and label, collecting target IDs
-    5. Map modality codes to readable category names (SM -> Small Molecule, etc.)
+    5. Map modality codes to category names (SM/AB/PR/OC -> Tractability variants)
 
     Args:
         targets_df: DataFrame containing target data with 'id' and 'tractability' columns

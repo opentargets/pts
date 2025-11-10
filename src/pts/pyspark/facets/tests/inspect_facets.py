@@ -23,8 +23,10 @@ print("Facets with multiple entities by category:")
 multi_entity_facets.groupBy('category').count().orderBy('count', ascending=False).show(20, truncate=False)
 
 # Show examples from each category
-categories = ['GO Biological Process', 'GO Molecular Function', 'GO Cellular Component', 
-              'Pathways', 'Subcellular Location', 'Target Class', 'Small Molecule']
+categories = ['GO:BP', 'GO:MF', 'GO:CC', 
+              'Reactome', 'Subcellular Location', 'ChEMBL Target Class', 
+              'Tractability Small Molecule', 'Tractability Antibody', 
+              'Tractability PROTAC', 'Tractability Other Modalities']
 
 for cat in categories:
     print(f"\n{'=' * 80}")

@@ -25,11 +25,20 @@ def example_local():
         'spark.sql.shuffle.partitions': '8',
     }
 
-    # Optional: Custom category names
+    # Optional: Custom category names (using Scala-compatible defaults)
     category_config = {
-        'SM': 'Small Molecule',
-        'AB': 'Antibody',
-        # ... other custom category names
+        'SM': 'Tractability Small Molecule',
+        'AB': 'Tractability Antibody',
+        'PR': 'Tractability PROTAC',
+        'OC': 'Tractability Other Modalities',
+        'goF': 'GO:MF',
+        'goP': 'GO:BP',
+        'goC': 'GO:CC',
+        'approvedSymbol': 'Approved Symbol',
+        'approvedName': 'Approved Name',
+        'subcellularLocation': 'Subcellular Location',
+        'targetClass': 'ChEMBL Target Class',
+        'pathways': 'Reactome',
     }
 
     target_facets(

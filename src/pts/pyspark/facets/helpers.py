@@ -31,7 +31,7 @@ def compute_simple_facet(
         DataFrame with facet schema (label, category, entityIds, datasourceId)
 
     Example:
-        >>> compute_simple_facet(targets_df, 'approvedSymbol', 'Target Symbol', 'id', spark)
+        >>> compute_simple_facet(targets_df, 'approvedSymbol', 'Approved Symbol', 'id', spark)
     """
     logger.debug(f'Computing simple facet: label={label_field}, category={category_value}')
 
