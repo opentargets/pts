@@ -122,7 +122,8 @@ def compute_tractability_facets(
             ).otherwise(F.col('category'))
         )
         .withColumn('datasourceId', F.lit(None).cast('string'))
-        .select('label', 'category', 'entityIds', 'datasourceId')
+        .withColumn('parentId', F.array().cast('array<string>'))
+        .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
 
@@ -229,7 +230,8 @@ def compute_subcellular_locations_facets(
         )
         .groupBy('label', 'category', 'datasourceId')
         .agg(F.collect_set('id').alias('entityIds'))
-        .select('label', 'category', 'entityIds', 'datasourceId')
+        .withColumn('parentId', F.array().cast('array<string>'))
+        .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
 
@@ -274,7 +276,8 @@ def compute_target_class_facets(
         .groupBy('label', 'category')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn('datasourceId', F.lit(None).cast('string'))
-        .select('label', 'category', 'entityIds', 'datasourceId')
+        .withColumn('parentId', F.array().cast('array<string>'))
+        .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
 
@@ -320,7 +323,8 @@ def compute_pathways_facets(
         )
         .groupBy('label', 'category', 'datasourceId')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
-        .select('label', 'category', 'entityIds', 'datasourceId')  # ← ADD THIS!
+        .withColumn('parentId', F.array().cast('array<string>'))
+        .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
 
@@ -388,7 +392,20 @@ def compute_go_facets(
         .join(go_df, on='id', how='left')
         # GO dataframe already has 'label' column (not 'name')
         .withColumn('datasourceId', F.col('id'))
-        .groupBy('label', 'category', 'datasourceId')
+        # Combine is_a and part_of arrays into parentId
+        .withColumn(
+            'parentId',
+            F.when(
+                F.col('is_a').isNotNull() | F.col('part_of').isNotNull(),
+                F.array_distinct(
+                    F.concat(
+                        F.coalesce(F.col('is_a'), F.array()),
+                        F.coalesce(F.col('part_of'), F.array())
+                    )
+                )
+            ).otherwise(F.array().cast('array<string>'))
+        )
+        .groupBy('label', 'category', 'datasourceId', 'parentId')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn(
             'category',
@@ -397,7 +414,7 @@ def compute_go_facets(
                 go_aspect_mappings[F.col('category')]
             ).otherwise(F.col('category'))
         )
-        .select('label', 'category', 'entityIds', 'datasourceId')
+        .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
 
@@ -500,6 +517,7 @@ def target_facets(
 
         logger.info(f"Loading GO data from: {source['go']}")
         go_df = spark.read.parquet(source['go'])
+        go_df = go_df.filter(F.col('isObsolete').isNull() | (F.col('isObsolete') == False))
 
         # Initialize category configuration
         category_values = FacetSearchCategories(category_config)

@@ -45,6 +45,7 @@ def compute_simple_facet(
         .groupBy('label', 'category')
         .agg(F.collect_set('id').alias('entityIds'))
         .withColumn('datasourceId', F.lit(None).cast('string'))
+        .withColumn('parentId', F.array().cast('array<string>'))
         .distinct()
     )
 

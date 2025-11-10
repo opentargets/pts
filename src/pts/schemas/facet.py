@@ -5,4 +5,5 @@ facet_schema = StructType([
     StructField('category', StringType(), nullable=False),
     StructField('entityIds', ArrayType(StringType(), containsNull=False), nullable=False),
     StructField('datasourceId', StringType(), nullable=True),
+    StructField('parentId', ArrayType(StringType(), containsNull=False), nullable=True),
 ])
