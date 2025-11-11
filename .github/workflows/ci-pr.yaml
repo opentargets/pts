@@ -20,7 +20,7 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Install toml package
         run: pip install toml
@@ -73,6 +73,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: 'pyproject.toml'
+
+      - name: set up java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: install
         run: uv sync --all-extras --dev

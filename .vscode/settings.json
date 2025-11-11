@@ -3,8 +3,9 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.tabSize": 4,
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
-    },
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit",
+    }
   },
   "ruff.nativeServer": true,
   "ruff.lint.enable": true,
@@ -25,5 +26,6 @@
       "config.yaml"
     ]
   },
-  "yaml.format.singleQuote": true
+  "yaml.format.singleQuote": true,
+  "editor.formatOnSave": true
 }

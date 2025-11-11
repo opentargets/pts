@@ -1,24 +1,29 @@
 [project]
 name = "PTS"
-version = "25.2.2-dev.1"
+version = "25.3.1-dev.2"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "loguru==0.7.3",
-  "opentargets-otter>=25.0.12",
+  "opentargets-otter==25.0.16",
   "polars==1.31.0",
   "pyspark>=4.0.0",
   "obonet>=0.3.1",
   "networkx>=3.2",
   "smart-open[gcs]>=7.0.0",
+  "pandas>=2.3.2",
+  "ontoma==2.1.0",
+  "openai==1.8",
+  "defusedxml>=0.7.1",
+  "pronto>=2.7.0",
 ]
 
 [dependency-groups]
-dev = ["deptry==0.23.0", "ruff==0.12.2"]
+dev = ["deptry==0.23.0", "pre-commit>=4.3.0", "pytest>=8.4.1", "ruff==0.12.2"]
 
 [project.optional-dependencies]
-test = ["pytest==8.4.1", "coverage==7.9.1", "pytest-mock==3.14.1"]
+test = ["pytest==8.4.1", "coverage==7.9.1"]
 
 [project.scripts]
 pts = "pts.core:main"
@@ -30,8 +35,20 @@ build-backend = "hatchling.build"
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
+[tool.deptry]
+pep621_dev_dependency_groups = ['test']
+exclude = ["src/test/**", "src/conftest.py"]
+
+[tool.deptry.package_module_name_map]
+opentargets-otter = 'otter'
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ['openpyxl', 'coverage']
+DEP004 = ['pytest']
+
 [tool.pytest.ini_options]
 testpaths = ["src/test"]
+markers = ["slow: mark a test as slow (deselect with '-m \"not slow\"')"]
 
 [tool.ruff]
 target-version = 'py313'
@@ -144,9 +161,6 @@ extend-safe-fixes = [
   'SIM110',  # ^ likewise
   'PERF102', # ^ likewise
 ]
-
-[tool.deptry]
-pep621_dev_dependency_groups = ['test']
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'
