@@ -11,7 +11,7 @@
   "ruff.organizeImports": true,
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "standard",
-  "python.languageServer": "None",
+  "python.languageServer": "Pylance",
   "files.exclude": {
     "**/__pycache__": true,
     "**/.pytest_cache": true,
@@ -25,7 +25,5 @@
       "config.yaml"
     ]
   },
-  "yaml.format.singleQuote": true,
-  "cursorpyright.analysis.autoImportCompletions": true,
-  "cursorpyright.analysis.typeCheckingMode": "standard",
+  "yaml.format.singleQuote": true
 }
