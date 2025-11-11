@@ -8,8 +8,8 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as f
 from pyspark.sql import types as t
 
+from pts.pyspark.common.ontology import add_efo_mapping
 from pts.pyspark.common.session import Session
-from pts.utils.ontology import add_efo_mapping
 
 G2P_mutationCsq2functionalCsq = OrderedDict([
     ('uncertain', 'SO_0002220'),
@@ -51,11 +51,13 @@ def gene2phenotype(
     source: dict[str, str],
     destination: str,
     settings: dict[str, Any],
-    properties: dict[str, str] | None,
+    properties: dict[str, str],
 ) -> None:
     spark = Session(app_name='gene2phenotype', properties=properties)
-    efo_version = settings.get('efo_version')
-    cores = int(settings.get('ontology_cores', 1))
+
+    # Pop OnToma LUT paths from the sources dict
+    ontoma_disease_label_lut = source.pop('ontoma_disease_label_lut')
+    ontoma_disease_id_lut = source.pop('ontoma_disease_id_lut')
 
     logger.info(f'load data from {source}')
     g2p_panel_files = list(source.values())
@@ -64,7 +66,10 @@ def gene2phenotype(
     evidence_df = process_gene2phenotype(gene2phenotype_df)
     logger.info('map gene2phenotype disease labels')
     mapped_evidence_df = add_efo_mapping(
-        evidence_strings=evidence_df, spark_instance=spark.spark, efo_version=efo_version, cores=cores
+        spark=spark.spark,
+        evidence_df=evidence_df,
+        disease_label_lut_path=ontoma_disease_label_lut,
+        disease_id_lut_path=ontoma_disease_id_lut,
     )
 
     logger.info(f'write gene2phenotype evidence strings to {destination}')

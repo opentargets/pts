@@ -14,8 +14,8 @@ from pts.pyspark.common.impc import (
     process_literature_references,
     process_ontology_terms,
 )
+from pts.pyspark.common.ontology import add_efo_mapping
 from pts.pyspark.common.session import Session
-from pts.utils.ontology import add_efo_mapping
 
 
 def impc(
@@ -23,14 +23,16 @@ def impc(
     destination: str,
     settings: dict[str, Any],
     properties: dict[str, str],
-) -> DataFrame:
+) -> None:
     """Generate IMPC evidence strings."""
     spark = Session(app_name='impc', properties=properties)
-    score_cutoff = float(settings.get('score_cutoff', 0.0))
-    efo_version = settings.get('efo_version')
-    mapping_cores = int(settings.get('ontology_cores', 1))
+    score_cutoff = float(settings.get('score_cutoff', 0))
 
-    # Load and prepare all required datasets for evidence generation
+    # Pop OnToma LUT paths from the sources dict
+    ontoma_disease_label_lut = source.pop('ontoma_disease_label_lut')
+    ontoma_disease_id_lut = source.pop('ontoma_disease_id_lut')
+
+    # Load and prepare all required datasets for evidence generation (last two sources are not impc datasets)
     datasets = _load_impc_datasets_for_evidence(spark, source)
     datasets = _prepare_impc_datasets_for_evidence(datasets)
 
@@ -65,7 +67,10 @@ def impc(
 
     # Apply EFO mapping
     mapped_evidence_df = add_efo_mapping(
-        evidence_strings=evidence, spark_instance=spark.spark, efo_version=efo_version, cores=mapping_cores
+        spark=spark.spark,
+        evidence_df=evidence,
+        disease_label_lut_path=ontoma_disease_label_lut,
+        disease_id_lut_path=ontoma_disease_id_lut,
     )
 
     # Finalize evidence strings
@@ -74,8 +79,6 @@ def impc(
     # Write evidence data
     logger.info('write impc evidence')
     final_evidence.write.mode('overwrite').parquet(destination)
-
-    return final_evidence
 
 
 def _load_impc_datasets_for_evidence(spark: Session, source: dict[str, str]) -> dict[str, DataFrame]:
