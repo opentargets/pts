@@ -13,7 +13,7 @@ dependencies = [
   "networkx>=3.2",
   "smart-open[gcs]>=7.0.0",
   "pandas>=2.3.2",
-  "ontoma==2.1.0",
+#  "ontoma==2.1.0",
   "openai==1.8",
   "defusedxml>=0.7.1",
   "pronto>=2.7.0",
