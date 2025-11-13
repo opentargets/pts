@@ -1,12 +1,17 @@
 [project]
 name = "PTS"
-version = "25.3.1-dev.6"
+version = "25.3.1-dev.7"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "loguru==0.7.3",
   "opentargets-otter==25.0.16",
+  "polars==1.31.0",
+  "pyspark>=3.5.7",
+  "obonet>=0.3.1",
+  "networkx>=3.2",
+  "smart-open[gcs]>=7.0.0",
   "pandas>=2.3.2",
   "ontoma==2.1.0",
   "polars==1.31.0",
