@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from loguru import logger
 from pyspark.sql import DataFrame, Row, SparkSession
 
@@ -98,6 +100,7 @@ def _parse_go_obo(path: str, spark: SparkSession) -> DataFrame:
 def go(
     source: str | dict[str, str],
     destination: str | dict[str, str],
+    settings: dict[str, Any],
     properties: dict[str, str] | None,
 ) -> None:
     # Unify IO parameters
