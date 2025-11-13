@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
-import loguru
+from loguru import logger
 from pyspark.conf import SparkConf
 from pyspark.sql import SparkSession
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class Session:
-    """This class provides a Spark session and logger."""
+    """This class provides a Spark session."""
 
     def __init__(
         self,
@@ -21,48 +22,51 @@ class Session:
         properties: dict[str, str] | None = None,
     ) -> None:
         """Initializes a Spark Session."""
+        self.is_dataproc = 'DATAPROC_CLUSTER_NAME' in os.environ
+
         self.spark: SparkSession = (
             SparkSession.Builder()
             .config(conf=self._create_config(properties))
-            .master(spark_uri)
+            .master('yarn' if self.is_dataproc else spark_uri)
             .appName(app_name)
             .getOrCreate()
         )
-
-        self.logger = loguru.logger
+        self.spark.sparkContext.setLogLevel('WARN')
 
     def _create_config(self, properties: dict[str, str] | None = None) -> SparkConf:
         if properties is None:
             properties = {}
+        base_properties = {}
 
-        default_properties = {
-            'spark.driver.maxResultSize': '0',
-            'spark.debug.maxToStringFields': '2000',
-            'spark.sql.broadcastTimeout': '3000',
-            # google cloud storage connector
-            'spark.jars.packages': 'com.google.cloud.bigdataoss:gcs-connector:hadoop3-2.2.21',
-            'spark.hadoop.fs.gs.impl': 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem',
-            'spark.hadoop.fs.AbstractFileSystem.gs.impl': 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS',
-            'spark.sql.adaptive.enabled': 'true',
-            'spark.sql.adaptive.coalescePartitions.enabled': 'true',
-            'spark.serializer': 'org.apache.spark.serializer.KryoSerializer',
-            'spark.hadoop.fs.gs.block.size': '134217728',
-            'spark.hadoop.fs.gs.inputstream.buffer.size': '8388608',
-            'spark.hadoop.fs.gs.outputstream.buffer.size': '8388608',
-            'spark.hadoop.fs.gs.outputstream.sync.min.interval.ms': '2000',
-            'spark.network.timeout': '10s',
-            'spark.network.timeoutInterval': '10s',
-            'spark.executor.heartbeatInterval': '6s',
-            'spark.hadoop.fs.gs.status.parallel.enable': 'true',
-            'spark.hadoop.fs.gs.glob.algorithm': 'CONCURRENT',
-            'spark.hadoop.fs.gs.copy.with.rewrite.enable': 'true',
-            'spark.hadoop.fs.gs.metadata.cache.enable': 'false',
-            'spark.hadoop.fs.gs.auth.type': 'APPLICATION_DEFAULT',
-        }
+        if not self.is_dataproc:
+            base_properties = {
+                'spark.driver.maxResultSize': '0',
+                'spark.debug.maxToStringFields': '2000',
+                'spark.sql.broadcastTimeout': '3000',
+                # google cloud storage connector
+                'spark.jars.packages': 'com.google.cloud.bigdataoss:gcs-connector:hadoop3-2.2.21',
+                'spark.sql.adaptive.enabled': 'true',
+                'spark.sql.adaptive.coalescePartitions.enabled': 'true',
+                'spark.serializer': 'org.apache.spark.serializer.KryoSerializer',
+                'spark.network.timeout': '10s',
+                'spark.network.timeoutInterval': '10s',
+                'spark.executor.heartbeatInterval': '6s',
+                'spark.hadoop.fs.gs.block.size': '134217728',
+                'spark.hadoop.fs.gs.inputstream.buffer.size': '8388608',
+                'spark.hadoop.fs.gs.outputstream.buffer.size': '8388608',
+                'spark.hadoop.fs.gs.outputstream.sync.min.interval.ms': '2000',
+                'spark.hadoop.fs.gs.status.parallel.enable': 'true',
+                'spark.hadoop.fs.gs.glob.algorithm': 'CONCURRENT',
+                'spark.hadoop.fs.gs.copy.with.rewrite.enable': 'true',
+                'spark.hadoop.fs.gs.metadata.cache.enable': 'false',
+                'spark.hadoop.fs.gs.auth.type': 'APPLICATION_DEFAULT',
+                'spark.hadoop.fs.gs.impl': 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem',
+                'spark.hadoop.fs.AbstractFileSystem.gs.impl': 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS',
+            }
 
-        properties = {**default_properties, **properties}
+        effective_properties = {**base_properties, **properties}
 
-        return SparkConf().setAll(list(properties.items()))
+        return SparkConf().setAll(list(effective_properties.items()))
 
     def load_data(
         self,
@@ -97,4 +101,4 @@ class Session:
     def stop(self) -> None:
         """Stops the Spark session."""
         self.spark.stop()
-        self.logger.info('spark session stopped')
+        logger.info('spark session stopped')

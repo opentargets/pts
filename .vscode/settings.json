@@ -3,8 +3,9 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.tabSize": 4,
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
-    },
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit",
+    }
   },
   "ruff.nativeServer": true,
   "ruff.lint.enable": true,
@@ -26,6 +27,5 @@
     ]
   },
   "yaml.format.singleQuote": true,
-  "cursorpyright.analysis.autoImportCompletions": true,
-  "cursorpyright.analysis.typeCheckingMode": "standard",
+  "editor.formatOnSave": true
 }
