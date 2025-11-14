@@ -13,7 +13,8 @@ def example_local():
 
     source = {
         'targets': 'work/output/targets/targets.parquet',
-        'go': 'work/output/go/go.parquet'
+        'go': 'work/output/go/go.parquet',
+        'reactome': 'work/input/reactome'
     }
 
     destination = {
@@ -58,7 +59,8 @@ def example_gcs():
 
     source = {
         'targets': 'gs://your-bucket/output/targets/targets.parquet',
-        'go': 'gs://your-bucket/output/go/go.parquet'
+        'go': 'gs://your-bucket/output/go/go.parquet',
+        'reactome': 'gs://your-bucket/output/reactome'
     }
 
     destination = {
@@ -94,6 +96,7 @@ def example_individual_facets():
         # Load data
         targets_df = spark.read.parquet('work/output/targets/targets.parquet')
         go_df = spark.read.parquet('work/output/go/go.parquet')
+        reactome_df = spark.read.parquet('work/input/reactome')
 
         # Initialize category configuration
         categories = FacetSearchCategories()
@@ -149,6 +152,9 @@ def example_with_test_data():
                 go=[
                     Row(id='GO:0006915', aspect='P'),  # apoptotic process
                     Row(id='GO:0003700', aspect='F'),  # DNA-binding transcription factor activity
+                ],
+                pathways=[
+                    Row(pathway='Cell Cycle', pathwayId='R-HSA-1640170')
                 ]
             ),
             Row(
@@ -160,6 +166,9 @@ def example_with_test_data():
                 ],
                 go=[
                     Row(id='GO:0006281', aspect='P'),  # DNA repair
+                ],
+                pathways=[
+                    Row(pathway='DNA Repair', pathwayId='R-HSA-73857')
                 ]
             ),
         ]
@@ -167,15 +176,22 @@ def example_with_test_data():
 
         # Create minimal test GO data
         test_go = [
-            Row(id='GO:0006915', name='apoptotic process', namespace='biological_process'),
-            Row(id='GO:0003700', name='DNA-binding transcription factor activity', namespace='molecular_function'),
-            Row(id='GO:0006281', name='DNA repair', namespace='biological_process'),
+            Row(id='GO:0006915', label='apoptotic process', namespace='biological_process', isObsolete=False),
+            Row(id='GO:0003700', label='DNA-binding transcription factor activity', namespace='molecular_function', isObsolete=False),
+            Row(id='GO:0006281', label='DNA repair', namespace='biological_process', isObsolete=False),
         ]
         go_df = spark.createDataFrame(test_go)
 
+        # Create minimal test Reactome data
+        test_reactome = [
+            Row(id='R-HSA-1640170', label='Cell Cycle', parents=['R-HSA-1430728'], ancestors=[], descendants=[], children=[], path=[]),
+            Row(id='R-HSA-73857', label='DNA Repair', parents=['R-HSA-2262752'], ancestors=[], descendants=[], children=[], path=[]),
+        ]
+        reactome_df = spark.createDataFrame(test_reactome)
+
         # Compute facets
         categories = FacetSearchCategories()
-        facets_df = compute_all_target_facets(targets_df, go_df, categories, spark)
+        facets_df = compute_all_target_facets(targets_df, go_df, reactome_df, categories, spark)
 
         # Display results
         print(f'Total facets computed: {facets_df.count()}')

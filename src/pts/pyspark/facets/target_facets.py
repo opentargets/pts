@@ -82,16 +82,18 @@ def compute_tractability_facets(
 
     # Create mapping for tractability modality codes to full names
     tractability_modality_mappings = F.create_map([
-        F.lit('SM'), F.lit(category_values.SM),
-        F.lit('AB'), F.lit(category_values.AB),
-        F.lit('PR'), F.lit(category_values.PR),
-        F.lit('OC'), F.lit(category_values.OC),
+        F.lit('SM'),
+        F.lit(category_values.SM),
+        F.lit('AB'),
+        F.lit(category_values.AB),
+        F.lit('PR'),
+        F.lit(category_values.PR),
+        F.lit('OC'),
+        F.lit(category_values.OC),
     ])
 
     # Extract relevant data with tractability array
-    tractability_with_id = get_relevant_dataset(
-        targets_df, 'id', 'ensemblGeneId', 'tractability'
-    )
+    tractability_with_id = get_relevant_dataset(targets_df, 'id', 'ensemblGeneId', 'tractability')
 
     # Process tractability data
     # 1. Explode the tractability array
@@ -99,16 +101,12 @@ def compute_tractability_facets(
     # 3. Filter for true values only
     # 4. Group and collect target IDs
     return (
-        tractability_with_id
-        .select(
-            F.col('ensemblGeneId'),
-            F.explode('tractability').alias('t')
-        )
+        tractability_with_id.select(F.col('ensemblGeneId'), F.explode('tractability').alias('t'))
         .select(
             F.col('ensemblGeneId'),
             F.col('t.modality').alias('category'),
             F.col('t.id').alias('label'),
-            F.col('t.value').alias('value')
+            F.col('t.value').alias('value'),
         )
         .where(F.col('value'))
         .groupBy('category', 'label')
@@ -118,8 +116,8 @@ def compute_tractability_facets(
             'category',
             F.when(
                 tractability_modality_mappings[F.col('category')].isNotNull(),
-                tractability_modality_mappings[F.col('category')]
-            ).otherwise(F.col('category'))
+                tractability_modality_mappings[F.col('category')],
+            ).otherwise(F.col('category')),
         )
         .withColumn('datasourceId', F.lit(None).cast('string'))
         .withColumn('parentId', F.array().cast('array<string>'))
@@ -163,9 +161,7 @@ def compute_approved_symbol_facets(
         DataFrame with facet schema containing approved symbol facets
     """
     logger.info('Computing approved symbol facets')
-    return compute_simple_facet(
-        targets_df, 'approvedSymbol', category_values.approved_symbol, 'id', spark
-    )
+    return compute_simple_facet(targets_df, 'approvedSymbol', category_values.approved_symbol, 'id', spark)
 
 
 def compute_approved_name_facets(
@@ -184,9 +180,7 @@ def compute_approved_name_facets(
         DataFrame with facet schema containing approved name facets
     """
     logger.info('Computing approved name facets')
-    return compute_simple_facet(
-        targets_df, 'approvedName', category_values.approved_name, 'id', spark
-    )
+    return compute_simple_facet(targets_df, 'approvedName', category_values.approved_name, 'id', spark)
 
 
 def compute_subcellular_locations_facets(
@@ -212,21 +206,15 @@ def compute_subcellular_locations_facets(
     """
     logger.info('Computing subcellular location facets')
 
-    subcellular_location_with_id = get_relevant_dataset(
-        targets_df, 'id', 'ensemblGeneId', 'subcellularLocations'
-    )
+    subcellular_location_with_id = get_relevant_dataset(targets_df, 'id', 'ensemblGeneId', 'subcellularLocations')
 
     return (
-        subcellular_location_with_id
-        .select(
-            F.col('ensemblGeneId'),
-            F.explode('subcellularLocations').alias('s')
-        )
+        subcellular_location_with_id.select(F.col('ensemblGeneId'), F.explode('subcellularLocations').alias('s'))
         .select(
             F.col('ensemblGeneId').alias('id'),
             F.col('s.location').alias('label'),
             F.lit(category_values.subcellular_location).alias('category'),
-            F.col('s.termSl').alias('datasourceId')
+            F.col('s.termSl').alias('datasourceId'),
         )
         .groupBy('label', 'category', 'datasourceId')
         .agg(F.collect_set('id').alias('entityIds'))
@@ -246,7 +234,9 @@ def compute_target_class_facets(
     Process:
     1. Extract target ID and targetClass array
     2. Explode array and extract class labels
-    3. Group by label, collecting target IDs
+    3. Infer parent-child relationships from hierarchy levels (l1, l2, l3, etc.)
+    4. Map children to their immediate parents
+    5. Group by label, collecting target IDs and adding parentId
 
     Args:
         targets_df: DataFrame with 'id' and 'targetClass' columns
@@ -258,25 +248,60 @@ def compute_target_class_facets(
     """
     logger.info('Computing target class facets')
 
-    target_class_with_id = get_relevant_dataset(
-        targets_df, 'id', 'ensemblGeneId', 'targetClass'
+    target_class_with_id = get_relevant_dataset(targets_df, 'id', 'ensemblGeneId', 'targetClass')
+
+    # Step 1: Explode targetClass arrays into flat structure
+    # Extract id, label, and level from each targetClass entry
+    targets_flat = target_class_with_id.select(F.col('ensemblGeneId'), F.explode('targetClass').alias('t')).select(
+        F.col('ensemblGeneId'),
+        F.col('t.id').alias('id'),
+        F.col('t.label').alias('label'),
+        F.col('t.level').alias('level'),
     )
 
-    return (
-        target_class_with_id
-        .select(
-            F.col('ensemblGeneId'),
-            F.explode('targetClass').alias('t')
+    # Step 2: Extract numeric level (l1 → 1, l2 → 2, etc.)
+    # Use regex to extract the number from level string
+    targets_flat_extr = targets_flat.withColumn('level_num', F.regexp_extract('level', r'l(\d+)', 1).cast('int'))
+
+    # Step 3: Self-join to find parent→child relationships
+    # Join where child level = parent level + 1 (immediate parent only)
+    # This creates a mapping: child label → parent label
+    targets_rel = (
+        targets_flat_extr.alias('p')
+        .join(
+            targets_flat_extr.alias('c'),
+            (F.col('p.id') == F.col('c.id')) & (F.col('c.level_num') == F.col('p.level_num') + 1),
+            how='inner',
         )
+        .select(F.col('c.label').alias('child_label'), F.col('p.label').alias('parent_label'))
+        .distinct()
+    )
+
+    # Step 4: Group by child label and collect all parent labels into an array
+    # This creates the parentId mapping: child_label → [parent1, parent2, ...]
+    parent_mapping = targets_rel.groupBy('child_label').agg(F.collect_set('parent_label').alias('parentId'))
+
+    # Step 5: Compute facets and join with parent mapping
+    facets = (
+        target_class_with_id.select(F.col('ensemblGeneId'), F.explode('targetClass').alias('t'))
         .select(
             F.col('ensemblGeneId'),
             F.col('t.label').alias('label'),
-            F.lit(category_values.target_class).alias('category')
+            F.lit(category_values.target_class).alias('category'),
         )
         .groupBy('label', 'category')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn('datasourceId', F.lit(None).cast('string'))
-        .withColumn('parentId', F.array().cast('array<string>'))
+    )
+
+    # Step 6: Join facets with parent mapping to add parentId
+    # Left join: if no parent found, use empty array
+    return (
+        facets.join(parent_mapping, on=F.col('label') == F.col('child_label'), how='left')
+        .withColumn(
+            'parentId',
+            F.when(F.col('parentId').isNotNull(), F.col('parentId')).otherwise(F.array().cast('array<string>')),
+        )
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
@@ -284,6 +309,7 @@ def compute_target_class_facets(
 
 def compute_pathways_facets(
     targets_df: DataFrame,
+    reactome_df: DataFrame,
     category_values: FacetSearchCategories,
     spark: SparkSession,
 ) -> DataFrame:
@@ -292,11 +318,13 @@ def compute_pathways_facets(
     Process:
     1. Extract target ID and pathways array (from Reactome)
     2. Explode array and extract pathway name and pathway ID
-    3. Group by pathway, collecting target IDs
-    4. Keep pathwayId as datasourceId for reference
+    3. Join with Reactome reference data to get parent pathways
+    4. Group by pathway, collecting target IDs
+    5. Keep pathwayId as datasourceId for reference
 
     Args:
         targets_df: DataFrame with 'id' and 'pathways' columns
+        reactome_df: Reference DataFrame with Reactome pathway information (id, label, parents)
         category_values: FacetSearchCategories instance
         spark: SparkSession instance
 
@@ -305,25 +333,30 @@ def compute_pathways_facets(
     """
     logger.info('Computing pathway facets')
 
-    pathways_with_id = get_relevant_dataset(
-        targets_df, 'id', 'id', 'pathways'
-    )
+    pathways_with_id = get_relevant_dataset(targets_df, 'id', 'id', 'pathways')
+
+    # Process pathways and join with Reactome reference to get parents
+    # Select only needed columns from reactome_df to avoid column name conflicts
+    reactome_parents = reactome_df.select(F.col('id').alias('reactome_id'), F.col('parents').alias('reactome_parents'))
 
     return (
-        pathways_with_id
-        .select(
-            F.col('id'),
-            F.explode('pathways').alias('p')
-        )
+        pathways_with_id.select(F.col('id'), F.explode('pathways').alias('p'))
         .select(
             F.col('id').alias('ensemblGeneId'),
             F.col('p.pathway').alias('label'),
             F.lit(category_values.pathways).alias('category'),
-            F.col('p.pathwayId').alias('datasourceId')
+            F.col('p.pathwayId').alias('datasourceId'),
         )
-        .groupBy('label', 'category', 'datasourceId')
+        .join(reactome_parents, on=F.col('datasourceId') == F.col('reactome_id'), how='left')
+        # Extract parents from Reactome reference, use empty array if null
+        .withColumn(
+            'parentId',
+            F.when(F.col('reactome_parents').isNotNull(), F.col('reactome_parents')).otherwise(
+                F.array().cast('array<string>')
+            ),
+        )
+        .groupBy('label', 'category', 'datasourceId', 'parentId')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
-        .withColumn('parentId', F.array().cast('array<string>'))
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
@@ -363,15 +396,16 @@ def compute_go_facets(
 
     # Create mapping for GO aspect codes to full names
     go_aspect_mappings = F.create_map([
-        F.lit('F'), F.lit(category_values.goF),
-        F.lit('P'), F.lit(category_values.goP),
-        F.lit('C'), F.lit(category_values.goC),
+        F.lit('F'),
+        F.lit(category_values.goF),
+        F.lit('P'),
+        F.lit(category_values.goP),
+        F.lit('C'),
+        F.lit(category_values.goC),
     ])
 
     # Extract relevant GO data from targets
-    go_with_id = get_relevant_dataset(
-        targets_df, 'id', 'ensemblId', 'go'
-    )
+    go_with_id = get_relevant_dataset(targets_df, 'id', 'ensemblId', 'go')
 
     # Process GO data
     # 1. Explode GO array to individual terms
@@ -379,15 +413,9 @@ def compute_go_facets(
     # 3. Map aspect codes to category names
     # 4. Group and collect target IDs
     return (
-        go_with_id
+        go_with_id.select(F.col('ensemblId'), F.explode('go').alias('g'))
         .select(
-            F.col('ensemblId'),
-            F.explode('go').alias('g')
-        )
-        .select(
-            F.col('ensemblId').alias('ensemblGeneId'),
-            F.col('g.id').alias('id'),
-            F.col('g.aspect').alias('category')
+            F.col('ensemblId').alias('ensemblGeneId'), F.col('g.id').alias('id'), F.col('g.aspect').alias('category')
         )
         .join(go_df, on='id', how='left')
         # GO dataframe already has 'label' column (not 'name')
@@ -398,21 +426,17 @@ def compute_go_facets(
             F.when(
                 F.col('is_a').isNotNull() | F.col('part_of').isNotNull(),
                 F.array_distinct(
-                    F.concat(
-                        F.coalesce(F.col('is_a'), F.array()),
-                        F.coalesce(F.col('part_of'), F.array())
-                    )
-                )
-            ).otherwise(F.array().cast('array<string>'))
+                    F.concat(F.coalesce(F.col('is_a'), F.array()), F.coalesce(F.col('part_of'), F.array()))
+                ),
+            ).otherwise(F.array().cast('array<string>')),
         )
         .groupBy('label', 'category', 'datasourceId', 'parentId')
         .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn(
             'category',
-            F.when(
-                go_aspect_mappings[F.col('category')].isNotNull(),
-                go_aspect_mappings[F.col('category')]
-            ).otherwise(F.col('category'))
+            F.when(go_aspect_mappings[F.col('category')].isNotNull(), go_aspect_mappings[F.col('category')]).otherwise(
+                F.col('category')
+            ),
         )
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
@@ -422,6 +446,7 @@ def compute_go_facets(
 def compute_all_target_facets(
     targets_df: DataFrame,
     go_df: DataFrame,
+    reactome_df: DataFrame,
     category_values: FacetSearchCategories | None = None,
     spark: SparkSession | None = None,
 ) -> DataFrame:
@@ -433,6 +458,7 @@ def compute_all_target_facets(
     Args:
         targets_df: DataFrame containing target data
         go_df: DataFrame containing GO reference data
+        reactome_df: DataFrame containing Reactome reference data
         category_values: Optional FacetSearchCategories instance. Uses defaults if None.
         spark: Optional SparkSession. Extracted from targets_df if None.
 
@@ -455,7 +481,7 @@ def compute_all_target_facets(
         compute_approved_name_facets(targets_df, category_values, spark),
         compute_subcellular_locations_facets(targets_df, category_values, spark),
         compute_target_class_facets(targets_df, category_values, spark),
-        compute_pathways_facets(targets_df, category_values, spark),
+        compute_pathways_facets(targets_df, reactome_df, category_values, spark),
         compute_go_facets(targets_df, go_df, category_values, spark),
     ]
 
@@ -482,12 +508,13 @@ def target_facets(
     Configuration via source dict:
         - 'targets': Path to targets parquet data
         - 'go': Path to GO reference parquet data
+        - 'reactome': Path to Reactome reference parquet data
 
     Configuration via destination dict:
         - 'targets': Path to write target facets output
 
     Args:
-        source: Dictionary with 'targets' and 'go' keys pointing to input paths
+        source: Dictionary with 'targets', 'go', and 'reactome' keys pointing to input paths
         destination: Dictionary with 'targets' key pointing to output path
         properties: Optional Spark configuration properties
         category_config: Optional custom category name mappings
@@ -496,7 +523,8 @@ def target_facets(
         >>> target_facets(
         ...     source={
         ...         'targets': 'gs://bucket/targets.parquet',
-        ...         'go': 'gs://bucket/go.parquet'
+        ...         'go': 'gs://bucket/go.parquet',
+        ...         'reactome': 'gs://bucket/reactome.parquet'
         ...     },
         ...     destination={'targets': 'gs://bucket/output/facets.parquet'},
         ...     properties={'spark.executor.memory': '8g'}
@@ -512,18 +540,21 @@ def target_facets(
         logger.info(f'Destination path: {destination}')
 
         # Load input data
-        logger.info(f"Loading targets from: {source['targets']}")
+        logger.info(f'Loading targets from: {source["targets"]}')
         targets_df = spark.read.parquet(source['targets'])
 
-        logger.info(f"Loading GO data from: {source['go']}")
+        logger.info(f'Loading GO data from: {source["go"]}')
         go_df = spark.read.parquet(source['go'])
         go_df = go_df.filter(F.col('isObsolete').isNull() | (F.col('isObsolete') == False))
+
+        logger.info(f'Loading Reactome data from: {source["reactome"]}')
+        reactome_df = spark.read.parquet(source['reactome'])
 
         # Initialize category configuration
         category_values = FacetSearchCategories(category_config)
 
         # Compute all facets
-        all_facets = compute_all_target_facets(targets_df, go_df, category_values, spark)
+        all_facets = compute_all_target_facets(targets_df, go_df, reactome_df, category_values, spark)
 
         # Write output
         output_path = destination['targets']
