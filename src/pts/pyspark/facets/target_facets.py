@@ -18,6 +18,7 @@ from pyspark.sql import functions as F
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.facets.helpers import compute_simple_facet, get_relevant_dataset
+from pts.pyspark.facets.pandasprop import propagate_entity_ids_pyspark_efficiently
 
 
 class FacetSearchCategories:
@@ -443,6 +444,72 @@ def compute_go_facets(
     )
 
 
+def prepare_dataset_for_propagation(facets_df: DataFrame) -> DataFrame:
+    """Prepare dataset for propagation by creating id column and exploding parentId.
+
+    This function prepares a facets DataFrame for propagation by:
+    1. Creating an 'id' column based on category:
+       - For GO:BP, GO:MF, GO:CC, Reactome: use datasourceId
+       - For other categories: use label
+    2. Selecting id, parentId, entityIds
+    3. Exploding parentId to get parent_id (string)
+
+    Args:
+        facets_df: DataFrame with columns (label, category, datasourceId, parentId, entityIds).
+            parentId should be an array of strings.
+
+    Returns:
+        DataFrame with columns (id, parent_id, entityIds) where:
+        - id: str (from datasourceId or label based on category)
+        - parent_id: str (exploded from parentId array)
+        - entityIds: array<string>
+    """
+    # Create id column based on category
+    prepared = facets_df.withColumn(
+        'id',
+        F.when(
+            F.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
+            F.col('datasourceId'),
+        ).otherwise(F.col('label')),
+    )
+
+    # Select id, parentId, entityIds
+    selected = prepared.select('id', 'parentId', 'entityIds')
+
+    # Explode parentId to get parent_id (string)
+    # Filter out rows where parentId is null or empty to avoid issues
+    return (
+        selected.filter(F.col('parentId').isNotNull() & (F.size(F.col('parentId')) > 0))
+        .withColumn('parent_id', F.explode('parentId'))
+        .select('id', 'parent_id', 'entityIds')
+    )
+
+
+def propagate_entity_ids_with_dataset_prep(
+    facets_df: DataFrame, return_iterations: bool = False
+) -> DataFrame | tuple[DataFrame, int]:
+    """Propagate entityIds from children to parents with dataset preparation.
+
+    This function combines prepare_dataset_for_propagation and propagate_entity_ids_pyspark:
+    1. Prepares the facets DataFrame by creating id column and exploding parentId
+    2. Propagates entityIds from children to parents iteratively
+
+    Args:
+        facets_df: DataFrame with columns (label, category, datasourceId, parentId, entityIds).
+            parentId should be an array of strings.
+        return_iterations: If True, returns a tuple (result_df, iterations). Defaults to False.
+
+    Returns:
+        DataFrame with columns (id, parent_id, entityIds) where entityIds have been
+        propagated from children to parents transitively.
+        If return_iterations is True, returns (DataFrame, int) where int is the number of iterations.
+    """
+    # Step 1: Prepare dataset for propagation
+    prepared_df = prepare_dataset_for_propagation(facets_df)
+
+    # Step 2: Propagate entityIds
+    return propagate_entity_ids_pyspark_efficiently(prepared_df, return_iterations=return_iterations)
+
 def compute_all_target_facets(
     targets_df: DataFrame,
     go_df: DataFrame,
@@ -490,7 +557,8 @@ def compute_all_target_facets(
     for facets_df in facets_list[1:]:
         all_facets = all_facets.union(facets_df)
 
-    return all_facets
+    # Transitive propagation: ensure parents contain entityIds from all descendants
+    return propagate_entity_ids_with_dataset_prep(all_facets)
 
 
 def target_facets(

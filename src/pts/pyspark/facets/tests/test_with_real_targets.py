@@ -14,7 +14,7 @@ source = {
     'reactome': 'work/input/reactome',  # Reactome reference data
 }
 
-destination = {'targets': 'work/output/facets/real_target_facets_chembl'}
+destination = {'targets': 'work/output/facets/real_target_facets_propagated'}
 
 print(f'📥 Reading targets from: {source["targets"]}')
 print(f'📥 Reading GO from: {source["go"]}')
@@ -55,8 +55,8 @@ try:
     total = facets_df.count()
     print(f'Output facets: {total} facets\n')
 
-    print('Facets by category:')
-    facets_df.groupBy('category').count().orderBy('count', ascending=False).show(20, truncate=False)
+    # print('Facets by category:')
+    # facets_df.groupBy('category').count().orderBy('count', ascending=False).show(20, truncate=False)
 
     # print('\nSample facets (first 10):')
     # facets_df.show(10, truncate=False)
@@ -79,20 +79,20 @@ try:
     # reactome_without_parents.show(10, truncate=False)
 
     # Check ChEMBL Target Class facets specifically
-    print('\n🔍 ChEMBL Target Class facets with parentId:')
-    chembl_facets = facets_df.filter(F.col('category') == 'ChEMBL Target Class')
-    chembl_with_parents = chembl_facets.filter(F.col('parentId').isNotNull() & (F.size(F.col('parentId')) > 0))
-    chembl_without_parents = chembl_facets.filter(F.col('parentId').isNull() | (F.size(F.col('parentId')) == 0))
-    chembl_total = chembl_facets.count()
-    chembl_with_parents_count = chembl_with_parents.count()
-    print(f'   Total ChEMBL Target Class facets: {chembl_total}')
-    print(f'   ChEMBL facets with parentId: {chembl_with_parents_count}')
-    print(f'   ChEMBL facets without parentId: {chembl_total - chembl_with_parents_count}')
-    if chembl_total - chembl_with_parents_count > 0:
-        print('\n   ChEMBL labels without parentId:')
-        chembl_without_parents.select('label').distinct().orderBy('label').show(100, truncate=False)
-    else:
-        print('\n   ✅ All ChEMBL facets have parentId values')
+    # print('\n🔍 ChEMBL Target Class facets with parentId:')
+    # chembl_facets = facets_df.filter(F.col('category') == 'ChEMBL Target Class')
+    # chembl_with_parents = chembl_facets.filter(F.col('parentId').isNotNull() & (F.size(F.col('parentId')) > 0))
+    # chembl_without_parents = chembl_facets.filter(F.col('parentId').isNull() | (F.size(F.col('parentId')) == 0))
+    # chembl_total = chembl_facets.count()
+    # chembl_with_parents_count = chembl_with_parents.count()
+    # print(f'   Total ChEMBL Target Class facets: {chembl_total}')
+    # print(f'   ChEMBL facets with parentId: {chembl_with_parents_count}')
+    # print(f'   ChEMBL facets without parentId: {chembl_total - chembl_with_parents_count}')
+    # if chembl_total - chembl_with_parents_count > 0:
+    #     print('\n   ChEMBL labels without parentId:')
+    #     chembl_without_parents.select('label').distinct().orderBy('label').show(100, truncate=False)
+    # else:
+    #     print('\n   ✅ All ChEMBL facets have parentId values')
 
     print(f'\n✅ Results saved to: {destination["targets"]}')
 
