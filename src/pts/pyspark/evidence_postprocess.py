@@ -83,5 +83,15 @@ def evidence_postprocess(
     )
 
     # Writing outputs:
-    processed_evidence.get_invalid_evidence().write.mode('overwrite').parquet(destination['failed_evidence'])
-    processed_evidence.get_valid_evidence().write.mode('overwrite').parquet(destination['evidence'])
+    session.write_data(
+        processed_evidence.get_invalid_evidence(),
+        destination['failed_evidence'],
+        mode='overwrite',
+        partitions=1,
+    )
+    session.write_data(
+        processed_evidence.get_valid_evidence(),
+        destination['evidence'],
+        mode='overwrite',
+        partitions=1,
+    )

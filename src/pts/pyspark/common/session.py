@@ -98,6 +98,26 @@ class Session:
 
         return self.spark.read.load(path, format=format, schema=schema, **kwargs)
 
+    def write_data(
+        self,
+        dataframe: DataFrame,
+        destination: str,
+        mode: str = 'overwrite',
+        partitions: int | None = None,
+    ):
+        """Generic function to write a Spark dataframe to disk.
+
+        Args:
+            dataframe (DataFrame): dataframe to write
+            destination (str): output path
+            mode (str): write mode. Defaults to 'overwrite'.
+            partitions (int | None): number of partitions to use when writing the data.
+                If None, the number of partitions in the dataframe is used.
+        """
+        if partitions is not None:
+            dataframe = dataframe.coalesce(partitions)
+        dataframe.write.mode(mode).parquet(destination)
+
     def stop(self) -> None:
         """Stops the Spark session."""
         self.spark.stop()
