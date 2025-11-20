@@ -21,13 +21,14 @@ def evidence_postprocess(
     """Post-process evidence.
 
     Process:
+        0. Harmonise to common evidence schema
         1. Validate disease
         2. Validate target
         3. Validate datasource
         4. Assign evidence identifier
         5. Calculate evidence date
-        6. Calculate direction of effect
-        7. Write output.
+        7. Calculate direction of effect
+        8. Write output.
 
     Args:
         source (dict[str, str]): dictionary with data sources.
