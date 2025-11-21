@@ -1,3 +1,5 @@
+import importlib.resources as pkg_resources
+import json
 from collections.abc import Callable, Iterable
 from enum import Enum
 from functools import wraps
@@ -6,8 +8,12 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import pyspark.sql.functions as f
 from pyspark.sql import Column, DataFrame
+from pyspark.sql.types import StructType
+
+from pts import schemas
 
 F = TypeVar('F', bound=Callable[..., Any])
+
 
 if TYPE_CHECKING:
     from enum import Enum
@@ -214,3 +220,19 @@ def pvalue_linear_rescaling(
     in_max_log = log10(in_range_max)
 
     return linear_rescaling(pvalue_log, in_min_log, in_max_log, out_range_min, out_range_max)
+
+
+def parse_spark_schema(schema_json: str) -> StructType:
+    """Parse Spark schema from JSON.
+
+    Args:
+        schema_json (str): JSON filename containing spark schema in the schemas package
+
+    Returns:
+        StructType: Spark schema
+    """
+    pkg = pkg_resources.files(schemas).joinpath(schema_json)
+    with pkg.open(encoding='utf-8') as schema:
+        core_schema = json.load(schema)
+
+    return StructType.fromJson(core_schema)

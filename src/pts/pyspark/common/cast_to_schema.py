@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.resources as pkg_resources
-import json
-
 from loguru import logger
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as f
 from pyspark.sql.types import ArrayType, DataType, StructType
-
-from pts import schemas
 
 
 def harmonise_to_schema(df: DataFrame, target_schema: StructType) -> DataFrame:
@@ -46,22 +41,6 @@ def harmonise_to_schema(df: DataFrame, target_schema: StructType) -> DataFrame:
         )
 
     return df
-
-
-def parse_spark_schema(schema_json: str) -> StructType:
-    """Parse Spark schema from JSON.
-
-    Args:
-        schema_json (str): JSON filename containing spark schema in the schemas package
-
-    Returns:
-        StructType: Spark schema
-    """
-    pkg = pkg_resources.files(schemas).joinpath(schema_json)
-    with pkg.open(encoding='utf-8') as schema:
-        core_schema = json.load(schema)
-
-    return StructType.fromJson(core_schema)
 
 
 def cast_column_to_target_type(
