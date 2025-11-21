@@ -71,7 +71,7 @@ def cast_column_to_target_type(
             # Simple array
             return f.transform(col, lambda x: x.cast(target_type.elementType))
 
-    if isinstance(source_type, StructType) and isinstance(target_type, StructType):
+    elif isinstance(source_type, StructType) and isinstance(target_type, StructType):
         return cast_struct(col, source_type, target_type)
 
     # Simple casts
@@ -107,14 +107,11 @@ def cast_struct(
             source_field_type = source_fields[field_name].dataType
 
             # Recursively handle nested types
-            if isinstance(target_field.dataType, (StructType, ArrayType)):
-                field_expr = cast_column_to_target_type(
-                    field_expr,
-                    source_field_type,
-                    target_field.dataType,
-                )
-            else:
-                field_expr = field_expr.cast(target_field.dataType)
+            field_expr = cast_column_to_target_type(
+                field_expr,
+                source_field_type,
+                target_field.dataType,
+            )
 
             field_exprs.append(field_expr.alias(field_name))
         else:

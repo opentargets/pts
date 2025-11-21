@@ -27,8 +27,8 @@ def evidence_postprocess(
         3. Validate datasource
         4. Assign evidence identifier
         5. Calculate evidence date
-        7. Calculate direction of effect
-        8. Write output.
+        6. Calculate direction of effect
+        7. Write output.
 
     Args:
         source (dict[str, str]): dictionary with data sources.
