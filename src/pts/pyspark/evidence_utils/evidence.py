@@ -47,7 +47,7 @@ class Evidence:
         if self.QC_COLUMN not in self.df.columns:
             self._df = self._df.withColumn(self.QC_COLUMN, f.lit([]).cast(t.ArrayType(t.StringType())))
 
-        evidence_schema = parse_spark_schema('evidence_schema.json')
+        evidence_schema = parse_spark_schema('evidence.json')
         self._df = harmonise_to_schema(self._df, evidence_schema)
 
     @required_columns(['targetFromSourceId'])
