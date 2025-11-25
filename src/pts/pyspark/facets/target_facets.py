@@ -510,6 +510,50 @@ def propagate_entity_ids_with_dataset_prep(
     # Step 2: Propagate entityIds
     return propagate_entity_ids_pyspark_efficiently(prepared_df, return_iterations=return_iterations)
 
+
+def merge_propagated_entity_ids(facets_df: DataFrame, propagated_df: DataFrame) -> DataFrame:
+    """Merge propagated entityIds back into the original facets DataFrame.
+
+    This function takes the original facets DataFrame and the propagated result,
+    and adds a new column 'entityIdsPropagated' containing the propagated entityIds
+    while keeping the original 'entityIds' column unchanged.
+
+    Args:
+        facets_df: Original DataFrame with columns (label, category, datasourceId, parentId, entityIds).
+        propagated_df: Propagated DataFrame with columns (id, parent_id, entityIds)
+            where entityIds have been propagated from children to parents.
+
+    Returns:
+        DataFrame with all original columns plus 'entityIdsPropagated' column.
+        The original 'entityIds' column is preserved unchanged.
+    """
+    # Step 1: Get unique entityIds per id
+    # The propagated result has one row per (id, parent_id) pair, but entityIds are already
+    # aggregated at the node level, so all rows for the same id have the same entityIds.
+    # We just need to collapse multiple rows into one per id.
+    propagated_aggregated = propagated_df.groupBy('id').agg(F.first('entityIds').alias('entityIdsPropagated'))
+
+    # Step 2: Create id column in original facets using same logic as prepare_dataset_for_propagation
+    facets_with_id = facets_df.withColumn(
+        'id',
+        F.when(
+            F.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
+            F.col('datasourceId'),
+        ).otherwise(F.col('label')),
+    )
+
+    # Step 3: Left join to add entityIdsPropagated, keeping all original columns
+    # Use coalesce to handle cases where id doesn't exist in propagated result
+    return (
+        facets_with_id.join(propagated_aggregated, on='id', how='left')
+        .withColumn(
+            'entityIdsPropagated',
+            F.coalesce(F.col('entityIdsPropagated'), F.array().cast('array<string>')),
+        )
+        .drop('id')  # Remove temporary id column
+    )
+
+
 def compute_all_target_facets(
     targets_df: DataFrame,
     go_df: DataFrame,
@@ -558,7 +602,10 @@ def compute_all_target_facets(
         all_facets = all_facets.union(facets_df)
 
     # Transitive propagation: ensure parents contain entityIds from all descendants
-    return propagate_entity_ids_with_dataset_prep(all_facets)
+    propagated_result = propagate_entity_ids_with_dataset_prep(all_facets)
+
+    # Merge propagated entityIds back into original facets, keeping original entityIds
+    return merge_propagated_entity_ids(all_facets, propagated_result)
 
 
 def target_facets(

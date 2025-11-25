@@ -131,6 +131,7 @@ def example_with_test_data():
     print('Example 4: Testing with sample data')
 
     from pyspark.sql import Row
+    from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
     from pts.pyspark.common.session import Session
     from pts.pyspark.facets import FacetSearchCategories, compute_all_target_facets
@@ -183,11 +184,22 @@ def example_with_test_data():
         go_df = spark.createDataFrame(test_go)
 
         # Create minimal test Reactome data
+        # Define schema explicitly to avoid type inference issues with empty arrays
+        reactome_schema = StructType([
+            StructField('id', StringType(), False),
+            StructField('label', StringType(), True),
+            StructField('ancestors', ArrayType(StringType(), containsNull=False), True),
+            StructField('descendants', ArrayType(StringType(), containsNull=False), True),
+            StructField('children', ArrayType(StringType(), containsNull=False), True),
+            StructField('parents', ArrayType(StringType(), containsNull=False), True),
+            StructField('path', ArrayType(StringType(), containsNull=False), True),
+        ])
+        
         test_reactome = [
             Row(id='R-HSA-1640170', label='Cell Cycle', parents=['R-HSA-1430728'], ancestors=[], descendants=[], children=[], path=[]),
             Row(id='R-HSA-73857', label='DNA Repair', parents=['R-HSA-2262752'], ancestors=[], descendants=[], children=[], path=[]),
         ]
-        reactome_df = spark.createDataFrame(test_reactome)
+        reactome_df = spark.createDataFrame(test_reactome, schema=reactome_schema)
 
         # Compute facets
         categories = FacetSearchCategories()
