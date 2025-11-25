@@ -14,27 +14,27 @@ source = {
     'reactome': 'work/input/reactome',  # Reactome reference data
 }
 
-destination = {'targets': 'work/output/facets/real_target_facets_propagated'}
+destination = {'targets': 'work/output/facets/facets_propagated_merged'}
 
 print(f'📥 Reading targets from: {source["targets"]}')
 print(f'📥 Reading GO from: {source["go"]}')
 print(f'📥 Reading Reactome from: {source["reactome"]}')
 print(f'💾 Writing facets to: {destination["targets"]}\n')
 
-# Check GO file before filtering
-print('🔍 Checking GO file for obsolete terms...')
-session_check = Session(app_name='check_go')
-go_df_check = session_check.spark.read.parquet(source['go'])
-initial_count = go_df_check.count()
-obsolete_count = go_df_check.filter(F.col('isObsolete') == True).count()
-null_count = go_df_check.filter(F.col('isObsolete').isNull()).count()
-false_count = go_df_check.filter(F.col('isObsolete') == False).count()
-print(f'   Total GO terms: {initial_count}')
-print(f'   Obsolete (True): {obsolete_count}')
-print(f'   Not obsolete (False): {false_count}')
-print(f'   Not obsolete (null): {null_count}')
-print(f'   Will keep: {false_count + null_count} terms\n')
-session_check.stop()
+# # Check GO file before filtering
+# print('🔍 Checking GO file for obsolete terms...')
+# session_check = Session(app_name='check_go')
+# go_df_check = session_check.spark.read.parquet(source['go'])
+# initial_count = go_df_check.count()
+# obsolete_count = go_df_check.filter(F.col('isObsolete') == True).count()
+# null_count = go_df_check.filter(F.col('isObsolete').isNull()).count()
+# false_count = go_df_check.filter(F.col('isObsolete') == False).count()
+# print(f'   Total GO terms: {initial_count}')
+# print(f'   Obsolete (True): {obsolete_count}')
+# print(f'   Not obsolete (False): {false_count}')
+# print(f'   Not obsolete (null): {null_count}')
+# print(f'   Will keep: {false_count + null_count} terms\n')
+# session_check.stop()
 
 try:
     # Compute facets

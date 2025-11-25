@@ -18,7 +18,7 @@ def main() -> None:
     try:
         base_path = 'work/output/facets'
         before_path = f'{base_path}/real_target_facets_chembl'
-        after_path = f'{base_path}/real_target_facets_propagated'
+        after_path = f'{base_path}/facets_propagated_merged'
 
         # Read Parquet outputs (ignore non-parquet files like _SUCCESS)
         before_df = spark.read.option('pathGlobFilter', '*.parquet').parquet(before_path)
