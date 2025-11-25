@@ -138,171 +138,6 @@ def propagate_entity_ids(df: pd.DataFrame, return_iterations: bool = False) -> p
     return result_df
 
 
-def propagate_entity_ids_pyspark(df: DataFrame, return_iterations: bool = False) -> DataFrame | tuple[DataFrame, int]:
-    """Propagate entityIds from children to parents iteratively using PySpark.
-
-    This function propagates entityIds through a hierarchy where each row
-    represents a (id, parent_id) pair with associated entityIds. The function
-    iteratively propagates entityIds from children to their parents using
-    tree traversal from the top until all nodes are processed.
-
-    Args:
-        df: PySpark DataFrame with columns:
-            - id: string - the entity identifier
-            - parent_id: string - the parent entity identifier (can be null for root nodes)
-            - entityIds: array<string> - list of entity IDs associated with this (id, parent_id) pair
-        return_iterations: If True, returns a tuple (result_df, iterations). Defaults to False.
-
-    Returns:
-        PySpark DataFrame with same structure but updated entityIds where parents
-        now include entityIds from all their descendants.
-        If return_iterations is True, returns (DataFrame, int) where int is the number of iterations.
-
-    Algorithm:
-        1. Step a0: Find nodes that have children (nodes whose id appears as parent_id)
-        2. Step a: Left join to get parent-child relationships and split nodes:
-           - Nodes without children → add to result
-           - Nodes with children → process (copy children's entityIds to parent)
-        3. Step b: Group by (id, parent_id) and union entityIds from children
-        4. Repeat until no nodes with children remain
-    """
-    current_df = df
-    max_iterations = 40
-    iteration = 0
-    spark = df.sparkSession
-    result_df = spark.createDataFrame([], schema=df.schema)
-
-    while iteration < max_iterations:
-        iteration += 1
-
-        # Step a0: Find nodes that have children (nodes whose id appears as parent_id)
-        # These are the nodes that will be processed in this iteration
-        nodes_with_children = (
-            current_df.filter(F.col('parent_id').isNotNull())
-            .alias('all')
-            .join(
-                current_df.select('id').distinct().alias('existing'),
-                on=F.col('all.parent_id') == F.col('existing.id'),
-                how='inner',
-            )
-            .select(F.col('all.parent_id').alias('id'))
-            .distinct()
-        )
-
-        # If no nodes have children, we're done
-        if nodes_with_children.isEmpty():
-            # Add all remaining nodes to result
-            result_df = result_df.union(current_df)
-            break
-
-        # Get children for nodes that have children
-        # Find all rows where parent_id is in nodes_with_children
-        children_df = (
-            current_df.filter(F.col('parent_id').isNotNull())
-            .alias('all')
-            .join(
-                nodes_with_children.alias('parents'),
-                on=F.col('all.parent_id') == F.col('parents.id'),
-                how='inner',
-            )
-            .select(
-                F.col('all.id').alias('child_id'),
-                F.col('all.parent_id').alias('child_parent_id'),
-                F.col('all.entityIds').alias('child_entityIds'),
-            )
-        )
-
-        # Step a: Left join to get parent-child relationships
-        # Left join: current_df with children_df where current_df.id = children_df.child_parent_id
-        joined = (
-            current_df.alias('df')
-            .join(
-                children_df.alias('children'),
-                on=F.col('df.id') == F.col('children.child_parent_id'),
-                how='left',
-            )
-            .select(
-                F.col('df.id'),
-                F.col('df.parent_id'),
-                F.col('df.entityIds'),
-                F.col('children.child_id'),
-                F.col('children.child_entityIds').alias('child_entity_ids'),
-            )
-        )
-
-        # Split nodes: nodes without children (child_id is null) vs nodes with children
-        nodes_without_children = joined.filter(F.col('child_id').isNull()).select('id', 'parent_id', 'entityIds')
-        nodes_to_process = joined.filter(F.col('child_id').isNotNull())
-
-        # Add nodes without children to result
-        if not nodes_without_children.isEmpty():
-            result_df = result_df.union(nodes_without_children)
-
-        # Convergence check: if leftover nodes (nodes without children) are non-empty, we continue
-        # If no nodes to process, we're done
-        if nodes_to_process.isEmpty():
-            break
-
-        # Step b: Group by (id, parent_id) and union entityIds
-        # Group by (id, parent_id) and aggregate entityIds
-        # For each group:
-        #   - Get original entityIds (first row's entityIds)
-        #   - Collect all child_entity_ids and flatten/union them
-        #   - Union original with child entityIds
-        processed = (
-            nodes_to_process.groupBy('id', 'parent_id')
-            .agg(
-                F.first('entityIds').alias('original_entityIds'),
-                F.collect_list('child_entity_ids').alias('child_entity_ids_list'),
-            )
-            .withColumn(
-                'child_entityIds_flat',
-                F.when(
-                    F.col('child_entity_ids_list').isNotNull(),
-                    F.array_distinct(
-                        F.flatten(
-                            F.filter(
-                                F.col('child_entity_ids_list'),
-                                lambda x: x.isNotNull(),
-                            )
-                        )
-                    ),
-                ).otherwise(F.array().cast('array<string>')),
-            )
-            .withColumn(
-                'entityIds',
-                F.when(
-                    F.col('child_entityIds_flat').isNotNull() & (F.size(F.col('child_entityIds_flat')) > 0),
-                    F.array_distinct(
-                        F.concat(
-                            F.coalesce(F.col('original_entityIds'), F.array().cast('array<string>')),
-                            F.col('child_entityIds_flat'),
-                        )
-                    ),
-                ).otherwise(F.coalesce(F.col('original_entityIds'), F.array().cast('array<string>'))),
-            )
-            .select('id', 'parent_id', 'entityIds')
-        )
-
-        # Check convergence: leftover nodes (nodes that didn't match in left join) should be non-empty
-        # This means we still have nodes to process
-        current_df = processed
-
-    if iteration >= max_iterations:
-        # Add any remaining nodes to result
-        if not current_df.isEmpty():
-            result_df = result_df.union(current_df)
-        # Raise error if max iterations reached
-        raise RuntimeError(
-            f'Propagation did not converge after {max_iterations} iterations. '
-            'This indicates a potential infinite loop or very deep hierarchy.'
-        )
-
-    if return_iterations:
-        return result_df, iteration
-    return result_df
-
-
 def separate_tree_to_nodes_and_edges(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     """Separate tree structure into nodes and edges DataFrames.
 
@@ -512,8 +347,8 @@ def merge_nodes_and_edges(nodes_df: DataFrame, edges_df: DataFrame) -> DataFrame
     """
     # Join edges with nodes where edges.child_id == nodes.id
     # Use left join to keep all edges even if node is missing
-    from pyspark.sql.types import ArrayType, StringType, StructType, StructField
-    
+    from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+
     result_df = (
         edges_df.alias('edges')
         .join(nodes_df.alias('nodes'), F.col('edges.child_id') == F.col('nodes.id'), 'left')
@@ -523,7 +358,7 @@ def merge_nodes_and_edges(nodes_df: DataFrame, edges_df: DataFrame) -> DataFrame
             F.coalesce(F.col('nodes.entityIds'), F.array().cast('array<string>')).alias('entityIds'),
         )
     )
-    
+
     # Reconstruct DataFrame with explicit non-nullable schema for entityIds
     # We need to create a new DataFrame with the correct schema
     spark = result_df.sparkSession
@@ -532,7 +367,7 @@ def merge_nodes_and_edges(nodes_df: DataFrame, edges_df: DataFrame) -> DataFrame
         StructField('parent_id', result_df.schema['parent_id'].dataType, nullable=True),
         StructField('entityIds', ArrayType(StringType(), containsNull=False), nullable=False),
     ])
-    
+
     # Create DataFrame with explicit schema
     return spark.createDataFrame(result_df.rdd, schema=expected_schema)
 
