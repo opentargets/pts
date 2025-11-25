@@ -646,6 +646,12 @@
     },
     {
       "metadata": {},
+      "name": "variantLabel",
+      "nullable": true,
+      "type": "string"
+    },
+    {
+      "metadata": {},
       "name": "variantRsId",
       "nullable": true,
       "type": "string"

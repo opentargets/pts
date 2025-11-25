@@ -12,6 +12,7 @@ from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 from pts.pyspark.common.ontology import add_efo_mapping
 from pts.pyspark.common.session import Session
+from pts.pyspark.common.utils import hash_long_variant_ids
 
 
 def pharmacogenetics(
@@ -188,7 +189,11 @@ def add_variantid_column(input_df: DataFrame) -> DataFrame:
         .withColumn('alt', f.explode(f.split(f.col('alt'), ',')))
         .filter(~(f.col('ref') == f.col('alt')))
         .select(
-            'genotypeId', f.concat_ws('_', f.col('chr'), f.col('pos'), f.col('ref'), f.col('alt')).alias('variantId')
+            'genotypeId',
+            hash_long_variant_ids(f.concat_ws('_', f.col('chr'), f.col('pos'), f.col('ref'), f.col('alt'))).alias(
+                'variantId'
+            ),
+            f.concat_ws('_', f.col('chr'), f.col('pos'), f.col('ref'), f.col('alt')).alias('variantLabel'),
         )
         .join(input_df, on='genotypeId', how='right')
     )

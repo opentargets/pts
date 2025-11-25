@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from pyspark.sql import Column, DataFrame
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as f
 from pyspark.sql import types as t
 from pyspark.sql.window import Window
 
 from pts.pyspark.common.cast_to_schema import harmonise_to_schema
-from pts.pyspark.common.utils import parse_spark_schema, required_columns, update_quality_flag
+from pts.pyspark.common.utils import hash_long_variant_ids, parse_spark_schema, required_columns, update_quality_flag
 
 
 class EvidenceFlags(StrEnum):
@@ -174,7 +174,12 @@ class Evidence:
             return self
 
         return Evidence(
-            self.df.withColumn('variantId', self._hash_long_variant_ids(f.col('variantId'), self.VARIANT_HASH_LENGHT))
+            self.df.withColumns({
+                # Backing up original variant ID:
+                'variantLabel': f.col('variantId'),
+                # Create new variant ID, hash if too long:
+                'variantId': hash_long_variant_ids(f.col('variantId'), self.VARIANT_HASH_LENGHT),
+            })
         )
 
     def assign_direction_on_target(
@@ -310,31 +315,6 @@ class Evidence:
 
     def resolve_direction_of_effect(self: Evidence, mechanism_of_action: DataFrame) -> Evidence:
         raise NotImplementedError
-
-    @staticmethod
-    def _hash_long_variant_ids(variant_id: Column, threshold: int = 300) -> Column:
-        """Generate hash for long variant identifiers.
-
-        Args:
-            variant_id (Column): variant identifier column.
-            threshold (int): lenght of the variant identifier above which we hash.
-
-        Returns:
-            Column: variant id column where long variants are hashed.
-        """
-        # Extract chromosome and position from variantId
-        chr_col = f.regexp_extract(variant_id, r'^([0-9XYMT]{1,2})_([0-9]+)_([ACGTN]+)_([ACGTN]+)$', 1)
-        pos_col = f.regexp_extract(variant_id, r'^([0-9XYMT]{1,2})_([0-9]+)_([ACGTN]+)_([ACGTN]+)$', 2)
-
-        # Apply transformation logic
-        return (
-            f.when(chr_col.isNull() | pos_col.isNull(), f.concat(f.lit('OTVAR_'), f.md5(variant_id).cast('string')))
-            .when(
-                f.length(variant_id) > threshold,
-                f.concat_ws('_', f.lit('OTVAR'), chr_col, pos_col, f.md5(variant_id).cast('string')),
-            )
-            .otherwise(variant_id)
-        )
 
     @property
     def df(self: Evidence) -> DataFrame:

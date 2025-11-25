@@ -236,3 +236,28 @@ def parse_spark_schema(schema_json: str) -> StructType:
         core_schema = json.load(schema)
 
     return StructType.fromJson(core_schema)
+
+
+def hash_long_variant_ids(variant_id: Column, threshold: int = 300) -> Column:
+    """Generate hash for long variant identifiers.
+
+    Args:
+        variant_id (Column): variant identifier column.
+        threshold (int): lenght of the variant identifier above which we hash.
+
+    Returns:
+        Column: variant id column where long variants are hashed.
+    """
+    # Extract chromosome and position from variantId
+    chr_col = f.regexp_extract(variant_id, r'^([0-9XYMT]{1,2})_([0-9]+)_([ACGTN]+)_([ACGTN]+)$', 1)
+    pos_col = f.regexp_extract(variant_id, r'^([0-9XYMT]{1,2})_([0-9]+)_([ACGTN]+)_([ACGTN]+)$', 2)
+
+    # Apply transformation logic
+    return (
+        f.when(chr_col.isNull() | pos_col.isNull(), f.concat(f.lit('OTVAR_'), f.md5(variant_id).cast('string')))
+        .when(
+            f.length(variant_id) > threshold,
+            f.concat_ws('_', f.lit('OTVAR'), chr_col, pos_col, f.md5(variant_id).cast('string')),
+        )
+        .otherwise(variant_id)
+    )
