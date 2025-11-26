@@ -18,7 +18,7 @@ from pyspark.sql import functions as F
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.facets.helpers import compute_simple_facet, get_relevant_dataset
-from pts.pyspark.facets.pandasprop import propagate_entity_ids_pyspark_efficiently
+from pts.pyspark.facets.propagation import propagate_entity_ids_pyspark_efficiently
 
 
 class FacetSearchCategories:
@@ -490,7 +490,7 @@ def propagate_entity_ids_with_dataset_prep(
 ) -> DataFrame | tuple[DataFrame, int]:
     """Propagate entityIds from children to parents with dataset preparation.
 
-    This function combines prepare_dataset_for_propagation and propagate_entity_ids_pyspark:
+    This function combines prepare_dataset_for_propagation and propagate_entity_ids_pyspark_efficiently:
     1. Prepares the facets DataFrame by creating id column and exploding parentId
     2. Propagates entityIds from children to parents iteratively
 

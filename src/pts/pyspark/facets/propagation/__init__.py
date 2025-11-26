@@ -1,141 +1,9 @@
-"""Pandas-based and PySpark-based entityId propagation from children to parents."""
+"""PySpark-based entityId propagation from children to parents."""
 
 from __future__ import annotations
 
-import pandas as pd
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-
-
-def propagate_entity_ids(df: pd.DataFrame, return_iterations: bool = False) -> pd.DataFrame | tuple[pd.DataFrame, int]:
-    """Propagate entityIds from children to parents iteratively.
-
-    This function propagates entityIds through a hierarchy where each row
-    represents a (id, parent_id) pair with associated entityIds. The function
-    iteratively propagates entityIds from children to their parents using
-    tree traversal from the top until all nodes are processed.
-
-    Args:
-        df: DataFrame with columns:
-            - id: str - the entity identifier
-            - parent_id: str - the parent entity identifier
-            - entityIds: list[str] - list of entity IDs associated with this (id, parent_id) pair
-        return_iterations: If True, returns a tuple (result_df, iterations). Defaults to False.
-
-    Returns:
-        DataFrame with same structure but updated entityIds where parents
-        now include entityIds from all their descendants.
-        If return_iterations is True, returns (DataFrame, int) where int is the number of iterations.
-
-    Algorithm:
-        1. Step a0: Find nodes that have children (nodes whose id appears as parent_id)
-        2. Step a: Left join to get parent-child relationships and split nodes:
-           - Nodes without children → add to result
-           - Nodes with children → process (copy children's entityIds to parent)
-        3. Step b: Group by (id, parent_id) and union entityIds from children
-        4. Repeat until no nodes with children remain
-    """
-    current_df = df.copy()
-    max_iterations = 40
-    iteration = 0
-    result_df = pd.DataFrame(columns=['id', 'parent_id', 'entityIds'])
-
-    while iteration < max_iterations:
-        iteration += 1
-
-        # Step a0: Find nodes that have children (nodes whose id appears as parent_id)
-        # These are the nodes that will be processed in this iteration
-        nodes_with_children = (
-            current_df[current_df['parent_id'].notna()]
-            .merge(
-                current_df[['id']].drop_duplicates(),
-                left_on='parent_id',
-                right_on='id',
-                how='inner',
-            )
-            .drop_duplicates(subset=['parent_id'])[['parent_id']]
-            .rename(columns={'parent_id': 'id'})
-        )
-
-        # If no nodes have children, we're done
-        if len(nodes_with_children) == 0:
-            # Add all remaining nodes to result
-            result_df = pd.concat([result_df, current_df], ignore_index=True)
-            break
-
-        # Get children for nodes that have children
-        # Find all rows where parent_id is in nodes_with_children
-        children_df = current_df.merge(
-            nodes_with_children,
-            left_on='parent_id',
-            right_on='id',
-            how='inner',
-            suffixes=('', '_parent'),
-        ).rename(columns={'id': 'child_id', 'parent_id': 'child_parent_id', 'entityIds': 'child_entityIds'})[
-            ['child_id', 'child_parent_id', 'child_entityIds']
-        ]
-
-        # Step a: Left join to get parent-child relationships
-        # Left join: current_df with children_df where current_df.id = children_df.child_parent_id
-        joined = current_df.merge(children_df, left_on='id', right_on='child_parent_id', how='left')
-        # Result columns: id, parent_id, entityIds, child_id, child_parent_id, child_entityIds
-
-        # Split nodes: nodes without children (child_id is NaN) vs nodes with children
-        nodes_without_children = joined[joined['child_id'].isna()][['id', 'parent_id', 'entityIds']].copy()
-        nodes_to_process = joined[joined['child_id'].notna()].copy()
-
-        # Add nodes without children to result
-        if len(nodes_without_children) > 0:
-            result_df = pd.concat([result_df, nodes_without_children], ignore_index=True)
-
-        # Convergence check: if leftover nodes (nodes without children) are non-empty, we continue
-        # If no nodes to process, we're done
-        if len(nodes_to_process) == 0:
-            break
-
-        # Clean up nodes_to_process: drop redundant child_parent_id, rename for clarity
-        nodes_to_process = nodes_to_process.drop(columns=['child_parent_id'])
-        nodes_to_process = nodes_to_process.rename(columns={'child_entityIds': 'child_entity_ids'})
-        # Final columns: id, parent_id, entityIds, child_id, child_entity_ids
-
-        # Step b: Group by (id, parent_id) and union entityIds
-        def union_entity_ids(group):
-            # Get original entityIds for this (id, parent_id) pair
-            original_ids = set(group['entityIds'].iloc[0]) if len(group) > 0 and group['entityIds'].iloc[0] else set()
-
-            # Get all child entityIds
-            child_ids = set()
-            for child_entity_ids in group['child_entity_ids'].dropna():
-                if child_entity_ids:
-                    child_ids.update(child_entity_ids)
-
-            # Union and return as sorted list
-            return sorted(original_ids.union(child_ids))
-
-        processed = (
-            nodes_to_process.groupby(['id', 'parent_id'], dropna=False)
-            .apply(lambda group: pd.Series({'entityIds': union_entity_ids(group)}), include_groups=False)
-            .reset_index()
-        )
-        # Result columns: id, parent_id, entityIds (updated)
-
-        # Check convergence: leftover nodes (nodes that didn't match in left join) should be non-empty
-        # This means we still have nodes to process
-        current_df = processed
-
-    if iteration >= max_iterations:
-        # Add any remaining nodes to result
-        if len(current_df) > 0:
-            result_df = pd.concat([result_df, current_df], ignore_index=True)
-        # Raise error if max iterations reached
-        raise RuntimeError(
-            f'Propagation did not converge after {max_iterations} iterations. '
-            'This indicates a potential infinite loop or very deep hierarchy.'
-        )
-
-    if return_iterations:
-        return result_df, iteration
-    return result_df
 
 
 def separate_tree_to_nodes_and_edges(df: DataFrame) -> tuple[DataFrame, DataFrame]:
@@ -377,9 +245,9 @@ def propagate_entity_ids_pyspark_efficiently(
 ) -> DataFrame | tuple[DataFrame, int]:
     """Propagate entityIds from children to parents using efficient leaf-to-root algorithm.
 
-    This function has the same interface as propagate_entity_ids_pyspark but uses
-    a more efficient bottom-up propagation algorithm. It separates the input DataFrame
-    into nodes and edges, runs efficient propagation, and merges the results back.
+    This function uses a more efficient bottom-up propagation algorithm. It separates
+    the input DataFrame into nodes and edges, runs efficient propagation, and merges
+    the results back.
 
     Args:
         df: PySpark DataFrame with columns:
@@ -429,7 +297,8 @@ def propagate_entity_ids_pyspark_efficiently(
             )
         if input_field.dataType != output_field.dataType:
             raise ValueError(
-                f'Column type mismatch for {input_field.name}: expected {input_field.dataType}, got {output_field.dataType}'
+                f'Column type mismatch for {input_field.name}: '
+                f'expected {input_field.dataType}, got {output_field.dataType}'
             )
 
     # Step 5: Return result

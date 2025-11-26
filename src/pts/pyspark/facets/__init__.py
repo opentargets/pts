@@ -32,4 +32,3 @@ __all__ = [
     'compute_tractability_facets',
     'target_facets',
 ]
-
