@@ -1,7 +1,5 @@
 """Test facets with real downloaded targets data."""
 
-from pyspark.sql import functions as F
-
 from pts.pyspark.common.session import Session
 from pts.pyspark.facets import target_facets
 
