@@ -5,7 +5,7 @@ in the Open Targets Platform search interface. Facets allow users to filter and
 explore targets and diseases based on different attributes.
 """
 
-from pts.pyspark.facets.gene_sets import (
+from pts.pyspark.gene_sets.gene_sets import (
     FacetSearchCategories,
     compute_all_target_facets,
     compute_approved_name_facets,

@@ -8,10 +8,10 @@ from typing import Any
 
 from loguru import logger
 
-from pts.pyspark.facets.gene_sets import target_facets as compute_target_facets
+from pts.pyspark.gene_sets.gene_sets import target_facets as compute_target_facets
 
 
-def gene_sets(
+def gene_sets_task(
     source: dict[str, str],
     destination: dict[str, str],
     settings: dict[str, Any],
@@ -23,9 +23,9 @@ def gene_sets(
     expected signature. It extracts category_config from settings and passes it along.
 
     Args:
-        source: Dictionary with 'targets', 'go', and 'reactome' keys pointing to input paths.
+        source: Dictionary with 'targets', 'go_processed', and 'reactome' keys pointing to input paths.
             Paths are relative to work_path or release_uri (backend handles prefixing).
-        destination: Dictionary with 'targets' key pointing to output path.
+        destination: Dictionary with 'gene_sets' key pointing to output path.
             Path is relative to work_path or release_uri (backend handles prefixing).
         settings: Optional dictionary with settings. Can contain 'category_config' for
             custom category name mappings.
@@ -34,14 +34,14 @@ def gene_sets(
     Example config.yaml entry:
         steps:
           gene_sets:
-            - name: compute target facets
+            - name: pyspark gene sets
               source:
-                targets: output/target
-                go: output/go/go.parquet
+                targets: input/target
+                go_processed: output/go
                 reactome: input/reactome
               destination:
-                targets: output/gene_sets
-              pyspark: gene_sets
+                gene_sets: output/gene_sets
+              pyspark: gene_sets_task
     """
     logger.info('Starting gene sets computation (backend entry point)')
 

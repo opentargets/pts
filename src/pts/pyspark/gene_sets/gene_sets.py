@@ -17,8 +17,8 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.helpers import compute_simple_facet, get_relevant_dataset
-from pts.pyspark.facets.propagation import propagate_entity_ids_pyspark_efficiently
+from pts.pyspark.gene_sets.helpers import compute_simple_facet, get_relevant_dataset
+from pts.pyspark.gene_sets.propagation import propagate_entity_ids_pyspark_efficiently
 
 
 class FacetSearchCategories:
@@ -658,8 +658,8 @@ def target_facets(
         logger.info(f'Loading targets from: {source["targets"]}')
         targets_df = spark.read.parquet(source['targets'])
 
-        logger.info(f'Loading GO data from: {source["go"]}')
-        go_df = spark.read.parquet(source['go'])
+        logger.info(f'Loading GO data from: {source["go_processed"]}')
+        go_df = spark.read.parquet(source['go_processed'])
         go_df = go_df.filter(F.col('isObsolete').isNull() | (F.col('isObsolete') == False))
 
         logger.info(f'Loading Reactome data from: {source["reactome"]}')
@@ -672,8 +672,8 @@ def target_facets(
         all_facets = compute_all_target_facets(targets_df, go_df, reactome_df, category_values, spark)
 
         # Write output
-        output_path = destination['targets']
-        logger.info(f'Writing target facets to: {output_path}')
+        output_path = destination['gene_sets']
+        logger.info(f'Writing gene_sets (target facets) to: {output_path}')
         all_facets.write.mode('overwrite').parquet(output_path)
 
         logger.info('Target Facets step complete')
