@@ -1,6 +1,6 @@
 [project]
 name = "PTS"
-version = "25.3.1-dev.6"
+version = "25.3.1-dev.22"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -8,7 +8,7 @@ dependencies = [
   "loguru==0.7.3",
   "opentargets-otter>=25.0.16",
   "pandas>=2.3.2",
-  "ontoma==2.1.0",
+  "ontoma==2.1.1",
   "polars==1.31.0",
   "pyspark>=3.5.7",
   "obonet>=0.3.1",
@@ -16,8 +16,8 @@ dependencies = [
   "smart-open[gcs]>=7.0.0",
   "openai>=2.7.2",
   "defusedxml>=0.7.1",
-  "pronto>=2.7.0",
   "openpyxl>=3.1.5",
+  "setuptools>=80.9.0",
 ]
 
 [dependency-groups]
@@ -44,7 +44,7 @@ exclude = ["src/test/**", "src/conftest.py"]
 opentargets-otter = 'otter'
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ['openpyxl', 'coverage']
+DEP002 = ['openpyxl', 'coverage', 'setuptools']
 DEP004 = ['pytest']
 
 [tool.pytest.ini_options]

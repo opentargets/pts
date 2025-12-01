@@ -37,13 +37,16 @@ G2P_INPUT_SCHEMA = (
     .add('variant consequence', t.StringType())
     .add('variant types', t.StringType())
     .add('molecular mechanism', t.StringType())
+    .add('molecular mechanism support', t.StringType())
     .add('molecular mechanism categorisation', t.StringType())
     .add('molecular mechanism evidence', t.StringType())
     .add('phenotypes', t.StringType())
     .add('publications', t.StringType())
+    .add('additional mined publications', t.StringType())
     .add('panel', t.StringType())
     .add('comments', t.StringType())
     .add('date of last review', t.StringType())
+    .add('review', t.StringType())
 )
 
 
@@ -80,7 +83,10 @@ def process_gene2phenotype(gene2phenotype_df: DataFrame) -> DataFrame:
     """Format raw G2P data into evidence strings."""
     return gene2phenotype_df.select(
         # Split pubmed IDs to list when not null:
-        f.when(f.col('publications').isNotNull(), f.split(f.col('publications'), ';')).alias('literature'),
+        f.when(
+            f.col('publications').isNotNull(),
+            f.transform(f.split(f.col('publications'), ';'), lambda pmid: f.trim(pmid)),
+        ).alias('literature'),
         # Renaming a few columns:
         f.col('gene symbol').alias('targetFromSourceId'),
         f.col('panel').alias('studyId'),

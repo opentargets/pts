@@ -2,7 +2,6 @@
 
 from typing import Any
 
-import pronto
 import pyspark.sql.functions as f
 from loguru import logger
 from pyspark.sql import DataFrame, Window
@@ -90,7 +89,6 @@ def _load_impc_datasets_for_evidence(spark: Session, source: dict[str, str]) -> 
         'disease_human_phenotypes': spark.load_data(source['solr_disease'], format='csv', header=True),
         'disease_model_summary': spark.load_data(source['solr_disease_model_summary'], format='csv', header=True),
         'ontology': spark.load_data(source['solr_ontology'], format='csv', header=True),
-        'mp_ontology': pronto.Ontology(source['mp_ontology']),
         'mgi_pubmed': spark.load_data(
             source['mouse_pubmed_refs'],
             format='csv',
@@ -189,6 +187,7 @@ def generate_impc_evidence_strings(
         .withColumnRenamed('disease_id', 'diseaseFromSourceId')
         .withColumnRenamed('disease_term', 'diseaseFromSource')
         .withColumn('biologicalModelId', cleanup_model_identifier(f.col('model_id')))
+        .drop('model_id', 'disease_model_avg_norm')
     )
 
 

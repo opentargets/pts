@@ -1,8 +1,8 @@
 """Mouse phenotype dataset generation and filtering."""
 
+import json
 from typing import Any
 
-import pronto
 import pyspark.sql.functions as f
 from loguru import logger
 from pyspark.sql import DataFrame
@@ -10,7 +10,6 @@ from pyspark.sql import DataFrame
 from pts.pyspark.common.impc import (
     build_gene_mapping,
     cleanup_model_identifier,
-    create_mp_classification,
     format_disease_model_associations,
     process_literature_references,
     process_ontology_terms,
@@ -35,7 +34,7 @@ def mouse_phenotype(
     datasets = _prepare_impc_datasets_for_mouse_phenotypes(datasets)
 
     # Process ontology terms and classifications (need spark instance)
-    datasets['mp_class'] = create_mp_classification(datasets['mp_ontology'], spark)
+    datasets['mp_class'] = _create_mp_classification(datasets['mp_ontology'], spark)
 
     # Generate mouse phenotypes dataset
     mouse_phenotypes_df = generate_mouse_phenotypes_dataset(
@@ -130,7 +129,7 @@ def filter_mouse_phenotypes_by_target(
     return out_df, exc_df
 
 
-def _load_impc_datasets_for_mouse_phenotypes(spark: Session, source: dict[str, str]) -> dict[str, DataFrame]:
+def _load_impc_datasets_for_mouse_phenotypes(spark: Session, source: dict[str, str]) -> dict[str, Any]:
     """Load IMPC datasets required for mouse phenotypes generation (subset of evidence data)."""
     logger.info(f'load IMPC data for mouse phenotypes generation from {source}')
     return {
@@ -138,7 +137,7 @@ def _load_impc_datasets_for_mouse_phenotypes(spark: Session, source: dict[str, s
         'model_mouse_phenotypes': spark.load_data(source['solr_mouse_model'], format='csv', header=True),
         'disease_model_summary': spark.load_data(source['solr_disease_model_summary'], format='csv', header=True),
         'ontology': spark.load_data(source['solr_ontology'], format='csv', header=True),
-        'mp_ontology': pronto.Ontology(source['mp_ontology']),
+        'mp_ontology': json.loads(spark.spark.read.text(source['mp_ontology'], wholetext=True).collect()[0][0]),
         'mgi_pubmed': spark.load_data(
             source['mouse_pubmed_refs'],
             format='csv',
@@ -156,7 +155,7 @@ def _load_impc_datasets_for_mouse_phenotypes(spark: Session, source: dict[str, s
     }
 
 
-def _prepare_impc_datasets_for_mouse_phenotypes(datasets: dict[str, DataFrame]) -> dict[str, DataFrame]:
+def _prepare_impc_datasets_for_mouse_phenotypes(datasets: dict[str, Any]) -> dict[str, Any]:
     """Prepare transformed versions of IMPC datasets for mouse phenotypes generation."""
     # Transform model phenotypes
     datasets['model_mouse_phenotypes_transformed'] = (
@@ -187,3 +186,104 @@ def _prepare_impc_datasets_for_mouse_phenotypes(datasets: dict[str, DataFrame]) 
     )
 
     return datasets
+
+
+def _create_mp_classification(mp_ontology_json: dict, spark: Session) -> DataFrame:
+    """Process MP definitions to extract high level classes for each term from JSON ontology.
+
+    Args:
+        mp_ontology_json: Parsed JSON ontology structure with graphs containing nodes and edges
+        spark: Spark session instance
+
+    Returns:
+        DataFrame with columns: modelPhenotypeId, modelPhenotypeClassId, modelPhenotypeClassLabel
+    """
+    logger.info('process MP definitions to extract high level classes for each term from JSON ontology.')
+
+    # Extract nodes and edges from JSON structure
+    graph = mp_ontology_json['graphs'][0]
+    nodes = graph['nodes']
+    edges = graph['edges']
+
+    # Helper function to extract ontology ID from full IRI
+    # Examples:
+    #   "http://purl.obolibrary.org/obo/MP_0000001" -> "MP:0000001"
+    #   "http://purl.obolibrary.org/obo/UBERON_0003102" -> "UBERON_0003102"
+    #   "MP:0000001" -> "MP:0000001" (already in correct format)
+    def extract_mp_id(iri: str) -> str:
+        """Extract ontology ID from full IRI, using the last part after the final slash."""
+        # If already in MP:format (e.g., "MP:0000001"), return as-is
+        if ':' in iri and iri.startswith('MP:'):
+            return iri
+
+        # Extract the last part after the final slash
+        if '/' in iri:
+            # Get everything after the last slash
+            last_part = iri.rsplit('/', maxsplit=1)[-1]
+            # Remove any fragment identifier (e.g., #something)
+            if '#' in last_part:
+                last_part = last_part.split('#', maxsplit=1)[0]
+
+            # For MP ontology, convert underscore to colon (MP_0000001 -> MP:0000001)
+            if last_part.startswith('MP_'):
+                return last_part.replace('MP_', 'MP:', 1)
+
+            # For other ontologies, return as-is (e.g., UBERON_0003102)
+            return last_part
+
+        # If no slash found, return as-is
+        return iri
+
+    # Build parent-to-children mapping from is_a relationships
+    # Edge: sub (child) -> is_a -> obj (parent)
+    # Normalize IDs as we build the mapping
+    parent_to_children: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge.get('pred') == 'is_a':
+            child = extract_mp_id(edge['sub'])
+            parent = extract_mp_id(edge['obj'])
+            if parent not in parent_to_children:
+                parent_to_children[parent] = set()
+            parent_to_children[parent].add(child)
+
+    # Update node labels for all normalized IDs
+    normalized_node_id_to_label: dict[str, str] = {}
+    for node in nodes:
+        node_id = node['id']
+        normalized_id = extract_mp_id(node_id)
+        # Prefer existing label or use node label
+        if normalized_id not in normalized_node_id_to_label:
+            normalized_node_id_to_label[normalized_id] = node.get('lbl', '')
+        elif not normalized_node_id_to_label[normalized_id] and node.get('lbl'):
+            normalized_node_id_to_label[normalized_id] = node.get('lbl', '')
+
+    # Find root node MP:0000001
+    root_id = 'MP:0000001'
+    if root_id not in normalized_node_id_to_label:
+        raise ValueError(f'Could not find root node {root_id} in ontology')
+
+    # Get direct children of root (high-level classes)
+    high_level_class_ids = parent_to_children.get(root_id, set()) - {root_id}
+
+    # Recursive function to get all descendants of a class (including the class itself)
+    def get_all_descendants(class_id: str) -> set[str]:
+        """Get all descendant classes recursively, including the class itself."""
+        descendants = {class_id}  # Include the class itself
+        children = parent_to_children.get(class_id, set())
+        for child in children:
+            descendants.update(get_all_descendants(child))
+        return descendants
+
+    # Build classification data: [term_id, high_level_class_id, high_level_class_label]
+    mp_class_data = []
+    for high_level_class_id in high_level_class_ids:
+        high_level_class_label = normalized_node_id_to_label.get(high_level_class_id, high_level_class_id)
+        # Get all descendants of this high-level class (including the class itself)
+        descendant_ids = get_all_descendants(high_level_class_id)
+
+        mp_class_data.extend([[term_id, high_level_class_id, high_level_class_label] for term_id in descendant_ids])
+
+    return spark.spark.createDataFrame(
+        data=mp_class_data,
+        schema=['modelPhenotypeId', 'modelPhenotypeClassId', 'modelPhenotypeClassLabel'],
+    )
