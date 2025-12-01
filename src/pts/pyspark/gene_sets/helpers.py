@@ -1,5 +1,4 @@
-"""Helper functions for computing search facets.
-"""
+"""Helper functions for computing search facets."""
 
 from __future__ import annotations
 

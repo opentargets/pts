@@ -148,6 +148,7 @@ ignore = [
   'PERF203', # noisy, false positives, and not applicable for 3.11+
   'FURB113', # less readable
   'FURB140', # less readable and actually slower in 3.12+
+  'N812',    # allow uppercase alias for pyspark.sql.functions (standard PySpark convention)
 ]
 
 extend-safe-fixes = [

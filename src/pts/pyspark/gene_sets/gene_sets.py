@@ -660,7 +660,7 @@ def target_facets(
 
         logger.info(f'Loading GO data from: {source["go_processed"]}')
         go_df = spark.read.parquet(source['go_processed'])
-        go_df = go_df.filter(F.col('isObsolete').isNull() | (F.col('isObsolete') == False))
+        go_df = go_df.filter(F.col('isObsolete').isNull() | (~F.col('isObsolete')))
 
         logger.info(f'Loading Reactome data from: {source["reactome"]}')
         reactome_df = spark.read.parquet(source['reactome'])
