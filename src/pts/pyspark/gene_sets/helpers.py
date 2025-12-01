@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from loguru import logger
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
+from pyspark.sql import functions as f
 
 
 def compute_simple_facet(
@@ -37,14 +37,14 @@ def compute_simple_facet(
     return (
         dataframe
         .select(
-            F.col(label_field).alias('label'),
-            F.lit(category_value).alias('category'),
-            F.col(entity_id_field).alias('id')
+            f.col(label_field).alias('label'),
+            f.lit(category_value).alias('category'),
+            f.col(entity_id_field).alias('id')
         )
         .groupBy('label', 'category')
-        .agg(F.collect_set('id').alias('entityIds'))
-        .withColumn('datasourceId', F.lit(None).cast('string'))
-        .withColumn('parentId', F.array().cast('array<string>'))
+        .agg(f.collect_set('id').alias('entityIds'))
+        .withColumn('datasourceId', f.lit(None).cast('string'))
+        .withColumn('parentId', f.array().cast('array<string>'))
         .distinct()
     )
 
@@ -74,6 +74,6 @@ def get_relevant_dataset(
     """
     return (
         dataframe
-        .select(F.col(id_field).alias(id_alias), F.col(facet_field))
-        .where(F.col(facet_field).isNotNull())
+        .select(f.col(id_field).alias(id_alias), f.col(facet_field))
+        .where(f.col(facet_field).isNotNull())
     )

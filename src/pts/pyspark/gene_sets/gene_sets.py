@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from loguru import logger
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
+from pyspark.sql import functions as f
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.gene_sets.helpers import compute_simple_facet, get_relevant_dataset
@@ -82,15 +82,15 @@ def compute_tractability_facets(
     logger.info('Computing tractability facets')
 
     # Create mapping for tractability modality codes to full names
-    tractability_modality_mappings = F.create_map([
-        F.lit('SM'),
-        F.lit(category_values.SM),
-        F.lit('AB'),
-        F.lit(category_values.AB),
-        F.lit('PR'),
-        F.lit(category_values.PR),
-        F.lit('OC'),
-        F.lit(category_values.OC),
+    tractability_modality_mappings = f.create_map([
+        f.lit('SM'),
+        f.lit(category_values.SM),
+        f.lit('AB'),
+        f.lit(category_values.AB),
+        f.lit('PR'),
+        f.lit(category_values.PR),
+        f.lit('OC'),
+        f.lit(category_values.OC),
     ])
 
     # Extract relevant data with tractability array
@@ -102,26 +102,26 @@ def compute_tractability_facets(
     # 3. Filter for true values only
     # 4. Group and collect target IDs
     return (
-        tractability_with_id.select(F.col('ensemblGeneId'), F.explode('tractability').alias('t'))
+        tractability_with_id.select(f.col('ensemblGeneId'), f.explode('tractability').alias('t'))
         .select(
-            F.col('ensemblGeneId'),
-            F.col('t.modality').alias('category'),
-            F.col('t.id').alias('label'),
-            F.col('t.value').alias('value'),
+            f.col('ensemblGeneId'),
+            f.col('t.modality').alias('category'),
+            f.col('t.id').alias('label'),
+            f.col('t.value').alias('value'),
         )
-        .where(F.col('value'))
+        .where(f.col('value'))
         .groupBy('category', 'label')
-        .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
+        .agg(f.collect_set('ensemblGeneId').alias('entityIds'))
         .drop('value')
         .withColumn(
             'category',
-            F.when(
-                tractability_modality_mappings[F.col('category')].isNotNull(),
-                tractability_modality_mappings[F.col('category')],
-            ).otherwise(F.col('category')),
+            f.when(
+                tractability_modality_mappings[f.col('category')].isNotNull(),
+                tractability_modality_mappings[f.col('category')],
+            ).otherwise(f.col('category')),
         )
-        .withColumn('datasourceId', F.lit(None).cast('string'))
-        .withColumn('parentId', F.array().cast('array<string>'))
+        .withColumn('datasourceId', f.lit(None).cast('string'))
+        .withColumn('parentId', f.array().cast('array<string>'))
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
@@ -210,16 +210,16 @@ def compute_subcellular_locations_facets(
     subcellular_location_with_id = get_relevant_dataset(targets_df, 'id', 'ensemblGeneId', 'subcellularLocations')
 
     return (
-        subcellular_location_with_id.select(F.col('ensemblGeneId'), F.explode('subcellularLocations').alias('s'))
+        subcellular_location_with_id.select(f.col('ensemblGeneId'), f.explode('subcellularLocations').alias('s'))
         .select(
-            F.col('ensemblGeneId').alias('id'),
-            F.col('s.location').alias('label'),
-            F.lit(category_values.subcellular_location).alias('category'),
-            F.col('s.termSl').alias('datasourceId'),
+            f.col('ensemblGeneId').alias('id'),
+            f.col('s.location').alias('label'),
+            f.lit(category_values.subcellular_location).alias('category'),
+            f.col('s.termSl').alias('datasourceId'),
         )
         .groupBy('label', 'category', 'datasourceId')
-        .agg(F.collect_set('id').alias('entityIds'))
-        .withColumn('parentId', F.array().cast('array<string>'))
+        .agg(f.collect_set('id').alias('entityIds'))
+        .withColumn('parentId', f.array().cast('array<string>'))
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
@@ -253,16 +253,16 @@ def compute_target_class_facets(
 
     # Step 1: Explode targetClass arrays into flat structure
     # Extract id, label, and level from each targetClass entry
-    targets_flat = target_class_with_id.select(F.col('ensemblGeneId'), F.explode('targetClass').alias('t')).select(
-        F.col('ensemblGeneId'),
-        F.col('t.id').alias('id'),
-        F.col('t.label').alias('label'),
-        F.col('t.level').alias('level'),
+    targets_flat = target_class_with_id.select(f.col('ensemblGeneId'), f.explode('targetClass').alias('t')).select(
+        f.col('ensemblGeneId'),
+        f.col('t.id').alias('id'),
+        f.col('t.label').alias('label'),
+        f.col('t.level').alias('level'),
     )
 
     # Step 2: Extract numeric level (l1 → 1, l2 → 2, etc.)
     # Use regex to extract the number from level string
-    targets_flat_extr = targets_flat.withColumn('level_num', F.regexp_extract('level', r'l(\d+)', 1).cast('int'))
+    targets_flat_extr = targets_flat.withColumn('level_num', f.regexp_extract('level', r'l(\d+)', 1).cast('int'))
 
     # Step 3: Self-join to find parent→child relationships
     # Join where child level = parent level + 1 (immediate parent only)
@@ -271,37 +271,37 @@ def compute_target_class_facets(
         targets_flat_extr.alias('p')
         .join(
             targets_flat_extr.alias('c'),
-            (F.col('p.id') == F.col('c.id')) & (F.col('c.level_num') == F.col('p.level_num') + 1),
+            (f.col('p.id') == f.col('c.id')) & (f.col('c.level_num') == f.col('p.level_num') + 1),
             how='inner',
         )
-        .select(F.col('c.label').alias('child_label'), F.col('p.label').alias('parent_label'))
+        .select(f.col('c.label').alias('child_label'), f.col('p.label').alias('parent_label'))
         .distinct()
     )
 
     # Step 4: Group by child label and collect all parent labels into an array
     # This creates the parentId mapping: child_label → [parent1, parent2, ...]
-    parent_mapping = targets_rel.groupBy('child_label').agg(F.collect_set('parent_label').alias('parentId'))
+    parent_mapping = targets_rel.groupBy('child_label').agg(f.collect_set('parent_label').alias('parentId'))
 
     # Step 5: Compute facets and join with parent mapping
     facets = (
-        target_class_with_id.select(F.col('ensemblGeneId'), F.explode('targetClass').alias('t'))
+        target_class_with_id.select(f.col('ensemblGeneId'), f.explode('targetClass').alias('t'))
         .select(
-            F.col('ensemblGeneId'),
-            F.col('t.label').alias('label'),
-            F.lit(category_values.target_class).alias('category'),
+            f.col('ensemblGeneId'),
+            f.col('t.label').alias('label'),
+            f.lit(category_values.target_class).alias('category'),
         )
         .groupBy('label', 'category')
-        .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
-        .withColumn('datasourceId', F.lit(None).cast('string'))
+        .agg(f.collect_set('ensemblGeneId').alias('entityIds'))
+        .withColumn('datasourceId', f.lit(None).cast('string'))
     )
 
     # Step 6: Join facets with parent mapping to add parentId
     # Left join: if no parent found, use empty array
     return (
-        facets.join(parent_mapping, on=F.col('label') == F.col('child_label'), how='left')
+        facets.join(parent_mapping, on=f.col('label') == f.col('child_label'), how='left')
         .withColumn(
             'parentId',
-            F.when(F.col('parentId').isNotNull(), F.col('parentId')).otherwise(F.array().cast('array<string>')),
+            f.when(f.col('parentId').isNotNull(), f.col('parentId')).otherwise(f.array().cast('array<string>')),
         )
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
@@ -338,26 +338,26 @@ def compute_pathways_facets(
 
     # Process pathways and join with Reactome reference to get parents
     # Select only needed columns from reactome_df to avoid column name conflicts
-    reactome_parents = reactome_df.select(F.col('id').alias('reactome_id'), F.col('parents').alias('reactome_parents'))
+    reactome_parents = reactome_df.select(f.col('id').alias('reactome_id'), f.col('parents').alias('reactome_parents'))
 
     return (
-        pathways_with_id.select(F.col('id'), F.explode('pathways').alias('p'))
+        pathways_with_id.select(f.col('id'), f.explode('pathways').alias('p'))
         .select(
-            F.col('id').alias('ensemblGeneId'),
-            F.col('p.pathway').alias('label'),
-            F.lit(category_values.pathways).alias('category'),
-            F.col('p.pathwayId').alias('datasourceId'),
+            f.col('id').alias('ensemblGeneId'),
+            f.col('p.pathway').alias('label'),
+            f.lit(category_values.pathways).alias('category'),
+            f.col('p.pathwayId').alias('datasourceId'),
         )
-        .join(reactome_parents, on=F.col('datasourceId') == F.col('reactome_id'), how='left')
+        .join(reactome_parents, on=f.col('datasourceId') == f.col('reactome_id'), how='left')
         # Extract parents from Reactome reference, use empty array if null
         .withColumn(
             'parentId',
-            F.when(F.col('reactome_parents').isNotNull(), F.col('reactome_parents')).otherwise(
-                F.array().cast('array<string>')
+            f.when(f.col('reactome_parents').isNotNull(), f.col('reactome_parents')).otherwise(
+                f.array().cast('array<string>')
             ),
         )
         .groupBy('label', 'category', 'datasourceId', 'parentId')
-        .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
+        .agg(f.collect_set('ensemblGeneId').alias('entityIds'))
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
         .distinct()
     )
@@ -396,13 +396,13 @@ def compute_go_facets(
     logger.info('Computing GO facets')
 
     # Create mapping for GO aspect codes to full names
-    go_aspect_mappings = F.create_map([
-        F.lit('F'),
-        F.lit(category_values.goF),
-        F.lit('P'),
-        F.lit(category_values.goP),
-        F.lit('C'),
-        F.lit(category_values.goC),
+    go_aspect_mappings = f.create_map([
+        f.lit('F'),
+        f.lit(category_values.goF),
+        f.lit('P'),
+        f.lit(category_values.goP),
+        f.lit('C'),
+        f.lit(category_values.goC),
     ])
 
     # Extract relevant GO data from targets
@@ -414,29 +414,29 @@ def compute_go_facets(
     # 3. Map aspect codes to category names
     # 4. Group and collect target IDs
     return (
-        go_with_id.select(F.col('ensemblId'), F.explode('go').alias('g'))
+        go_with_id.select(f.col('ensemblId'), f.explode('go').alias('g'))
         .select(
-            F.col('ensemblId').alias('ensemblGeneId'), F.col('g.id').alias('id'), F.col('g.aspect').alias('category')
+            f.col('ensemblId').alias('ensemblGeneId'), f.col('g.id').alias('id'), f.col('g.aspect').alias('category')
         )
         .join(go_df, on='id', how='left')
         # GO dataframe already has 'label' column (not 'name')
-        .withColumn('datasourceId', F.col('id'))
+        .withColumn('datasourceId', f.col('id'))
         # Combine is_a and part_of arrays into parentId
         .withColumn(
             'parentId',
-            F.when(
-                F.col('is_a').isNotNull() | F.col('part_of').isNotNull(),
-                F.array_distinct(
-                    F.concat(F.coalesce(F.col('is_a'), F.array()), F.coalesce(F.col('part_of'), F.array()))
+            f.when(
+                f.col('is_a').isNotNull() | f.col('part_of').isNotNull(),
+                f.array_distinct(
+                    f.concat(f.coalesce(f.col('is_a'), f.array()), f.coalesce(f.col('part_of'), f.array()))
                 ),
-            ).otherwise(F.array().cast('array<string>')),
+            ).otherwise(f.array().cast('array<string>')),
         )
         .groupBy('label', 'category', 'datasourceId', 'parentId')
-        .agg(F.collect_set('ensemblGeneId').alias('entityIds'))
+        .agg(f.collect_set('ensemblGeneId').alias('entityIds'))
         .withColumn(
             'category',
-            F.when(go_aspect_mappings[F.col('category')].isNotNull(), go_aspect_mappings[F.col('category')]).otherwise(
-                F.col('category')
+            f.when(go_aspect_mappings[f.col('category')].isNotNull(), go_aspect_mappings[f.col('category')]).otherwise(
+                f.col('category')
             ),
         )
         .select('label', 'category', 'entityIds', 'datasourceId', 'parentId')
@@ -467,10 +467,10 @@ def prepare_dataset_for_propagation(facets_df: DataFrame) -> DataFrame:
     # Create id column based on category
     prepared = facets_df.withColumn(
         'id',
-        F.when(
-            F.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
-            F.col('datasourceId'),
-        ).otherwise(F.col('label')),
+        f.when(
+            f.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
+            f.col('datasourceId'),
+        ).otherwise(f.col('label')),
     )
 
     # Select id, parentId, entityIds
@@ -479,8 +479,8 @@ def prepare_dataset_for_propagation(facets_df: DataFrame) -> DataFrame:
     # Explode parentId to get parent_id (string)
     # Filter out rows where parentId is null or empty to avoid issues
     return (
-        selected.filter(F.col('parentId').isNotNull() & (F.size(F.col('parentId')) > 0))
-        .withColumn('parent_id', F.explode('parentId'))
+        selected.filter(f.col('parentId').isNotNull() & (f.size(f.col('parentId')) > 0))
+        .withColumn('parent_id', f.explode('parentId'))
         .select('id', 'parent_id', 'entityIds')
     )
 
@@ -531,15 +531,15 @@ def merge_propagated_entity_ids(facets_df: DataFrame, propagated_df: DataFrame) 
     # The propagated result has one row per (id, parent_id) pair, but entityIds are already
     # aggregated at the node level, so all rows for the same id have the same entityIds.
     # We just need to collapse multiple rows into one per id.
-    propagated_aggregated = propagated_df.groupBy('id').agg(F.first('entityIds').alias('entityIdsPropagated'))
+    propagated_aggregated = propagated_df.groupBy('id').agg(f.first('entityIds').alias('entityIdsPropagated'))
 
     # Step 2: Create id column in original facets using same logic as prepare_dataset_for_propagation
     facets_with_id = facets_df.withColumn(
         'id',
-        F.when(
-            F.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
-            F.col('datasourceId'),
-        ).otherwise(F.col('label')),
+        f.when(
+            f.col('category').isin(['GO:BP', 'GO:MF', 'GO:CC', 'Reactome']),
+            f.col('datasourceId'),
+        ).otherwise(f.col('label')),
     )
 
     # Step 3: Left join to add entityIdsPropagated, keeping all original columns
@@ -548,7 +548,7 @@ def merge_propagated_entity_ids(facets_df: DataFrame, propagated_df: DataFrame) 
         facets_with_id.join(propagated_aggregated, on='id', how='left')
         .withColumn(
             'entityIdsPropagated',
-            F.coalesce(F.col('entityIdsPropagated'), F.array().cast('array<string>')),
+            f.coalesce(f.col('entityIdsPropagated'), f.array().cast('array<string>')),
         )
         .drop('id')  # Remove temporary id column
     )
@@ -660,7 +660,7 @@ def target_facets(
 
         logger.info(f'Loading GO data from: {source["go_processed"]}')
         go_df = spark.read.parquet(source['go_processed'])
-        go_df = go_df.filter(F.col('isObsolete').isNull() | (~F.col('isObsolete')))
+        go_df = go_df.filter(f.col('isObsolete').isNull() | (~f.col('isObsolete')))
 
         logger.info(f'Loading Reactome data from: {source["reactome"]}')
         reactome_df = spark.read.parquet(source['reactome'])

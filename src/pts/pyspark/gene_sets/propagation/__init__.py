@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
+from pyspark.sql import functions as f
 
 
 def separate_tree_to_nodes_and_edges(df: DataFrame) -> tuple[DataFrame, DataFrame]:
@@ -30,21 +30,21 @@ def separate_tree_to_nodes_and_edges(df: DataFrame) -> tuple[DataFrame, DataFram
     """
     # Extract edges: select id as child_id and parent_id
     edges = df.select(
-        F.col('id').alias('child_id'),
-        F.col('parent_id'),
+        f.col('id').alias('child_id'),
+        f.col('parent_id'),
     ).distinct()
 
     # Extract nodes: group by id and aggregate entityIds
     # For each id, we need to union all entityIds from all rows where that id appears
     nodes = (
         df.groupBy('id')
-        .agg(F.collect_list('entityIds').alias('entityIds_list'))
+        .agg(f.collect_list('entityIds').alias('entityIds_list'))
         .withColumn(
             'entityIds',
-            F.array_distinct(
-                F.flatten(
-                    F.filter(
-                        F.col('entityIds_list'),
+            f.array_distinct(
+                f.flatten(
+                    f.filter(
+                        f.col('entityIds_list'),
                         lambda x: x.isNotNull(),
                     )
                 )
@@ -106,7 +106,7 @@ def efficient_entity_id_propagation(
 
         # 1. Find leaves = nodes that never appear as parent
         parents = edges.select('parent_id').distinct()
-        leaves = edges.select('child_id').distinct().join(parents, F.col('child_id') == F.col('parent_id'), 'left_anti')
+        leaves = edges.select('child_id').distinct().join(parents, f.col('child_id') == f.col('parent_id'), 'left_anti')
 
         leaf_count = leaves.count()
         if leaf_count == 0:
@@ -116,36 +116,36 @@ def efficient_entity_id_propagation(
         # Join leaves with nodes to get their entityIds, then join with edges to get parents
         leaf_messages = (
             leaves.alias('leaves')
-            .join(nodes.alias('nodes'), F.col('leaves.child_id') == F.col('nodes.id'))
-            .join(edges.alias('edges'), F.col('leaves.child_id') == F.col('edges.child_id'))
+            .join(nodes.alias('nodes'), f.col('leaves.child_id') == f.col('nodes.id'))
+            .join(edges.alias('edges'), f.col('leaves.child_id') == f.col('edges.child_id'))
             .groupBy('edges.parent_id')
             .agg(
-                F.array_distinct(
-                    F.flatten(
-                        F.filter(
-                            F.collect_list('nodes.entityIds'),
+                f.array_distinct(
+                    f.flatten(
+                        f.filter(
+                            f.collect_list('nodes.entityIds'),
                             lambda x: x.isNotNull(),
                         )
                     )
                 ).alias('msgs')
             )
-            .select(F.col('parent_id'), F.col('msgs'))
+            .select(f.col('parent_id'), f.col('msgs'))
         )
 
         # 3. Update parents: merge (union) parent's stored entityIds with propagated ones
         new_nodes = (
-            nodes.join(leaf_messages, F.col('id') == F.col('parent_id'), 'left')
+            nodes.join(leaf_messages, f.col('id') == f.col('parent_id'), 'left')
             .withColumn(
                 'entityIds',
-                F.when(
-                    F.col('msgs').isNotNull(),
-                    F.array_distinct(
-                        F.array_union(
-                            F.coalesce(F.col('entityIds'), F.array().cast('array<string>')),
-                            F.col('msgs'),
+                f.when(
+                    f.col('msgs').isNotNull(),
+                    f.array_distinct(
+                        f.array_union(
+                            f.coalesce(f.col('entityIds'), f.array().cast('array<string>')),
+                            f.col('msgs'),
                         )
                     ),
-                ).otherwise(F.coalesce(F.col('entityIds'), F.array().cast('array<string>'))),
+                ).otherwise(f.coalesce(f.col('entityIds'), f.array().cast('array<string>'))),
             )
             .drop('parent_id', 'msgs')
             .cache()
@@ -154,8 +154,8 @@ def efficient_entity_id_propagation(
         # 4. Remove processed leaves from the edge list
         new_edges = (
             edges.alias('edges')
-            .join(leaves.alias('leaves'), F.col('edges.child_id') == F.col('leaves.child_id'), 'left_anti')
-            .select(F.col('edges.child_id'), F.col('edges.parent_id'))
+            .join(leaves.alias('leaves'), f.col('edges.child_id') == f.col('leaves.child_id'), 'left_anti')
+            .select(f.col('edges.child_id'), f.col('edges.parent_id'))
             .cache()
         )
 
@@ -219,11 +219,11 @@ def merge_nodes_and_edges(nodes_df: DataFrame, edges_df: DataFrame) -> DataFrame
 
     result_df = (
         edges_df.alias('edges')
-        .join(nodes_df.alias('nodes'), F.col('edges.child_id') == F.col('nodes.id'), 'left')
+        .join(nodes_df.alias('nodes'), f.col('edges.child_id') == f.col('nodes.id'), 'left')
         .select(
-            F.col('edges.child_id').alias('id'),
-            F.col('edges.parent_id'),
-            F.coalesce(F.col('nodes.entityIds'), F.array().cast('array<string>')).alias('entityIds'),
+            f.col('edges.child_id').alias('id'),
+            f.col('edges.parent_id'),
+            f.coalesce(f.col('nodes.entityIds'), f.array().cast('array<string>')).alias('entityIds'),
         )
     )
 
