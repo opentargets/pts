@@ -3,8 +3,8 @@
 from pyspark.sql import Row
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.gene_sets import prepare_dataset_for_propagation
-from pts.schemas.facet import facet_schema
+from pts.pyspark.gene_sets.gene_sets import prepare_dataset_for_propagation
+from pts.schemas.gene_sets import gene_sets_schema
 
 
 def test_prepare_dataset_go_category():
@@ -22,7 +22,7 @@ def test_prepare_dataset_go_category():
                 parentId=['GO:0008150'],  # biological_process
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -54,7 +54,7 @@ def test_prepare_dataset_reactome_category():
                 parentId=['R-HSA-1430728'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -86,7 +86,7 @@ def test_prepare_dataset_chembl_category():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -118,7 +118,7 @@ def test_prepare_dataset_multiple_parent_ids():
                 parentId=['Parent1', 'Parent2'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -160,7 +160,7 @@ def test_prepare_dataset_empty_parent_id():
                 parentId=['Root'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -197,7 +197,7 @@ def test_prepare_dataset_null_parent_id():
                 parentId=['Root'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -234,7 +234,7 @@ def test_prepare_dataset_mixed_categories():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -255,5 +255,3 @@ def test_prepare_dataset_mixed_categories():
 
     finally:
         session.stop()
-
-

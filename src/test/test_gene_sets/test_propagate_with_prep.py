@@ -8,8 +8,8 @@ import pytest
 from pyspark.sql import Row
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.gene_sets import propagate_entity_ids_with_dataset_prep
-from pts.schemas.facet import facet_schema
+from pts.pyspark.gene_sets.gene_sets import propagate_entity_ids_with_dataset_prep
+from pts.schemas.gene_sets import gene_sets_schema
 
 
 def test_propagate_with_prep_from_dict():
@@ -50,7 +50,7 @@ def test_propagate_with_prep_from_dict():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=facet_schema)
+        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)
@@ -132,7 +132,7 @@ def test_propagate_with_prep_multiple_parents():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=facet_schema)
+        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)
@@ -211,7 +211,7 @@ def test_propagate_with_prep_multiple_children():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=facet_schema)
+        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)

@@ -4,8 +4,8 @@ from pyspark.sql import Row
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.gene_sets import merge_propagated_entity_ids
-from pts.schemas.facet import facet_schema
+from pts.pyspark.gene_sets.gene_sets import merge_propagated_entity_ids
+from pts.schemas.gene_sets import gene_sets_schema
 
 
 def test_merge_propagated_go_category():
@@ -24,7 +24,7 @@ def test_merge_propagated_go_category():
                 parentId=['GO:0008150'],
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame (after propagation, parent got child's entityIds)
         propagated_schema = StructType([
@@ -34,7 +34,9 @@ def test_merge_propagated_go_category():
         ])
         propagated_data = [
             Row(id='GO:0006915', parent_id='GO:0008150', entityIds=['ENSG00000141510']),  # Child unchanged
-            Row(id='GO:0008150', parent_id=None, entityIds=['ENSG00000141510', 'ENSG00000012048']),  # Parent got propagated
+            Row(
+                id='GO:0008150', parent_id=None, entityIds=['ENSG00000141510', 'ENSG00000012048']
+            ),  # Parent got propagated
         ]
         propagated_df = spark.createDataFrame(propagated_data, schema=propagated_schema)
 
@@ -76,7 +78,7 @@ def test_merge_propagated_chembl_category():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame
         propagated_schema = StructType([
@@ -86,7 +88,9 @@ def test_merge_propagated_chembl_category():
         ])
         propagated_data = [
             Row(id='Enzyme', parent_id='Protein', entityIds=['ENSG00000141510']),  # Child unchanged
-            Row(id='Protein', parent_id=None, entityIds=['ENSG00000141510', 'ENSG00000012048']),  # Parent got propagated
+            Row(
+                id='Protein', parent_id=None, entityIds=['ENSG00000141510', 'ENSG00000012048']
+            ),  # Parent got propagated
         ]
         propagated_df = spark.createDataFrame(propagated_data, schema=propagated_schema)
 
@@ -126,7 +130,7 @@ def test_merge_propagated_multiple_parents():
                 parentId=['Parent1', 'Parent2'],  # Multiple parents
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame - same id appears multiple times (one per parent)
         propagated_schema = StructType([
@@ -172,7 +176,7 @@ def test_merge_propagated_missing_id():
                 parentId=['Parent'],
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame - doesn't contain 'MissingTerm'
         propagated_schema = StructType([
@@ -225,7 +229,7 @@ def test_merge_propagated_mixed_categories():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame
         propagated_schema = StructType([
@@ -278,7 +282,7 @@ def test_merge_propagated_preserves_all_columns():
                 parentId=['GO:0003674'],
             ),
         ]
-        facets_df = spark.createDataFrame(original_facets, schema=facet_schema)
+        facets_df = spark.createDataFrame(original_facets, schema=gene_sets_schema)
 
         # Propagated DataFrame
         propagated_schema = StructType([
@@ -297,7 +301,7 @@ def test_merge_propagated_preserves_all_columns():
         # Verify schema includes all original columns plus entityIdsPropagated
         schema = result.schema
         field_names = {field.name for field in schema.fields}
-        
+
         assert 'label' in field_names
         assert 'category' in field_names
         assert 'entityIds' in field_names
@@ -310,7 +314,7 @@ def test_merge_propagated_preserves_all_columns():
         result_list = result.collect()
         assert len(result_list) == 1
         row = result_list[0]
-        
+
         assert row.label == 'TestTerm'
         assert row.category == 'GO:MF'
         assert row.datasourceId == 'GO:0003700'
@@ -320,4 +324,3 @@ def test_merge_propagated_preserves_all_columns():
 
     finally:
         session.stop()
-
