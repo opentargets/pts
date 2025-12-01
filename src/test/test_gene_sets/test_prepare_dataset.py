@@ -3,7 +3,7 @@
 from pyspark.sql import Row
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.target_facets import prepare_dataset_for_propagation
+from pts.pyspark.facets.gene_sets import prepare_dataset_for_propagation
 from pts.schemas.facet import facet_schema
 
 

@@ -4,7 +4,7 @@ from pyspark.sql import Row
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.target_facets import merge_propagated_entity_ids
+from pts.pyspark.facets.gene_sets import merge_propagated_entity_ids
 from pts.schemas.facet import facet_schema
 
 

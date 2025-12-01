@@ -134,3 +134,16 @@ steps:
         go: output/go/go.parquet
       pyspark: go
   ##################################################################################################
+  #: TARGET FACETS STEP :###########################################################################
+  gene_sets:
+    - name: compute gene sets (target facets)
+      requires:
+        - pyspark transform go
+      source:
+        targets: output/target
+        go: output/go/go.parquet
+        reactome: input/reactome
+      destination:
+        targets: output/gene_sets
+      pyspark: gene_sets
+  ##################################################################################################

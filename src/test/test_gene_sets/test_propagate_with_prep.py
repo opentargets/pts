@@ -8,7 +8,7 @@ import pytest
 from pyspark.sql import Row
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.facets.target_facets import propagate_entity_ids_with_dataset_prep
+from pts.pyspark.facets.gene_sets import propagate_entity_ids_with_dataset_prep
 from pts.schemas.facet import facet_schema
 
 
