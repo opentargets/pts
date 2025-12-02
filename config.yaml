@@ -1,5 +1,5 @@
 ---
-work_path: ./work
+work_path: /Users/dsuveges/project_data/releases/25.12
 log_level: INFO
 pool_size: 32
 
@@ -1279,5 +1279,20 @@ steps:
           - resourceScore
           - diseaseCellLines
           - primaryProjectId
+  ##################################################################################################
 
-        #################################################################################################
+  #: VEP View generation STEP :#####################################################################
+  vep_view:
+    - name: pyspark generate vep view
+      pyspark: vep_view
+      source:
+        credible_set: output/credible_set
+        study_table: output/study
+        l2g_table: output/l2g_prediction
+        biosample: output/biosample
+      destination:
+        vep_data_header:  intermediate/vep_view_header.tsv
+        vep_data: intermediate/vep_view
+      properties:
+        spark.driver.memory: 16g
+  ##################################################################################################
