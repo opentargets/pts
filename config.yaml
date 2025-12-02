@@ -1,5 +1,5 @@
 ---
-work_path: ./work
+work_path: /Users/dsuveges/project_data/releases/25.12
 log_level: INFO
 pool_size: 32
 
@@ -1289,6 +1289,7 @@ steps:
         credible_set: output/credible_set
         study_table: output/study
         l2g_table: output/l2g_prediction
+        biosample: output/biosample
       destination: intermediate/vep_view.parquet
       properties:
         spark.driver.memory: 16g

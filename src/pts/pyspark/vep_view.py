@@ -9,6 +9,12 @@ from pyspark.sql.window import Window
 from pts.pyspark.common import Session
 
 
+def process_biosample(biosample_index: DataFrame) -> DataFrame:
+    return biosample_index.select(
+        f.col('biosampleId').alias('qtlBiosampleId'), f.col('biosampleName').alias('qtlBiosampleName')
+    ).distinct()
+
+
 def process_credible_set(credible_set: DataFrame) -> DataFrame:
     """Flatten a credible set into one row per tag variant and compute lead-variant flag.
 
@@ -95,14 +101,16 @@ def process_study(study: DataFrame) -> DataFrame:
     Returns:
         DataFrame with columns:
         - `studyId`, `studyType`
-        - `gwasDiseases` (string | NULL): comma-separated disease IDs when present
-        - `qtlStudy` (struct<geneId, biosampleId> | NULL): present only when `geneId` is not null
+        - `gwasDiseases` (string | NULL): "|" separated disease IDs when present
+        - `qtlGeneId` when `geneId` is not null
+        - `qtlBiosampleId` when `biosampleId` is not null
     """
     return study.select(
         'studyId',
         'studyType',
-        f.when(f.size(f.col('diseaseIds')) > 0, f.concat_ws(',', f.col('diseaseIds'))).alias('gwasDiseases'),
-        f.when(f.col('geneId').isNotNull(), f.struct(f.col('geneId'), f.col('biosampleId'))).alias('qtlStudy'),
+        f.when(f.size(f.col('diseaseIds')) > 0, f.concat_ws('|', f.col('diseaseIds'))).alias('gwasDiseases'),
+        f.col('geneId').alias('qtlGeneId'),
+        f.col('biosampleId').alias('qtlBiosampleId'),
     )
 
 
@@ -134,7 +142,7 @@ def process_l2g(l2g: DataFrame) -> DataFrame:
             f.rank().over(Window.partitionBy('studyLocusId').orderBy(f.col('score').desc())).alias('rank'),
         )
         .filter((f.col('rank') == 1) | (f.col('score') >= 0.5))
-        .select('studyLocusId', f.struct('geneId', f.col('score').alias('locus2geneScore')).alias('gwasLocus2gene'))
+        .select('studyLocusId', f.col('geneId').alias('gwasGeneId'), f.col('score').alias('gwasLocusToGeneScore'))
     )
 
 
@@ -164,11 +172,13 @@ def vep_view(source: dict[str, str], destination: str, settings: dict[str, Any],
     study = process_study(session.load_data(source['study_table']))
     credible_set = process_credible_set(session.load_data(source['credible_set']))
     l2g = process_l2g(session.load_data(source['l2g_table']))
+    biosample = process_biosample(session.load_data(source['biosample']))
 
     # Join and procerss:
     (
         credible_set.join(l2g, on='studyLocusId', how='left')
         .join(study, on='studyId', how='left')
+        .join(biosample, on='qtlBiosampleId', how='left')
         .select(
             *parse_variant_id(f.col('variantId')),
             'variantId',
@@ -183,11 +193,12 @@ def vep_view(source: dict[str, str], destination: str, settings: dict[str, Any],
             'posteriorProbability',
             'finemappingMethod',
             'isLead',
-            'gwasLocus2gene',
+            'gwasGeneId',
+            'gwasLocusToGeneScore',
             'gwasDiseases',
-            'qtlStudy',
+            'qtlGeneId',
+            'qtlBiosampleName',
         )
-        # .write.mode('overwrite')
-        # .csv(destination, sep='\t')
-        .printSchema()
+        .write.mode('overwrite')
+        .csv(destination, sep='\t', header=True)
     )
