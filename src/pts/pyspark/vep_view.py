@@ -1,9 +1,12 @@
 """Module to generate view for Open Target's VEP plugin."""
 
+from pathlib import Path
 from typing import Any
 
+from loguru import logger
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as f
+from pyspark.sql import types as t
 from pyspark.sql.window import Window
 
 from pts.pyspark.common import Session
@@ -158,13 +161,15 @@ def parse_variant_id(variant_id: Column) -> tuple[Column, Column, Column, Column
     parts = f.split(variant_id, '_')
     return (
         parts[0].alias('chromosome'),
-        parts[1].alias('position'),
+        parts[1].cast(t.IntegerType()).alias('position'),
         parts[2].alias('referenceAllele'),
         parts[3].alias('alternateAllele'),
     )
 
 
-def vep_view(source: dict[str, str], destination: str, settings: dict[str, Any], properties: dict[str, str]) -> None:
+def vep_view(
+    source: dict[str, str], destination: dict[str, str], settings: dict[str, Any], properties: dict[str, str]
+) -> None:
     # Initialise session:
     session = Session(app_name='VEP view generation', properties=properties)
 
@@ -175,7 +180,7 @@ def vep_view(source: dict[str, str], destination: str, settings: dict[str, Any],
     biosample = process_biosample(session.load_data(source['biosample']))
 
     # Join and procerss:
-    (
+    vep_view = (
         credible_set.join(l2g, on='studyLocusId', how='left')
         .join(study, on='studyId', how='left')
         .join(biosample, on='qtlBiosampleId', how='left')
@@ -199,6 +204,17 @@ def vep_view(source: dict[str, str], destination: str, settings: dict[str, Any],
             'qtlGeneId',
             'qtlBiosampleName',
         )
+    )
+    # Save header:
+    logger.info('Writing header')
+    header = '\t'.join(vep_view.columns)
+    Path(destination['vep_data_header']).write_text(header + '\n')
+
+    # Write data:
+    logger.info('Writing data')
+    (
+        vep_view.filter(f.col('position').isNotNull() & (f.length(f.col('chromosome')) < 3))
+        .orderBy('chromosome', 'position')
         .write.mode('overwrite')
-        .csv(destination, sep='\t', header=True)
+        .csv(destination['vep_data'], sep='\t')
     )

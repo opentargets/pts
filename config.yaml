@@ -1290,7 +1290,9 @@ steps:
         study_table: output/study
         l2g_table: output/l2g_prediction
         biosample: output/biosample
-      destination: intermediate/vep_view.parquet
+      destination:
+        vep_data_header:  intermediate/vep_view_header.tsv
+        vep_data: intermediate/vep_view
       properties:
         spark.driver.memory: 16g
   ##################################################################################################
