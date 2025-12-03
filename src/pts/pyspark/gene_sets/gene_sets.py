@@ -633,17 +633,6 @@ def target_facets(
         destination: Dictionary with 'targets' key pointing to output path
         properties: Optional Spark configuration properties
         category_config: Optional custom category name mappings
-
-    Example:
-        >>> target_facets(
-        ...     source={
-        ...         'targets': 'gs://bucket/targets.parquet',
-        ...         'go': 'gs://bucket/go.parquet',
-        ...         'reactome': 'gs://bucket/reactome.parquet'
-        ...     },
-        ...     destination={'targets': 'gs://bucket/output/facets.parquet'},
-        ...     properties={'spark.executor.memory': '8g'}
-        ... )
     """
     # Initialize Spark session with GCS support
     session = Session(app_name='target_facets', properties=properties)

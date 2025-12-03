@@ -28,9 +28,6 @@ def compute_simple_facet(
 
     Returns:
         DataFrame with facet schema (label, category, entityIds, datasourceId)
-
-    Example:
-        >>> compute_simple_facet(targets_df, 'approvedSymbol', 'Approved Symbol', 'id', spark)
     """
     logger.debug(f'Computing simple facet: label={label_field}, category={category_value}')
 
@@ -68,9 +65,6 @@ def get_relevant_dataset(
 
     Returns:
         Filtered DataFrame with renamed ID field and facet field
-
-    Example:
-        >>> get_relevant_dataset(targets_df, 'id', 'ensemblGeneId', 'tractability')
     """
     return (
         dataframe

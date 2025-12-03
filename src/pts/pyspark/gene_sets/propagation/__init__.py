@@ -206,12 +206,6 @@ def merge_nodes_and_edges(nodes_df: DataFrame, edges_df: DataFrame) -> DataFrame
             - parent_id: string - the parent entity identifier (from edges.parent_id)
             - entityIds: array<string> - entity IDs from the corresponding node
               (empty array if node not found)
-
-    Example:
-        >>> nodes = spark.createDataFrame([('A', ['ENSG1']), ('B', ['ENSG2'])], ['id', 'entityIds'])
-        >>> edges = spark.createDataFrame([('A', 'B')], ['child_id', 'parent_id'])
-        >>> merged = merge_nodes_and_edges(nodes, edges)
-        >>> # Result: (id='A', parent_id='B', entityIds=['ENSG1'])
     """
     # Join edges with nodes where edges.child_id == nodes.id
     # Use left join to keep all edges even if node is missing
