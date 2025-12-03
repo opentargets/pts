@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from loguru import logger
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as f
 
 
@@ -12,7 +12,6 @@ def compute_simple_facet(
     label_field: str,
     category_value: str,
     entity_id_field: str,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute simple facet dataset for the given DataFrame.
 
@@ -24,7 +23,6 @@ def compute_simple_facet(
         label_field: Field name to use as the facet label
         category_value: Fixed string value to use as the facet category
         entity_id_field: Field name to use as entity ID
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema (label, category, entityIds, datasourceId)

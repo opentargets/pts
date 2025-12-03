@@ -13,7 +13,7 @@ to filter and explore targets based on different characteristics.
 from __future__ import annotations
 
 from loguru import logger
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as f
 
 from pts.pyspark.common.session import Session
@@ -60,7 +60,6 @@ class FacetSearchCategories:
 def compute_tractability_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute tractability facets for the given targets DataFrame.
 
@@ -74,7 +73,6 @@ def compute_tractability_facets(
     Args:
         targets_df: DataFrame containing target data with 'id' and 'tractability' columns
         category_values: FacetSearchCategories instance with category name mappings
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing tractability facets
@@ -130,64 +128,57 @@ def compute_tractability_facets(
 def compute_target_id_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute target ID facets for the given targets DataFrame.
 
     Args:
         targets_df: DataFrame containing target data with 'id' column
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing target ID facets
     """
     logger.info('Computing target ID facets')
-    return compute_simple_facet(targets_df, 'id', category_values.target_id, 'id', spark)
+    return compute_simple_facet(targets_df, 'id', category_values.target_id, 'id')
 
 
 def compute_approved_symbol_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute approved gene symbol facets for the given targets DataFrame.
 
     Args:
         targets_df: DataFrame containing target data with 'approvedSymbol' column
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing approved symbol facets
     """
     logger.info('Computing approved symbol facets')
-    return compute_simple_facet(targets_df, 'approvedSymbol', category_values.approved_symbol, 'id', spark)
+    return compute_simple_facet(targets_df, 'approvedSymbol', category_values.approved_symbol, 'id')
 
 
 def compute_approved_name_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute approved gene name facets for the given targets DataFrame.
 
     Args:
         targets_df: DataFrame containing target data with 'approvedName' column
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing approved name facets
     """
     logger.info('Computing approved name facets')
-    return compute_simple_facet(targets_df, 'approvedName', category_values.approved_name, 'id', spark)
+    return compute_simple_facet(targets_df, 'approvedName', category_values.approved_name, 'id')
 
 
 def compute_subcellular_locations_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute subcellular location facets for the given targets DataFrame.
 
@@ -200,7 +191,6 @@ def compute_subcellular_locations_facets(
     Args:
         targets_df: DataFrame with 'id' and 'subcellularLocations' columns
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing subcellular location facets
@@ -228,7 +218,6 @@ def compute_subcellular_locations_facets(
 def compute_target_class_facets(
     targets_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute target class facets for the given targets DataFrame.
 
@@ -242,7 +231,6 @@ def compute_target_class_facets(
     Args:
         targets_df: DataFrame with 'id' and 'targetClass' columns
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing target class facets
@@ -312,7 +300,6 @@ def compute_pathways_facets(
     targets_df: DataFrame,
     reactome_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute pathway facets for the given targets DataFrame.
 
@@ -327,7 +314,6 @@ def compute_pathways_facets(
         targets_df: DataFrame with 'id' and 'pathways' columns
         reactome_df: Reference DataFrame with Reactome pathway information (id, label, parents)
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing pathway facets
@@ -367,7 +353,6 @@ def compute_go_facets(
     targets_df: DataFrame,
     go_df: DataFrame,
     category_values: FacetSearchCategories,
-    spark: SparkSession,
 ) -> DataFrame:
     """Compute Gene Ontology (GO) facets for the given targets DataFrame.
 
@@ -388,7 +373,6 @@ def compute_go_facets(
         targets_df: DataFrame with 'id' and 'go' columns
         go_df: Reference DataFrame with GO term information (id, name, aspect)
         category_values: FacetSearchCategories instance
-        spark: SparkSession instance
 
     Returns:
         DataFrame with facet schema containing GO facets
@@ -559,7 +543,6 @@ def compute_all_target_facets(
     go_df: DataFrame,
     reactome_df: DataFrame,
     category_values: FacetSearchCategories | None = None,
-    spark: SparkSession | None = None,
 ) -> DataFrame:
     """Compute all target facets and union them into a single DataFrame.
 
@@ -571,14 +554,10 @@ def compute_all_target_facets(
         go_df: DataFrame containing GO reference data
         reactome_df: DataFrame containing Reactome reference data
         category_values: Optional FacetSearchCategories instance. Uses defaults if None.
-        spark: Optional SparkSession. Extracted from targets_df if None.
 
     Returns:
         DataFrame containing all computed facets
     """
-    if spark is None:
-        spark = targets_df.sparkSession
-
     if category_values is None:
         category_values = FacetSearchCategories()
 
@@ -586,14 +565,14 @@ def compute_all_target_facets(
 
     # Compute all facet types
     facets_list = [
-        compute_tractability_facets(targets_df, category_values, spark),
-        compute_target_id_facets(targets_df, category_values, spark),
-        compute_approved_symbol_facets(targets_df, category_values, spark),
-        compute_approved_name_facets(targets_df, category_values, spark),
-        compute_subcellular_locations_facets(targets_df, category_values, spark),
-        compute_target_class_facets(targets_df, category_values, spark),
-        compute_pathways_facets(targets_df, reactome_df, category_values, spark),
-        compute_go_facets(targets_df, go_df, category_values, spark),
+        compute_tractability_facets(targets_df, category_values),
+        compute_target_id_facets(targets_df, category_values),
+        compute_approved_symbol_facets(targets_df, category_values),
+        compute_approved_name_facets(targets_df, category_values),
+        compute_subcellular_locations_facets(targets_df, category_values),
+        compute_target_class_facets(targets_df, category_values),
+        compute_pathways_facets(targets_df, reactome_df, category_values),
+        compute_go_facets(targets_df, go_df, category_values),
     ]
 
     # Union all facets into single DataFrame
@@ -658,7 +637,7 @@ def target_facets(
         category_values = FacetSearchCategories(category_config)
 
         # Compute all facets
-        all_facets = compute_all_target_facets(targets_df, go_df, reactome_df, category_values, spark)
+        all_facets = compute_all_target_facets(targets_df, go_df, reactome_df, category_values)
 
         # Write output
         output_path = destination['gene_sets']
