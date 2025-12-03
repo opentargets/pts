@@ -12,7 +12,7 @@
   "ruff.organizeImports": true,
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "standard",
-  "python.languageServer": "None",
+  "python.languageServer": "Pylance",
   "files.exclude": {
     "**/__pycache__": true,
     "**/.pytest_cache": true,

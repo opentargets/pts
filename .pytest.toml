@@ -1,5 +1,0 @@
-# pytest.toml or .pytest.toml
-[pytest]
-testpaths = [
-    "src/pts/pyspark/facets/tests"
-]
