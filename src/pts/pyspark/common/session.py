@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -32,6 +33,12 @@ class Session:
             .getOrCreate()
         )
         self.spark.sparkContext.setLogLevel('WARN')
+
+        # Set checkpoint directory if not already set
+        if self.spark.sparkContext.getCheckpointDir() is None:
+            checkpoint_dir = self._get_checkpoint_dir(properties)
+            self.spark.sparkContext.setCheckpointDir(checkpoint_dir)
+            logger.info(f'Checkpoint directory set to: {checkpoint_dir}')
 
     def _create_config(self, properties: dict[str, str] | None = None) -> SparkConf:
         if properties is None:
@@ -67,6 +74,22 @@ class Session:
         effective_properties = {**base_properties, **properties}
 
         return SparkConf().setAll(list(effective_properties.items()))
+
+    def _get_checkpoint_dir(self, properties: dict[str, str] | None) -> str:
+        """Get checkpoint directory path.
+
+        Args:
+            properties: Optional Spark properties that may contain checkpoint directory
+
+        Returns:
+            Checkpoint directory path
+        """
+        # Check if checkpoint directory is provided in properties
+        if properties and 'spark.checkpoint.dir' in properties:
+            return properties['spark.checkpoint.dir']
+
+        # Create a temporary directory for checkpointing
+        return tempfile.mkdtemp(prefix='spark-checkpoint-')
 
     def load_data(
         self,

@@ -13,12 +13,10 @@ steps:
       source: input/disease/efo_otar_slim.json
       destination: output/disease/disease.parquet
       transformer: disease
-
     - name: transform disease_hpo
       source: input/disease/hp-full.json
       destination: output/disease_hpo/disease_hpo.parquet
       transformer: disease_hpo
-
     - name: transform disease_phenotype
       requires:
         - transform disease_efo
@@ -28,6 +26,7 @@ steps:
         - input/disease/mondo.json
       destination: output/disease_phenotype/disease_phenotype.parquet
       transformer: disease_phenotype
+
   ##################################################################################################
 
   #: EXPRESSION STEP :##############################################################################
@@ -42,16 +41,15 @@ steps:
       source: intermediate/expression/normal_tissue.tsv
       destination: intermediate/expression/normal_tissue.tsv.gz
 
-    - name: transform expression tissue
-      source: input/expression/map_with_efos.json
-      destination: intermediate/expression/tissue-translation-map.parquet
-      transformer: expression_tissue
-  ##################################################################################################
+  #   - name: transform expression tissue
+  #     source: input/expression/map_with_efos.json
+  #     destination: intermediate/expression/tissue-translation-map.parquet
+  #     transformer: expression_tissue
+  # ##################################################################################################
 
   #: MOUSE_PHENOTYPES STEP :########################################################################
   mouse_phenotype:
-    - name: pyspark generate from IMPC and validate with target
-      pyspark: mouse_phenotype
+    - name: pyspark separate into output and excluded
       source:
         target: output/target
         # IMPC source files
@@ -158,6 +156,14 @@ steps:
           destination: intermediate/target/homologue/gene_dictionary/${match_path}${match_stem}.parquet
           transformer: homology
   ##################################################################################################
+  #: GO STEP :######################################################################################
+  go:
+    - name: pyspark transform go
+      source:
+        go: input/go/go.obo
+      destination:
+        go: output/go
+      pyspark: go
 
   #: TARGET_SAFETY STEP :############### - part of target, pyspark tasks must run standalone for now
   target_safety:
@@ -382,62 +388,16 @@ steps:
         disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
         disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
   ##################################################################################################
-
-  #: TIMESERIES STEP :##############################################################################
-  timeseries:
-    - name: pyspark timeseries
-      pyspark: timeseries
+  #: TARGET GENE SETS (TARGET FACETS) STEP :###########################################################################
+  gene_sets:
+    - name: pyspark gene sets
       source:
-        evidence: output/evidence
-        disease: output/disease
+        targets: input/target
+        go_processed: output/go
+        reactome: input/reactome
       destination:
-        overall_direct: view/timeseries_overall_direct
-        overall_indirect: view/timeseries_overall_indirect
-        by_datasource_direct: view/timeseries_by_datasource_direct
-        by_datasource_indirect: view/timeseries_by_datasource_indirect
-      settings:
-        novelty_scale: 2 # 2 for long tailed slow decays
-        novelty_shift: 3 # 3 for long tailed slow decays
-        novelty_window: 10
-        datasource_weights:
-          - id: gwas_credible_sets
-            weight: 1.0
-          - id: eva
-            weight: 1.0
-          - id: gene_burden
-            weight: 1.0
-          - id: genomics_england
-            weight: 1.0
-          - id: gene2phenotype
-            weight: 1.0
-          - id: uniprot_literature
-            weight: 1.0
-          - id: uniprot_variants
-            weight: 1.0
-          - id: orphanet
-            weight: 1.0
-          - id: clingen
-            weight: 1.0
-          - id: cancer_gene_census
-            weight: 1.0
-          - id: eva_somatic
-            weight: 1.0
-          - id: cancer_biomarkers
-            weight: 1.0
-          - id: chembl
-            weight: 1.0
-          - id: crispr_screen
-            weight: 1.0
-          - id: crispr
-            weight: 1.0
-          - id: reactome
-            weight: 1.0
-          - id: europepmc
-            weight: 0.2
-          - id: expression_atlas
-            weight: 0.2
-          - id: impc
-            weight: 0.2
+        gene_sets: output/gene_sets
+      pyspark: gene_sets_task
   ##################################################################################################
 
   #: EVIDENCE POST PROCESS STEP :###################################################################

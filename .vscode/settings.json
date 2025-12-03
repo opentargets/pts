@@ -27,5 +27,10 @@
     ]
   },
   "yaml.format.singleQuote": true,
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "python.testing.pytestArgs": [
+    "src"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }
