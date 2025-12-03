@@ -5,24 +5,28 @@ Tests use full facet schema with label, category, datasourceId, parentId, entity
 """
 
 import pytest
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
 
-from pts.pyspark.common.session import Session
 from pts.pyspark.gene_sets.gene_sets import propagate_entity_ids_with_dataset_prep
 from pts.schemas.gene_sets import gene_sets_schema
 
 
-def test_propagate_with_prep_from_dict():
-    """Example test using dictionary input with GO category - easy to copy and edit.
+@pytest.mark.slow
+class TestPropagateWithPrep:
+    """Test suite for propagate_entity_ids_with_dataset_prep function."""
 
-    This test demonstrates how to create tests from dictionaries.
-    Each dictionary represents a row with label, category, datasourceId, parentId, entityIds.
-    For GO categories, id is derived from datasourceId.
-    """
-    session = Session(app_name='test_propagate_with_prep')
-    spark = session.spark
+    @pytest.fixture(autouse=True)
+    def _setup(self, spark: SparkSession) -> None:
+        """Set up test fixtures with spark session."""
+        self.spark = spark
 
-    try:
+    def test_propagate_with_prep_from_dict(self) -> None:
+        """Example test using dictionary input with GO category - easy to copy and edit.
+
+        This test demonstrates how to create tests from dictionaries.
+        Each dictionary represents a row with label, category, datasourceId, parentId, entityIds.
+        For GO categories, id is derived from datasourceId.
+        """
         # Input data as list of dictionaries - easy to edit
         # Using GO:BP category, so id will be derived from datasourceId
         input_data = [
@@ -50,7 +54,7 @@ def test_propagate_with_prep_from_dict():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
+        df = self.spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)
@@ -82,22 +86,14 @@ def test_propagate_with_prep_from_dict():
         # so it was filtered out by prepare_dataset_for_propagation.
         # The function only returns rows that have a parent (i.e., rows that are children).
 
-    finally:
-        session.stop()
+    def test_propagate_with_prep_multiple_parents(self) -> None:
+        """Test propagation when one id has multiple parents (ChEMBL category).
 
-
-def test_propagate_with_prep_multiple_parents():
-    """Test propagation when one id has multiple parents (ChEMBL category).
-
-    This test demonstrates that one id can have multiple parent_id values
-    (multiple rows with same id but different parent_id), and entityIds
-    should propagate to all parents.
-    For ChEMBL category, id is derived from label.
-    """
-    session = Session(app_name='test_propagate_with_prep')
-    spark = session.spark
-
-    try:
+        This test demonstrates that one id can have multiple parent_id values
+        (multiple rows with same id but different parent_id), and entityIds
+        should propagate to all parents.
+        For ChEMBL category, id is derived from label.
+        """
         # Input data as list of dictionaries - easy to edit
         # Using ChEMBL Target Class category, so id will be derived from label
         input_data = [
@@ -132,7 +128,7 @@ def test_propagate_with_prep_multiple_parents():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
+        df = self.spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)
@@ -161,22 +157,14 @@ def test_propagate_with_prep_multiple_parents():
         # they have parentId=None, so they were filtered out by prepare_dataset_for_propagation.
         # The function only returns rows that have a parent (i.e., rows that are children).
 
-    finally:
-        session.stop()
+    def test_propagate_with_prep_multiple_children(self) -> None:
+        """Test propagation when one parent has multiple children (Reactome category).
 
-
-def test_propagate_with_prep_multiple_children():
-    """Test propagation when one parent has multiple children (Reactome category).
-
-    This test demonstrates that one parent_id can have multiple children
-    (multiple rows with different id but same parent_id), and entityIds
-    from all children should propagate to the parent.
-    For Reactome category, id is derived from datasourceId.
-    """
-    session = Session(app_name='test_propagate_with_prep')
-    spark = session.spark
-
-    try:
+        This test demonstrates that one parent_id can have multiple children
+        (multiple rows with different id but same parent_id), and entityIds
+        from all children should propagate to the parent.
+        For Reactome category, id is derived from datasourceId.
+        """
         # Input data as list of dictionaries - easy to edit
         # Using Reactome category, so id will be derived from datasourceId
         input_data = [
@@ -211,7 +199,7 @@ def test_propagate_with_prep_multiple_children():
         ]
 
         # Convert to PySpark DataFrame with facet schema
-        df = spark.createDataFrame(input_data, schema=gene_sets_schema)
+        df = self.spark.createDataFrame(input_data, schema=gene_sets_schema)
 
         # Run propagation
         result, iterations = propagate_entity_ids_with_dataset_prep(df, return_iterations=True)
@@ -240,9 +228,6 @@ def test_propagate_with_prep_multiple_children():
         # Note: Parent (R-HSA-1430728) is not in the result because it has parentId=None,
         # so it was filtered out by prepare_dataset_for_propagation.
         # The function only returns rows that have a parent (i.e., rows that are children).
-
-    finally:
-        session.stop()
 
 
 if __name__ == '__main__':

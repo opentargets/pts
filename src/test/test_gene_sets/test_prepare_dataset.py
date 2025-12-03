@@ -1,18 +1,23 @@
 """Test suite for prepare_dataset_for_propagation function."""
 
-from pyspark.sql import Row
+import pytest
+from pyspark.sql import Row, SparkSession
 
-from pts.pyspark.common.session import Session
 from pts.pyspark.gene_sets.gene_sets import prepare_dataset_for_propagation
 from pts.schemas.gene_sets import gene_sets_schema
 
 
-def test_prepare_dataset_go_category():
-    """Test that GO categories use datasourceId for id column."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
+@pytest.mark.slow
+class TestPrepareDataset:
+    """Test suite for prepare_dataset_for_propagation function."""
 
-    try:
+    @pytest.fixture(autouse=True)
+    def _setup(self, spark: SparkSession) -> None:
+        """Set up test fixtures with spark session."""
+        self.spark = spark
+
+    def test_prepare_dataset_go_category(self) -> None:
+        """Test that GO categories use datasourceId for id column."""
         test_facets = [
             Row(
                 label='apoptotic process',
@@ -22,7 +27,7 @@ def test_prepare_dataset_go_category():
                 parentId=['GO:0008150'],  # biological_process
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -35,16 +40,8 @@ def test_prepare_dataset_go_category():
         assert row.parent_id == 'GO:0008150'
         assert row.entityIds == ['ENSG00000141510']
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_reactome_category():
-    """Test that Reactome category uses datasourceId for id column."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_reactome_category(self) -> None:
+        """Test that Reactome category uses datasourceId for id column."""
         test_facets = [
             Row(
                 label='Signal Transduction',
@@ -54,7 +51,7 @@ def test_prepare_dataset_reactome_category():
                 parentId=['R-HSA-1430728'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -67,16 +64,8 @@ def test_prepare_dataset_reactome_category():
         assert row.parent_id == 'R-HSA-1430728'
         assert row.entityIds == ['ENSG00000141510', 'ENSG00000012048']
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_chembl_category():
-    """Test that ChEMBL category uses label for id column."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_chembl_category(self) -> None:
+        """Test that ChEMBL category uses label for id column."""
         test_facets = [
             Row(
                 label='Enzyme',
@@ -86,7 +75,7 @@ def test_prepare_dataset_chembl_category():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -99,16 +88,8 @@ def test_prepare_dataset_chembl_category():
         assert row.parent_id == 'Protein'
         assert row.entityIds == ['ENSG00000141510']
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_multiple_parent_ids():
-    """Test that multiple parentIds are exploded correctly."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_multiple_parent_ids(self) -> None:
+        """Test that multiple parentIds are exploded correctly."""
         test_facets = [
             Row(
                 label='Child',
@@ -118,7 +99,7 @@ def test_prepare_dataset_multiple_parent_ids():
                 parentId=['Parent1', 'Parent2'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -134,16 +115,8 @@ def test_prepare_dataset_multiple_parent_ids():
             assert row.id == 'Child'
             assert row.entityIds == ['ENSG00000141510']
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_empty_parent_id():
-    """Test that rows with empty parentId arrays are filtered out."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_empty_parent_id(self) -> None:
+        """Test that rows with empty parentId arrays are filtered out."""
         test_facets = [
             Row(
                 label='Root',
@@ -160,7 +133,7 @@ def test_prepare_dataset_empty_parent_id():
                 parentId=['Root'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -171,16 +144,8 @@ def test_prepare_dataset_empty_parent_id():
         assert row.id == 'Child'
         assert row.parent_id == 'Root'
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_null_parent_id():
-    """Test that rows with null parentId are filtered out."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_null_parent_id(self) -> None:
+        """Test that rows with null parentId are filtered out."""
         test_facets = [
             Row(
                 label='Root',
@@ -197,7 +162,7 @@ def test_prepare_dataset_null_parent_id():
                 parentId=['Root'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -208,16 +173,8 @@ def test_prepare_dataset_null_parent_id():
         assert row.id == 'Child'
         assert row.parent_id == 'Root'
 
-    finally:
-        session.stop()
-
-
-def test_prepare_dataset_mixed_categories():
-    """Test with mixed categories (GO and ChEMBL)."""
-    session = Session(app_name='test_prepare_dataset')
-    spark = session.spark
-
-    try:
+    def test_prepare_dataset_mixed_categories(self) -> None:
+        """Test with mixed categories (GO and ChEMBL)."""
         test_facets = [
             Row(
                 label='apoptotic process',
@@ -234,7 +191,7 @@ def test_prepare_dataset_mixed_categories():
                 parentId=['Protein'],
             ),
         ]
-        facets_df = spark.createDataFrame(test_facets, schema=gene_sets_schema)
+        facets_df = self.spark.createDataFrame(test_facets, schema=gene_sets_schema)
 
         result = prepare_dataset_for_propagation(facets_df)
 
@@ -252,6 +209,3 @@ def test_prepare_dataset_mixed_categories():
         # ChEMBL should use label
         assert chembl_row.id == 'Enzyme'
         assert chembl_row.entityIds == ['ENSG00000012048']
-
-    finally:
-        session.stop()
