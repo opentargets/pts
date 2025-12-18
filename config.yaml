@@ -31,21 +31,104 @@ steps:
   ##################################################################################################
 
   #: EXPRESSION STEP :##############################################################################
-  expression:
-    - name: unzip normal tissue
-      source: input/expression/normal_tissue.tsv.zip
-      inner_file: normal_ihc_data.tsv
-      destination: intermediate/expression/normal_tissue.tsv
-    - name: gzip normal tissue
+  baseline_expression_dice:
+    - name: pyspark baseline expression harmonise
+      pyspark: baseline_expression_harmonise
+      source:
+        dice_directory: input/dice
+        mapping_path: input/dice/DICE_ontology_mapping.txt
+      destination:
+        baseline_expression: intermediate/baseline_expression/dice
+      settings:
+        harmoniser: dice
+    - name: pyspark baseline expression aggregate
+      pyspark: aggregate
+      source: intermediate/baseline_expression/dice
+      destination: intermediate/baseline_expression/dice_aggregated
       requires:
-        - unzip normal tissue
-      source: intermediate/expression/normal_tissue.tsv
-      destination: intermediate/expression/normal_tissue.tsv.gz
+        - pyspark baseline expression harmonise
+    
+  baseline_expression_tabula_sapiens:
+    - name: pyspark baseline expression harmonise
+      pyspark: baseline_expression_harmonise
+      source:
+        h5ad_path: input/tabula_sapiens/TabulaSapiens.h5ad
+      destination:
+        baseline_expression: intermediate/baseline_expression/tabula_sapiens
+      settings:
+        harmoniser: tabula_sapiens
+        datasource_id: tabula_sapiens
+        datatype_id: scrna-seq
+        min_cells: 5
+        min_genes: 5
+        technology: 10X
+        normalise: false
+        aggregation_min_cells: 5
+        aggregation_method: sum
+        tissue_agg_colname: tissue_ontology_term_id
+        celltype_agg_colname: cell_type_ontology_term_id
+        age_colname: age
+        sex_colname: sex
+        ethnicity_colname: ethnicity
+        donor_colname: donor_id
+    - name: pyspark baseline expression aggregate
+      pyspark: aggregate
+      source: intermediate/baseline_expression/tabula_sapiens
+      destination: intermediate/baseline_expression/tabula_sapiens_aggregated
+      requires:
+        - pyspark baseline expression harmonise
 
-    - name: transform expression tissue
-      source: input/expression/map_with_efos.json
-      destination: intermediate/expression/tissue-translation-map.parquet
-      transformer: expression_tissue
+  baseline_expression_pride:
+    - name: pyspark baseline expression harmonise
+      pyspark: baseline_expression_harmonise
+      source:
+        pride_source_data_dir: input/pride
+        pride_codes: PXD000000,PXD000001
+        tissue_ontology_mapping_path: input/pride/pride_ontology_mapping.tsv
+        target_index_path: input/target/target_index.parquet
+      destination:
+        baseline_expression: intermediate/baseline_expression/pride
+      settings:
+        harmoniser: pride
+    - name: pyspark baseline expression aggregate
+      pyspark: aggregate
+      source: intermediate/baseline_expression/pride
+      destination: intermediate/baseline_expression/pride_aggregated
+      requires:
+        - pyspark baseline expression harmonise
+
+  baseline_expression_gtex:
+    - name: pyspark baseline expression harmonise
+      pyspark: baseline_expression_harmonise
+      source:
+        gtex_source_data_path: input/gtex/gtex_tpm.gct.gz
+        sample_metadata_path: input/gtex/sample_metadata.tsv
+        subject_metadata_path: input/gtex/subject_metadata.tsv
+      destination:
+        baseline_expression: intermediate/baseline_expression/gtex
+      settings:
+        harmoniser: gtex
+    - name: pyspark baseline expression aggregate
+      pyspark: aggregate
+      source: intermediate/baseline_expression/gtex
+      destination: intermediate/baseline_expression/gtex_aggregated
+      requires:
+        - pyspark baseline expression harmonise
+
+  merge_baseline_expression:
+    - name: pyspark baseline expression merge unaggregated
+      pyspark: merge
+      source: ''
+      destination: ''
+      settings:
+        merger: unaggregated
+    - name: pyspark baseline expression merge aggregated
+      pyspark: merge
+      source: ''
+      destination: ''
+      settings:
+        merger: aggregated
+
   ##################################################################################################
 
   #: MOUSE_PHENOTYPES STEP :########################################################################
