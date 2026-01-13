@@ -387,6 +387,17 @@ steps:
       destination: output/drug_warning
   ##################################################################################################
 
+  #: DRUG_MECHANISM_OF_ACTION STEP :###############################################################
+  drug_mechanism_of_action:
+    - name: pyspark drug_mechanism_of_action
+      pyspark: drug_mechanism_of_action
+      source:
+        chembl_mechanism: input/drug/chembl_mechanism.jsonl
+        chembl_target: input/drug/chembl_target.jsonl
+        target: output/target
+      destination: output/drug_mechanism_of_action
+  ##################################################################################################
+
   #: TIMESERIES STEP :##############################################################################
   timeseries:
     - name: pyspark timeseries
