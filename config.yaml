@@ -408,6 +408,20 @@ steps:
       destination: intermediate/drug_molecule
   ##################################################################################################
 
+  #: DRUG_MOLECULE STEP :##########################################################################
+  drug_molecule:
+    - name: pyspark drug_molecule
+      pyspark: drug_molecule
+      source:
+        molecule: intermediate/drug_molecule
+        chemical_probes: intermediate/chemical_probes_evidence.parquet
+        mechanism_of_action: output/drug_mechanism_of_action
+        drug_warning: output/drug_warning
+        indication: input/drug/chembl_drug_indication.jsonl
+        disease: output/disease
+      destination: output/drug_molecule
+  ##################################################################################################
+
   #: TIMESERIES STEP :##############################################################################
   timeseries:
     - name: pyspark timeseries
