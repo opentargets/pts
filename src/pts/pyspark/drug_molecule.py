@@ -106,6 +106,9 @@ def process_drug_index(
         .join(has_mechanism, on='id', how='left_outer')
         .join(indications.select('id', 'indications'), on='id', how='left_outer')
         .join(warnings, on='id', how='left_outer')
+        # Coalesce null warning flags to false
+        .withColumn('blackBoxWarning', f.coalesce(f.col('blackBoxWarning'), f.lit(False)))
+        .withColumn('hasBeenWithdrawn', f.coalesce(f.col('hasBeenWithdrawn'), f.lit(False)))
     )
 
     # Filter to only include "drugs" - molecules that have:
@@ -137,8 +140,6 @@ def process_drug_index(
             'hasMechanismOfAction',
             'indications',
             'maximumClinicalTrialPhase',
-            'blackBoxWarning',
-            'hasBeenWithdrawn',
         )
         .transform(_cleanup)
         .dropDuplicates(['id'])
