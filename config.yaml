@@ -423,6 +423,21 @@ steps:
       destination: output/drug_molecule
   ##################################################################################################
 
+  #: TARGET_PRIORITISATION STEP :###################################################################
+  target_prioritisation:
+    - name: pyspark target_prioritisation
+      pyspark: target_prioritisation
+      source:
+        targets: output/target
+        mouse_phenotypes: output/mouse_phenotype
+        molecule: output/drug_molecule
+        mechanism_of_action: output/drug_mechanism_of_action
+        hpa_data: input/target_engine/proteinatlas.json.gz
+        uniprot_slterms: input/target_engine/uniprot_locations.tsv.gz
+        mouse_pheno_scores: input/target_engine/mouse_pheno_scores.csv
+      destination: output/target_prioritisation
+  ##################################################################################################
+
   #: TIMESERIES STEP :##############################################################################
   timeseries:
     - name: pyspark timeseries
