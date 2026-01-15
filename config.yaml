@@ -75,6 +75,7 @@ steps:
       source:
         probes_excel: input/target/chemicalprobes/probes.xlsx
         drugs_csv: input/target/chemicalprobes/probes_links.csv
+        chembl_molecule: intermediate/chembl_molecule
       destination: intermediate/chemical_probes_evidence.parquet
   ##################################################################################################
 
