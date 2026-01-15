@@ -142,11 +142,11 @@ class DiceBaselineExpression:
     def _write_output(self, df: DataFrame, local: bool, as_json: bool):
         base = f'file://{self.output_directory_path}' if local else self.output_directory_path
         if as_json:
-            out_path = f'{base}/json/dice_baseline_expression'
+            out_path = f'{base}/json/'
             df.write.mode('overwrite').json(out_path)
             logger.info(f'Data written to {out_path} in JSON format')
         else:
-            out_path = f'{base}/parquet/dice_baseline_expression'
+            out_path = f'{base}/parquet/'
             df.write.mode('overwrite').parquet(out_path)
             logger.info(f'Data written to {out_path}')
 

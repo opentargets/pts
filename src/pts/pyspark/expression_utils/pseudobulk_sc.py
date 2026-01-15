@@ -101,7 +101,10 @@ class PseudobulkExpression:
             raise ValueError('Provide at least one aggregation column.')
 
         # define a single output directory for this whole aggregation
-        output_dir = self.output_directory_path
+        if self.json:
+            output_dir = f'{self.output_directory_path}/json'
+        else:
+            output_dir = f'{self.output_directory_path}/parquet'
 
         for tissue_id, celltype_id in annotations:
             logger.info(f'Aggregating tissue={tissue_id}, celltype={celltype_id}')
@@ -162,7 +165,7 @@ class PseudobulkExpression:
             # Set unit based on aggregation method
             unit_dict = {
                 'mean': 'pseudobulk mean(logCP10K[counts])',
-                'sum': 'pseudobulk CPM(sum[counts])'
+                'sum': 'CPM(pseudobulk sum[counts])'
             }
             merged_df['unit'] = unit_dict[agg_method]
             merged_df['tissueBiosampleId'] = tissue_id.replace(':', '_') if tissue_agg_colname else None

@@ -15,8 +15,9 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
-  "numpy>=1.26.0",
+  "numpy>=2.2.6",
   "scanpy>=1.10.0",
+  "cellex",
 ]
 
 [dependency-groups]
@@ -183,3 +184,6 @@ parametrize-values-row-type = 'tuple'
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 ignore-decorators = ["pts.tasks.report", "pts.manifest.task_reporter.report"]
+
+[tool.uv.sources]
+cellex = { git = "https://github.com/Tobi1kenobi/CELLEX" }

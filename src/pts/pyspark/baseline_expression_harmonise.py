@@ -18,6 +18,9 @@ def baseline_expression_harmonise(
     logger.info('Starting baseline expression computation')
 
     # Initialize Spark Session
+    if properties is None:
+        properties = {}
+
     session = Session(app_name='baseline_expression_harmonise', properties=properties)
     spark = session.spark
 
@@ -104,7 +107,7 @@ def baseline_expression_harmonise(
             subject_metadata_path=subject_metadata_path,
             json=False,
             local=False,
-            matrix=False
+            matrix=settings.get('matrix', False)
         ).run()
 
     else:
