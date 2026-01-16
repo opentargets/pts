@@ -204,7 +204,7 @@ steps:
         associations: output/pharmacogenomics
         phenotypes: intermediate/pharmacogenetics/phenotypes.json
       settings:
-        openai_token_filename: work/openai_token
+        openai_token_filename: /var/run/secrets/openai_token
       properties:
         'spark.jars.packages': 'com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3'
 
@@ -548,24 +548,24 @@ steps:
           - contrast
           - studyId
         excluded_biotypes:
-          - "IG_C_pseudogene"
-          - "IG_J_pseudogene"
-          - "IG_pseudogene"
-          - "IG_V_pseudogene"
-          - "polymorphic_pseudogene"
-          - "processed_pseudogene"
-          - "pseudogene"
-          - "rRNA"
-          - "rRNA_pseudogene"
-          - "snoRNA"
-          - "snRNA"
-          - "transcribed_processed_pseudogene"
-          - "transcribed_unitary_pseudogene"
-          - "transcribed_unprocessed_pseudogene"
-          - "TR_J_pseudogene"
-          - "TR_V_pseudogene"
-          - "unitary_pseudogene"
-          - "unprocessed_pseudogene"
+          - 'IG_C_pseudogene'
+          - 'IG_J_pseudogene'
+          - 'IG_pseudogene'
+          - 'IG_V_pseudogene'
+          - 'polymorphic_pseudogene'
+          - 'processed_pseudogene'
+          - 'pseudogene'
+          - 'rRNA'
+          - 'rRNA_pseudogene'
+          - 'snoRNA'
+          - 'snRNA'
+          - 'transcribed_processed_pseudogene'
+          - 'transcribed_unitary_pseudogene'
+          - 'transcribed_unprocessed_pseudogene'
+          - 'TR_J_pseudogene'
+          - 'TR_V_pseudogene'
+          - 'unitary_pseudogene'
+          - 'unprocessed_pseudogene'
 
   evidence_postprocess_clinvar:
     - name: pyspark evidence_postprocess
@@ -859,7 +859,7 @@ steps:
       settings:
         evidence_format: parquet
         datasource_id: cancer_biomarkers
-        score_expression: "1.0"
+        score_expression: '1.0'
         unique_fields:
           - targetId
           - targetFromSourceId
@@ -959,7 +959,7 @@ steps:
       settings:
         evidence_format: json
         datasource_id: reactome
-        score_expression: "1.0"
+        score_expression: '1.0'
         unique_fields:
           - targetId
           - targetFromSourceId
@@ -983,7 +983,7 @@ steps:
       settings:
         evidence_format: parquet
         datasource_id: impc
-        score_expression: "resourceScore / 100"
+        score_expression: 'resourceScore / 100'
         unique_fields:
           - targetId
           - targetFromSourceId
@@ -1277,7 +1277,7 @@ steps:
       settings:
         evidence_format: parquet
         datasource_id: ot_crispr
-        score_expression: "1.0"
+        score_expression: '1.0'
         unique_fields:
           - targetId
           - targetFromSourceId
