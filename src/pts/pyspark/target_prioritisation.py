@@ -105,7 +105,7 @@ def compute_target_prioritisation(
         .transform(lambda df: _tep_query(df, targets))
         .transform(lambda df: _mouse_model_query(df, mouse_phenotypes, mouse_pheno_scores))
         .transform(lambda df: _chemical_probes_query(df, targets))
-        .transform(lambda df: _clin_trials_query(df, mechanism_of_action))
+        .transform(lambda df: _clin_trials_query(df, mechanism_of_action, molecule))
         .transform(lambda df: _tissue_specific_query(df, hpa_data))
     )
 
@@ -726,36 +726,54 @@ def _chemical_probes_query(queryset: DataFrame, targets: DataFrame) -> DataFrame
     return queryset.join(grouped, on='targetid', how='left')
 
 
-def _clin_trials_query(queryset: DataFrame, mechanism_of_action: DataFrame) -> DataFrame:
-    """Compute maximum clinical trial phase from mechanism of action.
+def _clin_trials_query(
+    queryset: DataFrame,
+    mechanism_of_action: DataFrame,
+    molecule: DataFrame,
+) -> DataFrame:
+    """Compute maximum clinical trial phase from MoA and molecule data.
 
-    Uses mechanism of action data instead of deprecated linkedTargets.
+    Uses MoA to find drug-target relationships, joins with molecule to get
+    clinical trial phases, then normalizes to 0-1 scale (phase / 4).
     """
-    # Get drug-target relationships and max clinical trial phase from MoA
+    # Get drug-target relationships from MoA
     drug_targets = (
         mechanism_of_action.select(
-            f.explode(f.col('targets')).alias('targets'),
+            f.explode(f.col('targets')).alias('target'),
             f.explode(f.col('chemblIds')).alias('chemblId'),
         )
         .distinct()
     )
 
-    # Since we don't have maximumClinicalTrialPhase in MoA directly,
-    # we'll just flag presence in clinical trials (set to 1 if target has any MoA)
-    # Note: For full implementation, this would need to be joined with drug data
-    # that has clinical trial phase information
-    drug_approved = (
-        drug_targets.groupBy('targets')
-        .agg(f.count('chemblId').alias('drugCount'))
+    # Get clinical trial phase from molecule data
+    molecule_phase = molecule.select(
+        f.col('id').alias('drugId'),
+        f.col('maximumClinicalTrialPhase'),
+    )
+
+    # Join drug-target with molecule to get clinical trial phase per target
+    drug_target_phase = drug_targets.join(
+        molecule_phase,
+        drug_targets['chemblId'] == molecule_phase['drugId'],
+        'left',
+    )
+
+    # Get max clinical trial phase per target, normalized to 0-1 scale
+    max_phase_per_target = (
+        drug_target_phase.dropDuplicates(['target', 'maximumClinicalTrialPhase'])
+        .groupBy('target')
+        .agg(f.max('maximumClinicalTrialPhase').alias('maxClinTrialPhase'))
         .withColumn(
             'inClinicalTrials',
-            f.when(f.col('drugCount') > 0, f.lit(1)).otherwise(f.lit(None)),
+            f.when(f.col('maxClinTrialPhase') >= 0, f.col('maxClinTrialPhase') / 4).otherwise(
+                f.lit(None)
+            ),
         )
     )
 
     return queryset.join(
-        drug_approved,
-        queryset['targetid'] == drug_approved['targets'],
+        max_phase_per_target,
+        queryset['targetid'] == max_phase_per_target['target'],
         'left',
     )
 

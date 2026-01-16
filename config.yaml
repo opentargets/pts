@@ -441,6 +441,8 @@ steps:
         uniprot_slterms: input/target_engine/uniprot_locations.tsv.gz
         mouse_pheno_scores: input/target_engine/mouse_pheno_scores.csv
       destination: output/target_prioritisation
+      properties:
+        spark.driver.memory: 16g
   ##################################################################################################
 
   #: TIMESERIES STEP :##############################################################################

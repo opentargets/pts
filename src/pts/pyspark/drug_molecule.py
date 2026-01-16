@@ -139,7 +139,6 @@ def process_drug_index(
             'chemicalProbeDrugId',
             'hasMechanismOfAction',
             'indications',
-            'maximumClinicalTrialPhase',
         )
         .transform(_cleanup)
         .dropDuplicates(['id'])
@@ -236,12 +235,8 @@ def _process_warnings(drug_warning: DataFrame) -> DataFrame:
         )
         .groupBy('id')
         .agg(
-            f.max(f.when(f.col('warningType') == 'Black Box Warning', True).otherwise(False)).alias(
-                'blackBoxWarning'
-            ),
-            f.max(f.when(f.col('warningType') == 'Withdrawn', True).otherwise(False)).alias(
-                'hasBeenWithdrawn'
-            ),
+            f.max(f.when(f.col('warningType') == 'Black Box Warning', True).otherwise(False)).alias('blackBoxWarning'),
+            f.max(f.when(f.col('warningType') == 'Withdrawn', True).otherwise(False)).alias('hasBeenWithdrawn'),
         )
     )
 
@@ -336,11 +331,7 @@ def _generate_description(
     indication_str = ''
     if indication_phases is not None and indication_labels is not None:
         indications = list(zip(indication_phases, indication_labels, strict=False))
-        indications = [
-            (phase, label)
-            for phase, label in indications
-            if phase is not None and label is not None
-        ]
+        indications = [(phase, label) for phase, label in indications if phase is not None and label is not None]
         indications = list(set(indications))
 
         approved = [label for phase, label in indications if phase == 4.0]
@@ -364,8 +355,7 @@ def _generate_description(
                 )
             else:
                 indication_str = (
-                    f' and has {len(approved)} approved'
-                    f' and {investigational_count} investigational indication{s}'
+                    f' and has {len(approved)} approved and {investigational_count} investigational indication{s}'
                 )
 
     # Main sentence
