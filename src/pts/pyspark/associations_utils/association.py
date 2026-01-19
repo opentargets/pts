@@ -8,9 +8,10 @@ from typing import ClassVar
 
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as f
+from pyspark.sql import types as t
 from pyspark.sql.window import Window, WindowSpec
 
-from pts.pyspark.timeseries_utils.dataset import Dataset
+from pts.pyspark.associations_utils.dataset import Dataset
 
 
 @dataclass
@@ -22,14 +23,197 @@ class Association(Dataset):
         'diseaseId',
         'targetId',
         'year',
-        'yearlyEvidenceScores',
-        'yearlyAssociationScore',
+        'associationScore',
         'aggregationType',
         'aggregationValue',
+        'yearlyEvidenceCount',
     ]
 
     # This is the default set of columns we group evidence by, used for association calculation:
     GROUPBY_COLUMNS: ClassVar[list[str]] = ['diseaseId', 'targetId', 'aggregationType', 'aggregationValue']
+
+    def aggregate_overall(self: Association, datasource_weights: DataFrame) -> Association:
+        """Apply overall aggregation on the datasource data.
+
+        Args:
+            datasource_weights (DataFrame): for each datasource we need to provide weights and corresponding datatype
+
+        Returns:
+            Association: where the datasources are further aggregated fully.
+        """
+        # Aggregate value expression:
+        aggregation_type_expression = f.lit('overall')
+        aggregation_value_expression = f.lit('None')
+
+        # Association scores are weighted by datasource weight:
+        score_expression = f.col('associationScore') * f.col('weight')
+
+        # To calculate the association score we normalise with the maximum value of the harmonic sum:
+        association_expression = self._get_harmonic_sum(f.col('datasourceMaxScores')) / self.MAX_HARMONIC_SUM
+
+        return self._aggregate_associations(
+            aggregation_type_expression,
+            aggregation_value_expression,
+            score_expression,
+            association_expression,
+            datasource_weights,
+        )
+
+    def aggregate_by_datatype(self: Association, datasource_weights: DataFrame) -> Association:
+        """Apply further aggregation based on data types.
+
+        Args:
+            datasource_weights (DataFrame): for each datasource we need to provide weights and corresponding datatype
+
+        Returns:
+            Association: where the datasources are further aggregated by datatypes.
+        """
+        # Aggregate value expression:
+        aggregation_type_expression = f.lit('datatypeId')
+        aggregation_value_expression = f.col('datatypeId')
+
+        # Association scores are not weighted by datasource weitht:
+        score_expression = f.col('associationScore')
+
+        # To calculate the association score, we normalise by the theoretical maximum of the harmonic sum:
+        association_expression = self._get_harmonic_sum(f.col('datasourceMaxScores')) / self._get_harmonic_sum(
+            f.array_repeat(f.lit(1.0), f.size('datasourceMaxScores'))
+        )
+
+        return self._aggregate_associations(
+            aggregation_type_expression,
+            aggregation_value_expression,
+            score_expression,
+            association_expression,
+            datasource_weights,
+        )
+
+    def _aggregate_associations(
+        self: Association,
+        aggregation_type_expression: Column,
+        aggregation_value_expression: Column,
+        score_expression: Column,
+        association_expression: Column,
+        datasource_weights: DataFrame,
+    ) -> Association:
+        """Further aggregate association data.
+
+        Upon aggregating evidence by datasource, we get an "Association" object. This, however
+        can be further aggregated by datatypes or overall. These further aggregation would yield
+        datasets with identical schema.
+
+        Args:
+            aggregation_type_expression (Columns): column expression describing how the data is aggregated
+            aggregation_value_expression (Columns): column expression describing aggregated group
+            score_expression (Column): column expression describing how the scores are processed
+            association_expression (Column): expression describing how the association score is computed
+            datasource_weights (DataFrame): for each datasource we need to provide weights and corresponding datatype
+
+        Returns:
+            Association object. associations with type of aggregation, with more or less rows.
+        """
+        collect_window = (
+            Window.partitionBy(['targetId', 'diseaseId', 'aggregationValue'])
+            .orderBy(f.col('year').asc())
+            .rowsBetween(Window.unboundedPreceding, 0)
+        )
+
+        return Association(
+            self.df.select(
+                'targetId',
+                'diseaseId',
+                'yearlyEvidenceCount',
+                'associationScore',
+                'year',
+                f.col('aggregationValue').alias('datasourceId'),
+            )
+            .join(datasource_weights, on='datasourceId', how='inner')
+            .select(
+                'targetId',
+                'diseaseId',
+                'year',
+                score_expression.alias('associationScore'),
+                aggregation_type_expression.alias('aggregationType'),
+                aggregation_value_expression.alias('aggregationValue'),
+                'yearlyEvidenceCount',
+                'datasourceId',
+            )
+            .drop('weight')
+            .withColumn(
+                'dataset_scores',
+                f.collect_list(f.struct('datasourceId', 'associationScore')).over(collect_window),
+            )
+            .withColumn('datasourceMaxScores', self._retain_max_scores(f.col('dataset_scores')))
+            .withColumn('associationScore', association_expression)
+            .groupby('targetId', 'diseaseId', 'aggregationValue', 'year', 'aggregationType')
+            .agg(
+                f.max('associationScore').alias('associationScore'),
+                f.sum('yearlyEvidenceCount').alias('yearlyEvidenceCount'),
+            )
+            .orderBy('targetId', 'diseaseId', 'year')
+        )
+
+    def compute_novelty(
+        self: Association,
+        novelty_window: int = 10,
+        novelty_scale: int = 2,
+        novelty_shift: int = 2,
+    ) -> DataFrame:
+        """Calculate novelty.
+
+        Args:
+            novelty_window (int): size of the window. Default value 10.
+            novelty_scale (int): how quickly the novelty decays. Default value 2.
+            novelty_shift (int): Novelty shift
+
+        Returns:
+            DataFrame: novelty dataset.
+        """
+        # Generate a complete dataset with filled data for missing years:
+        intermediate_dataset = self._back_fill_missing_years(self.df.na.fill({'aggregationValue': 'NA'}))
+
+        # Calculate novelty based on subsequent years:
+        novelty = self._get_novelty(
+            intermediate_dataset, self.GROUPBY_COLUMNS, novelty_window, novelty_shift, novelty_scale
+        )
+        novelty.write.mode('overwrite').parquet('novelty')
+
+        # Next year:
+        current_year = datetime.now().year
+
+        return (
+            intermediate_dataset
+            # add max novelty values to original dataframe disease-target-year
+            .join(
+                novelty,
+                [*self.GROUPBY_COLUMNS, 'year'],
+                'left',
+            )
+            # Remove the future date from time series - future dates represent evidence with no evidence date:
+            .withColumns({
+                'year': f.when(f.col('year') <= current_year, f.col('year')).otherwise(None),
+                'novelty': f.when(f.col('year') <= current_year, f.col('novelty')).otherwise(None),
+            })
+            # Collate the yearly associations into a single association object:
+            .groupby(self.GROUPBY_COLUMNS)
+            .agg(
+                # Get the highest association value:
+                f.max(f.col('associationScore')).alias('associationScore'),
+                # Get the total number of supporting evidence:
+                f.sum('yearlyEvidenceCount').alias('evidenceCount'),
+                # Get the timeseries object:
+                f.collect_list(f.struct('year', 'associationScore', 'novelty', 'yearlyEvidenceCount')).alias(
+                    'timeseries'
+                ),
+            )
+            # Adding current novelty, which allows for quick filtering:
+            .withColumns({
+                # The current novelty is the novelty in the current year:
+                'currentNovelty': f.filter('timeseries', lambda x: x.year == current_year)[0].novelty,
+                'aggregationValue': f.when(f.col('aggregationValue') != 'NA', f.col('aggregationValue')),
+                'associationScore': f.filter('timeseries', lambda x: x.year.isNull())[0].associationScore,
+            })
+        )
 
     @staticmethod
     def _get_peak(scores: Column, window: WindowSpec) -> Column:
@@ -91,7 +275,7 @@ class Association(Dataset):
         Returns:
             DataFrame:
         """
-        last_year = datetime.now().year
+        last_year = datetime.now().year + 1
         window_spec = (
             Window.partitionBy('targetId', 'diseaseId')
             .orderBy('year')
@@ -142,9 +326,9 @@ class Association(Dataset):
             # Filling missing association scores from previous non-null years:
             .withColumn(
                 # Propagating non-null association scores from earlier years:
-                'yearlyAssociationScore',
+                'associationScore',
                 f.coalesce(
-                    f.last('yearlyAssociationScore', ignorenulls=True).over(
+                    f.last('associationScore', ignorenulls=True).over(
                         window_spec.rowsBetween(Window.unboundedPreceding, 0)
                     ),
                     f.lit(0),
@@ -176,7 +360,7 @@ class Association(Dataset):
         return (
             intermediate_dataset
             # Marking peaks:
-            .withColumn('peak', Association._get_peak(f.col('yearlyAssociationScore'), window_spec))
+            .withColumn('peak', Association._get_peak(f.col('associationScore'), window_spec))
             .withColumnRenamed('year', 'associationYear')
             # Drawing around the window:
             .select('*', Association._windowing_around_peak(f.col('associationYear'), novelty_window))
@@ -237,54 +421,6 @@ class Association(Dataset):
         """
         return f.max(score_value / (1 + f.exp(decay_steepness * (window_difference - f.lit(sigmoid_midpoint)))))
 
-    def compute_novelty(
-        self: Association,
-        novelty_window: int = 10,
-        novelty_scale: int = 2,
-        novelty_shift: int = 2,
-    ) -> DataFrame:
-        """Calculate novelty.
-
-        Args:
-            novelty_window (int): size of the window. Default value 10.
-            novelty_scale (int): how quickly the novelty decays. Default value 2.
-            novelty_shift (int): Novelty shift
-
-        Returns:
-            DataFrame: novelty dataset.
-        """
-        # Generate a complete dataset with filled data for missing years:
-        intermediate_dataset = self._back_fill_missing_years(self.df.na.fill({'aggregationValue': 'NA'}))
-
-        # Calculate novelty based on subsequent years:
-        novelty = self._get_novelty(
-            intermediate_dataset, self.GROUPBY_COLUMNS, novelty_window, novelty_shift, novelty_scale
-        )
-
-        return (
-            # spark.read.parquet('test_association')
-            intermediate_dataset
-            # add max. novelty values to original dataframe disease-target-year
-            .join(
-                novelty,
-                [*self.GROUPBY_COLUMNS, 'year'],
-                'left',
-            )
-            .filter(f.col('novelty').isNotNull())
-            .groupby(self.GROUPBY_COLUMNS)
-            .agg(
-                f.max(f.col('yearlyAssociationScore')).alias('associationScore'),
-                f.collect_list(f.struct('year', 'yearlyAssociationScore', 'novelty', 'yearlyEvidenceScores')).alias(
-                    'timeseries'
-                ),
-            )
-            # Adding current novelty, which allows for quick filtering:
-            .withColumns({
-                'currentNovelty': f.filter('timeseries', lambda x: x.year == datetime.now().year)[0].novelty,
-                'aggregationValue': f.when(f.col('aggregationValue') != 'NA', f.col('aggregationValue')),
-            })
-        )
-
     @staticmethod
     def _windowing_around_peak(peak: Column, window: int) -> Column:
         """Window around peak.
@@ -317,3 +453,34 @@ class Association(Dataset):
         <BLANKLINE>
         """
         return f.posexplode(f.sequence(peak, peak + f.lit(window))).alias('year-peakYear', 'year')
+
+    @staticmethod
+    def _retain_max_scores(array_col: Column) -> Column:
+        """Return an array of structs with unique datasourceId and max associationScore."""
+        empty_arr = f.array().cast(
+            t.ArrayType(
+                t.StructType([
+                    t.StructField('datasourceId', t.StringType(), True),
+                    t.StructField('associationScore', t.DoubleType(), True),
+                ])
+            )
+        )
+        max_scores = f.aggregate(
+            array_col,
+            empty_arr,
+            lambda acc, x: f.when(
+                f.exists(acc, lambda a: a.datasourceId == x.datasourceId),
+                f.transform(
+                    acc,
+                    lambda a: f.when(
+                        a.datasourceId == x.datasourceId,
+                        f.struct(
+                            a.datasourceId.alias('datasourceId'),
+                            f.greatest(a.associationScore, x.associationScore).alias('associationScore'),
+                        ),
+                    ).otherwise(a),
+                ),
+            ).otherwise(f.concat(acc, f.array(x))),
+        )
+
+        return f.transform(max_scores, lambda datasource: datasource.getField('associationScore'))
