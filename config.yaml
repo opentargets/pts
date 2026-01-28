@@ -440,6 +440,14 @@ steps:
       transformer: clinical_report
   ##################################################################################################
 
+  #: CLINICAL_INDICATION STEP :####################################################################
+  clinical_indication:
+    - name: transform clinical_indication
+      source: output/clinical_report
+      destination: output/clinical_indication
+      transformer: clinical_indication
+  ##################################################################################################
+
   #: TARGET_PRIORITISATION STEP :###################################################################
   target_prioritisation:
     - name: pyspark target_prioritisation
