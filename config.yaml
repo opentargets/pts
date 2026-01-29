@@ -250,7 +250,7 @@ steps:
       source:
         chembl_evidence: input/evidence/chembl/chembl.json.gz
         stop_reasons: input/evidence/chembl/stop_reasons.json
-        drug_indications: input/drug/chembl_drug_indication.jsonl
+        clinical_report: output/clinical_report
       destination: intermediate/evidence/chembl.parquet
   ##################################################################################################
 

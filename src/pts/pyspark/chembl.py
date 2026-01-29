@@ -20,13 +20,28 @@ def chembl(
     categorisation of the clinical trial reason to stop.
 
     The evidence from clinical trials is also filtered for Phase IV trials.
+
+    Args:
+        source: Dictionary with paths to:
+            - chembl_evidence: ChEMBL evidence JSON
+            - stop_reasons: Stop reasons JSON
+            - clinical_report: Clinical report parquet from clinical_report step
+        destination: Path to write the output parquet file.
+        settings: Custom settings (not used).
+        properties: Spark configuration options.
     """
+    # TODO: Implement drug approvals processing using clinical_report dataset
+    raise NotImplementedError(
+        'evidence_chembl step is temporarily disabled. '
+        'The logic to process drug approvals from clinical_report is not yet implemented.'
+    )
+
     spark = Session(app_name='gene_burden', properties=properties)
 
     logger.info(f'load data from {source}')
     chembl_df = spark.load_data(source['chembl_evidence'], format='json')
     predictions_df = spark.load_data(source['stop_reasons'], format='json')
-    chembl_indications_df = spark.load_data(source['drug_indications'], format='json')
+    clinical_report_df = spark.load_data(source['clinical_report'])  # noqa: F841
 
     logger.info('Joining ChEMBL evidence with predicted stopped reasons')
     pretty_predictions_df = predictions_df.transform(prettify_subclasses).distinct()
