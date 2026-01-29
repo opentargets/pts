@@ -29,12 +29,18 @@ def drug_molecule(
             - chemical_probes: Chemical probes parquet
             - mechanism_of_action: Mechanism of action parquet
             - drug_warning: Drug warnings parquet
-            - indication: ChEMBL indication JSONL
+            - clinical_report: Clinical report parquet from clinical_report step
             - disease: Disease/EFO parquet
         destination: Path to write the output parquet file.
         _settings: Custom settings (not used).
         properties: Spark configuration options.
     """
+    # TODO: Implement indication processing using clinical_report dataset
+    raise NotImplementedError(
+        'drug_molecule step is temporarily disabled. '
+        'The logic to process indications from clinical_report is not yet implemented.'
+    )
+
     spark = Session(app_name='drug_molecule', properties=properties)
 
     logger.info(f'Loading data from {source}')
@@ -42,7 +48,7 @@ def drug_molecule(
     chemical_probes_df = spark.load_data(source['chemical_probes'])
     mechanism_df = spark.load_data(source['mechanism_of_action'])
     warning_df = spark.load_data(source['drug_warning'])
-    indication_raw_df = spark.load_data(source['indication'], format='json')
+    clinical_report_df = spark.load_data(source['clinical_report'])  # noqa: F841
     disease_df = spark.load_data(source['disease'])
 
     logger.info('Processing drug index')
