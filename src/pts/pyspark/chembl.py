@@ -23,25 +23,25 @@ def chembl(
 
     Args:
         source: Dictionary with paths to:
-            - chembl_evidence: ChEMBL evidence JSON
             - stop_reasons: Stop reasons JSON
             - clinical_report: Clinical report parquet from clinical_report step
+            - drug_mechanism_of_action: Drug mechanism of action parquet
         destination: Path to write the output parquet file.
         settings: Custom settings (not used).
         properties: Spark configuration options.
     """
-    # TODO: Implement drug approvals processing using clinical_report dataset
+    # TODO: Implement processing using clinical_report and drug_mechanism_of_action datasets
     raise NotImplementedError(
         'evidence_chembl step is temporarily disabled. '
-        'The logic to process drug approvals from clinical_report is not yet implemented.'
+        'The logic to process clinical_report and drug_mechanism_of_action is not yet implemented.'
     )
 
     spark = Session(app_name='gene_burden', properties=properties)
 
     logger.info(f'load data from {source}')
-    chembl_df = spark.load_data(source['chembl_evidence'], format='json')
     predictions_df = spark.load_data(source['stop_reasons'], format='json')
     clinical_report_df = spark.load_data(source['clinical_report'])  # noqa: F841
+    drug_moa_df = spark.load_data(source['drug_mechanism_of_action'])  # noqa: F841
 
     logger.info('Joining ChEMBL evidence with predicted stopped reasons')
     pretty_predictions_df = predictions_df.transform(prettify_subclasses).distinct()

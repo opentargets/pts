@@ -248,9 +248,9 @@ steps:
     - name: pyspark chembl
       pyspark: chembl
       source:
-        chembl_evidence: input/evidence/chembl/chembl.json.gz
         stop_reasons: input/evidence/chembl/stop_reasons.json
         clinical_report: output/clinical_report
+        drug_mechanism_of_action: output/drug_mechanism_of_action
       destination: intermediate/evidence/chembl.parquet
   ##################################################################################################
 
