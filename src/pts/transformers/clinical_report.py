@@ -12,6 +12,7 @@ def clinical_report(source: dict[str, Path], destination: dict[str, Path]) -> No
         source: Dictionary containing paths to input data:
             - chembl_molecule: Path to ChEMBL molecule data (intermediate/chembl_molecule)
             - disease: Path to disease data (output/disease)
+            - drug_warning: Path to drug warning data (output/drug_warning)
         destination: Dictionary containing paths to output data:
             - output: Path to write valid clinical reports (output/clinical_report)
             - excluded: Path to write invalid clinical reports (excluded/clinical_report)

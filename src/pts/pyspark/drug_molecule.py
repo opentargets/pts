@@ -28,7 +28,6 @@ def drug_molecule(
             - molecule: Processed molecule parquet
             - chemical_probes: Chemical probes parquet
             - mechanism_of_action: Mechanism of action parquet
-            - drug_warning: Drug warnings parquet
             - clinical_report: Clinical report parquet from clinical_report step
             - disease: Disease/EFO parquet
         destination: Path to write the output parquet file.
@@ -47,7 +46,6 @@ def drug_molecule(
     molecule_df = spark.load_data(source['molecule'])
     chemical_probes_df = spark.load_data(source['chemical_probes'])
     mechanism_df = spark.load_data(source['mechanism_of_action'])
-    warning_df = spark.load_data(source['drug_warning'])
     clinical_report_df = spark.load_data(source['clinical_report'])  # noqa: F841
     disease_df = spark.load_data(source['disease'])
 
@@ -56,7 +54,6 @@ def drug_molecule(
         molecule_df,
         chemical_probes_df,
         mechanism_df,
-        warning_df,
         indication_raw_df,
         disease_df,
     )
