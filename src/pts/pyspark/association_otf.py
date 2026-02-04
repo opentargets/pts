@@ -6,6 +6,8 @@ Ported from the Scala AssociationOTF class in platform-etl-backend.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pyspark.sql.functions as f
 from loguru import logger
 from pyspark.sql import DataFrame
@@ -122,7 +124,10 @@ def _compute_facet_tractability(df: DataFrame) -> DataFrame:
 
 
 def association_otf(
-    source: dict[str, str], destination: str, settings: dict[str, str] | None, properties: dict[str, str]
+    source: dict[str, str],
+    destination: str,
+    settings: dict[str, Any],
+    properties: dict[str, str],
 ) -> None:
     """Enrich evidence with disease and target facet data for ClickHouse.
 
@@ -139,11 +144,9 @@ def association_otf(
     spark = Session(app_name='association_otf', properties=properties)
 
     logger.info(f'Loading data from {source}')
-    diseases_raw = spark.load_data(source['disease'])
-    targets_raw = spark.load_data(source['target'])
-    evidences_raw = spark.load_data(source['evidence'])
-    assocation_direct = spark.load_data(source['association_direct'])
-    assocation_indirect = spark.load_data(source['association_indirect'])
+    diseases_raw = spark.load_data(source['diseases'])
+    targets_raw = spark.load_data(source['targets'])
+    evidences_raw = spark.load_data(source['evidences'])
 
     # Process diseases: select relevant columns and compute therapeutic area facets.
     diseases = (
@@ -201,41 +204,17 @@ def association_otf(
         .drop('reactome', 'tractability')
     )
 
-    # Process direct and indirect assocation data:
-    novelty_direct = assocation_direct.select('targetId', 'diseaseId', f.col('currentNovelty').alias('noveltyDirect'))
-
-    novelty_indirect = assocation_indirect.select(
-        'targetId', 'diseaseId', f.col('currentNovelty').alias('noveltyIndirect')
-    )
-
     # Join evidences with enriched disease and target data.
     evidences = evidences_raw.select(
-        f.col('id').alias('rowId'),
+        'id',
         'diseaseId',
         'targetId',
         'datasourceId',
         'datatypeId',
-        f.col('score').alias('rowScore'),
+        'score',
     )
 
-    result = (
-        evidences.join(final_diseases, ['diseaseId'], 'left_outer')
-        .join(final_targets, ['targetId'], 'left_outer')
-        .join(novelty_direct, on=['diseaseId', 'targetId'], how='left')
-        .join(novelty_indirect, on=['diseaseId', 'targetId'], how='left')
-        .select(
-            'rowId',
-            'diseaseId',
-            'targetId',
-            'datasourceId',
-            'datatypeId',
-            'rowScore',
-            'diseaseData',
-            'targetData',
-            'noveltyDirect',
-            'noveltyIndirect',
-        )
-    )
+    result = evidences.join(final_diseases, ['diseaseId'], 'left_outer').join(final_targets, ['targetId'], 'left_outer')
 
     logger.info(f'Writing association OTF data to {destination}')
     result.write.parquet(destination, mode='overwrite')
