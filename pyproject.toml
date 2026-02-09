@@ -8,13 +8,14 @@ dependencies = [
   "loguru==0.7.3",
   "opentargets-otter==25.0.16",
   "pandas>=2.3.2",
-  "ontoma==2.1.1",
   "polars==1.38.1",
   "pyspark==3.5.7",
   "openai>=2.7.2",
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
+  "clinical-mining",
+  "ontoma",
 ]
 
 [dependency-groups]
@@ -29,6 +30,10 @@ pts = "pts.core:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il_filter_drug_label_lut" }
+clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
