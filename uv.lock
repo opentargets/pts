@@ -222,7 +222,7 @@ wheels = [
 [[package]]
 name = "clinical-mining"
 version = "0.1.0"
-source = { git = "https://github.com/opentargets/clinical_mining#1e7236c0b34823b72cb195f31496ae60790a03ff" }
+source = { git = "https://github.com/opentargets/clinical_mining#6a2c5c94178fa29866300b8cb676d30c127587ba" }
 dependencies = [
     { name = "altair" },
     { name = "connectorx" },

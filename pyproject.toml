@@ -14,8 +14,8 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
-  "clinical-mining",
   "ontoma",
+  "clinical-mining",
 ]
 
 [dependency-groups]

@@ -433,10 +433,20 @@ steps:
       source:
         chembl_molecule: intermediate/chembl_molecule
         disease: output/disease
-        drug_warning: output/drug_warning
+        pmda: input/clinical_report/pmda.pdf
+        ttd: input/clinical_report/ttd.txt
+        ema: input/clinical_report/ema_medicines.xlsx
+        # chembl_curation: input/clinical_report/chembl_curation.parquet
+        ner_cache_path: input/clinical_report/ner_cache
+
       destination:
         output: output/clinical_report
-        excluded: excluded/clinical_report
+      properties:
+        aact_db_type: postgresql
+        aact_db_uri: localhost:5432/aact
+        chembl_db_type: postgresql
+        chembl_db_uri: localhost:5432/chembl_36
+        ner_batch_size: 256
       transformer: clinical_report
   ##################################################################################################
 
