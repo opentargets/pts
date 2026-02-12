@@ -22,8 +22,6 @@ class CellexAnalysis:
     ):
         self.spark = spark
         self.mode = mode
-        self.expression_matrix_path = expression_matrix_path
-        self.metadata_path = metadata_path
         self.output_path = output_path
         self.biosample = biosample
         self.sample_id = sample_id
@@ -31,9 +29,9 @@ class CellexAnalysis:
         self.do_anova = do_anova
         self.input_path = input_path
 
-    def run_cellex_analysis(self, expression_matrix, metadata, output_suffix):
+    def run_cellex_analysis(self, expression_matrix, metadata):
         """Run CELLEX analysis on expression matrix and metadata."""
-        logger.info(f'Processing {output_suffix}')
+        logger.info('Processing CELLEX analysis')
 
         # Create ESObject (Expression Specificity Object)
         eso = cellex.ESObject(
@@ -50,7 +48,7 @@ class CellexAnalysis:
 
         # Save results
         if self.output_path:
-            output_path = f'{self.output_path}/{output_suffix}'
+            output_path = f'{self.output_path}/cellex'
             logger.info(f'Saving results to: {output_path}')
             eso.save_as_csv(keys=['all'], verbose=True, path=output_path)
         else:
@@ -58,14 +56,14 @@ class CellexAnalysis:
 
     def load_from_matrices(self):
         """Load expression matrix and metadata from files."""
-        logger.info(f'Loading expression matrix from: {self.expression_matrix_path}/matrix/')
-        expression_matrix = pd.read_csv(f'{self.expression_matrix_path}/matrix/matrix.tsv', sep='\t', index_col=0)
+        logger.info(f'Loading expression matrix from: {self.input_path}/matrix/')
+        expression_matrix = pd.read_csv(f'{self.input_path}/matrix/expression.tsv', sep='\t', index_col=0)
 
         logger.info(f'Expression matrix shape: {expression_matrix.shape}')
 
         # Load metadata
-        logger.info(f'Loading metadata from: {self.metadata_path}')
-        metadata = pd.read_csv(self.metadata_path, sep='\t')
+        logger.info(f'Loading metadata from: {self.input_path}/matrix/metadata.tsv')
+        metadata = pd.read_csv(f'{self.input_path}/matrix/metadata.tsv', sep='\t')
 
         logger.info(f'Metadata shape before processing: {metadata.shape}')
 
@@ -125,10 +123,10 @@ class CellexAnalysis:
             logger.info(f'Reading parquet from provided input path: {self.input_path}/parquet')
             df = self.spark.read.parquet(f'{self.input_path}/parquet')
         else:
-            raise ValueError('input_path is required for parquet mode')
+            raise ValueError('input_path is required.')
 
         # Set biosample column name dynamically
-        if self.biosample != 'both':
+        if self.biosample not in ('both', 'tissuecelltype'):
             biosample_col = f'{self.biosample}BiosampleId'
             # Concatenate biosampleId and donorId to create a unique sample identifier
             df = df.withColumn(
@@ -160,18 +158,13 @@ class CellexAnalysis:
         return expression_matrix, metadata
 
     def run(self):
-        output_suffix = f'cellex-{self.biosample}'
         # Process based on mode
         if self.mode == 'matrix':
             # Load from matrix files
             expression_matrix, metadata = self.load_from_matrices()
-
-            # Run CELLEX analysis
-            self.run_cellex_analysis(expression_matrix, metadata, output_suffix)
-
         else:
             # Load from parquet files
             expression_matrix, metadata = self.process_from_parquet()
 
-            # Run CELLEX analysis
-            self.run_cellex_analysis(expression_matrix, metadata, output_suffix)
+        # Run CELLEX analysis
+        self.run_cellex_analysis(expression_matrix, metadata)
