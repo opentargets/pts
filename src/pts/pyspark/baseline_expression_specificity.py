@@ -30,6 +30,7 @@ def baseline_expression_specificity(
         # Extract settings
         datasource = settings.get('datasource')
         biosample = settings.get('biosample')
+        mode = settings.get('mode', 'parquet')
 
         if not all([datasource, biosample]):
             logger.warning(
@@ -39,10 +40,11 @@ def baseline_expression_specificity(
 
         cellex_analysis = CellexAnalysis(
             spark=spark,
-            mode='parquet',
+            mode=mode,
             input_path=input_path,
             output_path=destination,
             biosample=biosample,
+            sample_id=settings.get('sample_id'),
             do_anova=settings.get('do_anova', True)
         )
         cellex_analysis.run()
