@@ -43,7 +43,7 @@ def baseline_expression_harmonise(
             json=False,
             local=False
         ).run()
-    elif harmoniser == 'tabula_sapiens':
+    elif harmoniser == 'cellxgene':
         # Extract arguments
         h5ad_path = source['h5ad_path']
         output_directory_path = destination['baseline_expression']
@@ -76,8 +76,8 @@ def baseline_expression_harmonise(
         )
 
     elif harmoniser == 'pride':
-        pride_source_data_dir = source['pride_source_data_dir']
-        pride_codes = source['pride_codes']
+        pride_source_data_dir = source['pride_directory']
+        pride_codes = settings.get('pride_codes')
         tissue_ontology_mapping_path = source['tissue_ontology_mapping_path']
         target_index_path = source['target_index_path']
         output_directory_path = destination['baseline_expression']
