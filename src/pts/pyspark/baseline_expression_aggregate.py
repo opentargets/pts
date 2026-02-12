@@ -107,7 +107,7 @@ class AggregateExpression:
             s = f.coalesce(f.col(colname).cast('string'), f.lit(''))
             arr = f.split(s, delim)
             arr = f.transform(arr, lambda x: f.trim(x))
-            return f.filter(arr, lambda x: x.isNotNull() & x)
+            return f.filter(arr, lambda x: x.isNotNull() & (x != ''))  # noqa: PLC1901
 
         # ---- build long mapping directly (skip any list middleman) ----
         long_parts = [
@@ -115,14 +115,14 @@ class AggregateExpression:
             for c in other_cols
         ]
         mapping_long = reduce(lambda a, b: a.unionByName(b), long_parts) \
-            .filter(f.col('value').isNotNull() & f.col('value'))
+            .filter(f.col('value').isNotNull() & (f.col('value') != ''))  # noqa: PLC1901
 
         # Enrich with norm & pretty; choose ONE row per norm deterministically (min key).
         enriched = (
             mapping_long
             .withColumn('norm', norm('value'))
             .withColumn('pretty', pretty('value'))
-            .filter(f.col('norm'))
+            .filter(f.col('norm') != '')  # noqa: PLC1901
         )
         min_key_by_norm = enriched.groupBy('norm').agg(f.min(f.col(key_col)).alias(key_col))
         mapping_norm = (
@@ -327,7 +327,7 @@ class AggregateExpression:
         # Helper: trim -> drop null/empty -> sort -> join
         def join_sorted(arr_col, out_name):
             arr_trim = f.transform(f.col(arr_col), lambda x: f.when(x.isNull(), None).otherwise(f.trim(x)))
-            arr_keep = f.filter(arr_trim, lambda x: x.isNotNull() & x)
+            arr_keep = f.filter(arr_trim, lambda x: x.isNotNull() & (x != ''))  # noqa: PLC1901
             arr_sorted = f.array_sort(arr_keep)  # simple lexicographic sort; duplicates preserved
             return f.when(f.size(arr_sorted) > 0, f.array_join(arr_sorted, sep)).otherwise(f.lit(None)).alias(out_name)
 
