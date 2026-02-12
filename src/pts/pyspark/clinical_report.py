@@ -1,10 +1,8 @@
 """Clinical report dataset generation."""
 
-from pathlib import Path
-
 import polars as pl
 from clinical_mining.data_sources.aact import extract_clinical_report as extract_aact_clinical_report
-from clinical_mining.data_sources.chembl.drug_warning import (
+from clinical_mining.data_sources.chembl.drug_warnings import (
     extract_clinical_report as extract_drug_warning_clinical_report,
 )
 from clinical_mining.data_sources.chembl.indications import extract_clinical_report as extract_chembl_clinical_report
@@ -19,33 +17,37 @@ from clinical_mining.utils.spark_helpers import spark_session
 from loguru import logger
 
 
-def clinical_report(source: dict[str, Path], destination: dict[str, Path], properties: dict[str, str]) -> None:
+def clinical_report(
+    source: dict[str, str], destination: dict[str, str], settings: dict[str, str], properties: dict[str, str]
+) -> None:
     """Generate clinical report dataset from ChEMBL molecules and disease data.
 
     Args:
         source: Dictionary containing paths to input data
         destination: Dictionary containing paths to output data:
             - output: Path to write clinical reports (output/clinical_report)
-        properties: Dictionary containing step variables
+        settings: Dictionary containing step variables
+        properties: Dictionary containing spark configuration
     """
     logger.info(f'Source paths: {source}')
     aact_uri = construct_db_uri(
-        db_type=properties['aact_db_type'],
-        db_uri=properties['aact_db_uri'],
+        db_type=settings['aact_db_type'],
+        db_uri=settings['aact_db_uri'],
     )
     chembl_uri = construct_db_uri(
-        db_type=properties['chembl_db_type'],
-        db_uri=properties['chembl_db_uri'],
+        db_type=settings['chembl_db_type'],
+        db_uri=settings['chembl_db_uri'],
     )
     spark = spark_session()
 
-    molecule_index_spark = spark.read.parquet(source['chembl_molecule'])
+    # molecule_index_spark = spark.read.parquet(source['chembl_molecule'])
+    molecule_index_spark = spark.read.parquet('/Users/irenelopez/EBI/repos/pts/work/intermediate/chembl_molecule')
     disease_index_spark = spark.read.parquet(source['disease'])
     chembl_curation = pl.read_parquet(source['chembl_curation']) if 'chembl_curation' in source else None
 
     aact_studies = load_db_table(
         table_name='studies',
-        db_uri=aact_uri,
+        db_url=aact_uri,
         db_schema='ctgov',
         select_cols=[
             'nct_id',
@@ -60,49 +62,49 @@ def clinical_report(source: dict[str, Path], destination: dict[str, Path], prope
     )
     aact_interventions = load_db_table(
         table_name='interventions',
-        db_uri=aact_uri,
+        db_url=aact_uri,
         db_schema='ctgov',
         select_cols=['nct_id', 'intervention_type', 'name'],
     )
     aact_conditions = load_db_table(
-        table_name='conditions', db_uri=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'downcase_name']
+        table_name='conditions', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'downcase_name']
     )
     aact_study_references = load_db_table(
         table_name='study_references',
-        db_uri=aact_uri,
+        db_url=aact_uri,
         db_schema='ctgov',
         select_cols=['nct_id', 'pmid', 'reference_type'],
     )
     aact_designs = load_db_table(
-        table_name='designs', db_uri=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'primary_purpose']
+        table_name='designs', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'primary_purpose']
     )
     aact_summaries = load_db_table(
-        table_name='brief_summaries', db_uri=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'description']
+        table_name='brief_summaries', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'description']
     )
     chembl_indication = load_db_table(
         table_name='drug_indication',
-        db_uri=chembl_uri,
+        db_url=chembl_uri,
         db_schema='public',
         select_cols=['drugind_id', 'molregno', 'max_phase_for_ind', 'efo_id', 'efo_term'],
     )
     chembl_indication_references = load_db_table(
         table_name='indication_refs',
-        db_uri=chembl_uri,
+        db_url=chembl_uri,
         db_schema='public',
         select_cols=['drugind_id', 'ref_type', 'ref_id', 'ref_url'],
     )
     chembl_molecule = load_db_table(
-        table_name='molecule_dictionary', db_uri=chembl_uri, db_schema='public', select_cols=['molregno', 'chembl_id']
+        table_name='molecule_dictionary', db_url=chembl_uri, db_schema='public', select_cols=['molregno', 'chembl_id']
     )
     chembl_drug_warning = load_db_table(
         table_name='drug_warning',
-        db_uri=chembl_uri,
+        db_url=chembl_uri,
         db_schema='public',
         select_cols=['warning_id', 'molregno', 'warning_type', 'warning_year', 'warning_country', 'efo_id', 'efo_term'],
     )
     chembl_drug_warning_references = load_db_table(
         table_name='warning_refs',
-        db_uri=chembl_uri,
+        db_url=chembl_uri,
         db_schema='public',
         select_cols=['warning_id', 'ref_type', 'ref_id', 'ref_url'],
     )
@@ -117,18 +119,18 @@ def clinical_report(source: dict[str, Path], destination: dict[str, Path], prope
     )
     chembl_indication = extract_chembl_clinical_report(
         drug_indication=chembl_indication,
-        molectule_dictionary=chembl_molecule,
+        molecule_dictionary=chembl_molecule,
         indication_refs=chembl_indication_references,
     )
     chembl_drug_warning = extract_drug_warning_clinical_report(
         drug_warning=chembl_drug_warning,
-        molectule_dictionary=chembl_molecule,
+        molecule_dictionary=chembl_molecule,
         warning_refs=chembl_drug_warning_references,
     )
     ttd = extract_ttd_clinical_report(indications_path=source['ttd'])
     ema = extract_ema_clinical_report(indications_path=source['ema'], spark=spark)
 
-    reports = union_dfs([pmda, aact, chembl_indication, chembl_drug_warning, ttd, ema])
+    reports = union_dfs([pmda.df, aact.df, chembl_indication.df, chembl_drug_warning.df, ttd.df, ema.df])
     mapped_reports = ClinicalReport.map_entities(
         spark=spark,
         reports=reports,
@@ -138,9 +140,10 @@ def clinical_report(source: dict[str, Path], destination: dict[str, Path], prope
         drug_column_name='drugFromSource',
         disease_column_name='diseaseFromSource',
         ner_extract_drug=True,
-        ner_batch_size=properties['ner_batch_size'],
-        ner_cache_path=source['ner_cache_path'],
+        ner_batch_size=settings['ner_batch_size'],
+        # ner_cache_path=source['ner_cache_path'],
+        ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
     )
 
     logger.info(f'Destination paths: {destination}')
-    mapped_reports.df.write.mode('overwrite').parquet(destination['output'])
+    mapped_reports.df.write_parquet(destination['output'])
