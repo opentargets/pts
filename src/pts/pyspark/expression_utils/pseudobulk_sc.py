@@ -91,20 +91,23 @@ class PseudobulkExpression:
         adata = self.adata
 
         if tissue_agg_colname and celltype_agg_colname:
+            annot_type = 'tissue_celltype'
             annotations = adata.obs[[tissue_agg_colname, celltype_agg_colname]].drop_duplicates()
             annotations = [(row[tissue_agg_colname], row[celltype_agg_colname]) for _, row in annotations.iterrows()]
         elif tissue_agg_colname:
+            annot_type = 'tissue'
             annotations = [(tissue, None) for tissue in adata.obs[tissue_agg_colname].unique()]
         elif celltype_agg_colname:
+            annot_type = 'celltype'
             annotations = [(None, celltype) for celltype in adata.obs[celltype_agg_colname].unique()]
         else:
             raise ValueError('Provide at least one aggregation column.')
 
         # define a single output directory for this whole aggregation
         if self.json:
-            output_dir = f'{self.output_directory_path}/json'
+            output_dir = f'{self.output_directory_path}/{annot_type}/json'
         else:
-            output_dir = f'{self.output_directory_path}/parquet'
+            output_dir = f'{self.output_directory_path}/{annot_type}/parquet'
 
         for tissue_id, celltype_id in annotations:
             logger.info(f'Aggregating tissue={tissue_id}, celltype={celltype_id}')
