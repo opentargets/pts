@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import polars as pl
+from clinical_mining.dataset import ClinicalIndication
 from loguru import logger
 
 
@@ -16,5 +18,11 @@ def clinical_indication(source: Path, destination: Path) -> None:
         NotImplementedError: This step is not yet implemented.
     """
     logger.info(f'Source path: {source}')
+    indications = (
+        ClinicalIndication.from_report(source)
+        .df.filter(pl.col('mappingStatus') == 'FULLY_MAPPED')
+        .drop('drugName', 'diseaseName', 'mappingStatus')
+    )
+
     logger.info(f'Destination path: {destination}')
-    raise NotImplementedError('clinical_indication step is not yet implemented')
+    indications.write_parquet(destination)
