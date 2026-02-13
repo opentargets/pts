@@ -27,9 +27,9 @@ def clinical_report(
         destination: Dictionary containing paths to output data:
             - output: Path to write clinical reports (output/clinical_report)
         settings: Dictionary containing step variables
-        properties: Dictionary containing spark configuration
+        properties: Dictionary containing Spark properties
     """
-    logger.info(f'Source paths: {source}')
+    logger.info(f'source paths: {source}')
     aact_uri = construct_db_uri(
         db_type=settings['aact_db_type'],
         db_uri=settings['aact_db_uri'],
@@ -45,6 +45,7 @@ def clinical_report(
     disease_index_spark = spark.read.parquet(source['disease'])
     chembl_curation = pl.read_parquet(source['chembl_curation']) if 'chembl_curation' in source else None
 
+    # TODO: replace db loading
     aact_studies = load_db_table(
         table_name='studies',
         db_url=aact_uri,
@@ -109,6 +110,7 @@ def clinical_report(
         select_cols=['warning_id', 'ref_type', 'ref_id', 'ref_url'],
     )
 
+    logger.info('extract clinical report')
     pmda = extract_pmda_clinical_report(df=parse_pmda_approvals(pmda_path=source['pmda']), spark=spark)
     aact = extract_aact_clinical_report(
         studies=aact_studies,
@@ -116,7 +118,7 @@ def clinical_report(
         conditions=aact_conditions,
         additional_metadata=[aact_study_references, aact_designs, aact_summaries],
         aggregation_specs={'pmid': {'group_by': 'nct_id', 'alias': 'literature'}},
-    )
+    )  # TODO: join with stop reasons
     chembl_indication = extract_chembl_clinical_report(
         drug_indication=chembl_indication,
         molecule_dictionary=chembl_molecule,
@@ -131,6 +133,7 @@ def clinical_report(
     ema = extract_ema_clinical_report(indications_path=source['ema'], spark=spark)
 
     reports = union_dfs([pmda.df, aact.df, chembl_indication.df, chembl_drug_warning.df, ttd.df, ema.df])
+    logger.info('reports generated. map entities...')
     mapped_reports = ClinicalReport.map_entities(
         spark=spark,
         reports=reports,
@@ -145,5 +148,55 @@ def clinical_report(
         ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
     )
 
-    logger.info(f'Destination paths: {destination}')
-    mapped_reports.df.write_parquet(destination['output'])
+    output = validate_disease(mapped_reports, disease_index=pl.read_parquet(source['disease']))
+
+    logger.info(f'destination paths: {destination}')
+    output.df.write_parquet(destination['output'])
+
+
+def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> ClinicalReport:
+    """Validate disease entities in the reports.
+
+    Args:
+        reports: ClinicalReport object with mapped entities
+        disease_index: Polars DataFrame with disease index
+
+    Returns:
+        ClinicalReport object with validated disease entities
+    """
+    exploded = reports.df.explode('diseases').unnest('diseases')
+    diseases = disease_index.select(pl.col('id').alias('diseaseId'), 'obsoleteTerms').explode('obsoleteTerms')
+
+    # Find valid IDs (those that exist in diseases dataframe or are null in the first place)
+    null_ids = exploded.filter(pl.col('diseaseId').is_null())
+    non_null = exploded.filter(pl.col('diseaseId').is_not_null())
+    valid_ids = non_null.join(diseases.select('diseaseId'), on='diseaseId', how='semi')
+
+    obsolete_ids = non_null.join(
+        diseases.select('diseaseId'),
+        on='diseaseId',
+        how='anti',  # Keep only rows where diseaseId doesn't exist in diseases
+    )
+    updated_ids = (
+        obsolete_ids.join(
+            diseases.select('diseaseId', 'obsoleteTerms'), left_on='diseaseId', right_on='obsoleteTerms', how='left'
+        )
+        .with_columns([
+            # Replace obsolete ID with current term, or null if not found
+            pl.when(pl.col('diseaseId_right').is_not_null())
+            .then(pl.col('diseaseId_right'))
+            .otherwise(None)
+            .alias('diseaseId'),
+        ])
+        .drop('diseaseId_right')
+    )
+
+    combined = pl.concat([null_ids, valid_ids, updated_ids])
+    return ClinicalReport(
+        df=(
+            # Reconstruct the nested disease structure
+            combined.group_by(reports.df.drop('diseases').columns, maintain_order=True).agg([
+                pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases')
+            ])
+        )
+    )
