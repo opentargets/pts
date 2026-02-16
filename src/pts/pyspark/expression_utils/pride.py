@@ -34,7 +34,7 @@ class PrideBaselineExpression:
         self,
         spark: SparkSession,
         pride_source_data_dir: str,
-        pride_codes: str,
+        pride_codes: list,
         output_directory_path: str,
         tissue_ontology_mapping_path: str,
         target_index_path: str,
@@ -43,7 +43,7 @@ class PrideBaselineExpression:
     ):
         self.spark = spark
         self.pride_source_data_dir = pride_source_data_dir
-        self.pride_codes = pride_codes.split(',')  # Split multiple codes if provided
+        self.pride_codes = pride_codes
         self.output_directory_path = output_directory_path
         self.tissue_ontology_mapping_path = tissue_ontology_mapping_path
         self.target_index_path = target_index_path

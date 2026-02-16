@@ -491,6 +491,15 @@ class AggregateExpression:
                 .parquet(output_directory)
 
 
+# Default Spark properties for the aggregate step
+_AGGREGATE_DEFAULT_PROPERTIES: dict[str, str] = {
+    'spark.driver.memory': '8g',
+    'spark.executor.memory': '8g',
+    'spark.driver.userClassPathFirst': 'true',
+    'spark.executor.userClassPathFirst': 'true',
+}
+
+
 def baseline_expression_aggregate(
     source: str | dict[str, str],
     destination: str | dict[str, str],
@@ -503,7 +512,10 @@ def baseline_expression_aggregate(
     if properties is None:
         properties = {}
 
-    session = Session(app_name='baseline_expression_aggregate', properties=properties)
+    # Merge step defaults with any caller-supplied overrides
+    effective_properties = {**_AGGREGATE_DEFAULT_PROPERTIES, **properties}
+
+    session = Session(app_name='baseline_expression_aggregate', properties=effective_properties)
     spark = session.spark
 
     # Extract arguments

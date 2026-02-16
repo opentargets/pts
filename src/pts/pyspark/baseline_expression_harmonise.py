@@ -9,6 +9,30 @@ from pts.pyspark.expression_utils.pride import PrideBaselineExpression
 from pts.pyspark.expression_utils.pseudobulk_sc import PseudobulkExpression
 
 
+# Default Spark properties per harmoniser type
+_HARMONISE_LIGHT_PROPERTIES: dict[str, str] = {
+    'spark.driver.memory': '8g',
+    'spark.executor.memory': '8g',
+}
+
+_HARMONISE_HEAVY_PROPERTIES: dict[str, str] = {
+    'spark.driver.memory': '50g',
+    'spark.executor.memory': '70g',
+    'spark.memory.offHeap.enabled': 'true',
+    'spark.memory.offHeap.size': '16g',
+    'spark.driver.maxResultSize': '32g',
+    'spark.sql.pivotMaxValues': '1000000',
+}
+
+# Map harmoniser name → default properties
+_HARMONISE_PROPERTIES: dict[str, dict[str, str]] = {
+    'dice': _HARMONISE_LIGHT_PROPERTIES,
+    'cellxgene': _HARMONISE_LIGHT_PROPERTIES,
+    'pride': _HARMONISE_LIGHT_PROPERTIES,
+    'gtex': _HARMONISE_HEAVY_PROPERTIES,
+}
+
+
 def baseline_expression_harmonise(
     source: dict[str, str],
     destination: dict[str, str],
@@ -21,12 +45,16 @@ def baseline_expression_harmonise(
     if properties is None:
         properties = {}
 
-    session = Session(app_name='baseline_expression_harmonise', properties=properties)
-    spark = session.spark
-
     harmoniser = settings['harmoniser']
     if isinstance(harmoniser, list):
         harmoniser = harmoniser[0]
+
+    # Merge step defaults with any caller-supplied overrides
+    default_props = _HARMONISE_PROPERTIES.get(harmoniser, _HARMONISE_LIGHT_PROPERTIES)
+    effective_properties = {**default_props, **properties}
+
+    session = Session(app_name='baseline_expression_harmonise', properties=effective_properties)
+    spark = session.spark
 
     if harmoniser == 'dice':
         # Extract arguments

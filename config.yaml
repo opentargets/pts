@@ -41,9 +41,6 @@ steps:
         baseline_expression: intermediate/baseline_expression/unaggregated/DICE/celltype
       settings:
         harmoniser: dice
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
     - name: pyspark baseline expression specificity
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/DICE/celltype
@@ -52,9 +49,6 @@ steps:
         specificity_method: cellex
         biosample: celltype
         datasource: dice
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression aggregate
@@ -65,11 +59,6 @@ steps:
         celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
         celltype_cellex: intermediate/baseline_expression/specificity/DICE/celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/DICE/celltype/parquet
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
       requires:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity
@@ -97,9 +86,6 @@ steps:
         sex_colname: sex
         ethnicity_colname: self_reported_ethnicity
         donor_colname: donor_id
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
     - name: pyspark baseline expression specificity celltype
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/tabula_sapiens/celltype
@@ -107,13 +93,6 @@ steps:
       settings:
         specificity_method: cellex
         biosample: celltype
-      properties:
-        spark.driver.memory: 50g
-        spark.executor.memory: 70g
-        spark.memory.offHeap.enabled: 'true'
-        spark.memory.offHeap.size: 16g
-        spark.driver.maxResultSize: 32g
-        spark.sql.pivotMaxValues: '1000000'
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression specificity tissue
@@ -123,13 +102,6 @@ steps:
       settings:
         specificity_method: cellex
         biosample: tissue
-      properties:
-        spark.driver.memory: 50g
-        spark.executor.memory: 70g
-        spark.memory.offHeap.enabled: 'true'
-        spark.memory.offHeap.size: 16g
-        spark.driver.maxResultSize: 32g
-        spark.sql.pivotMaxValues: '1000000'
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression specificity tissue celltype
@@ -139,13 +111,6 @@ steps:
       settings:
         specificity_method: cellex
         biosample: tissuecelltype
-      properties:
-        spark.driver.memory: 50g
-        spark.executor.memory: 70g
-        spark.memory.offHeap.enabled: 'true'
-        spark.memory.offHeap.size: 16g
-        spark.driver.maxResultSize: 32g
-        spark.sql.pivotMaxValues: '1000000'
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression aggregate celltype
@@ -154,15 +119,10 @@ steps:
         expression_data: intermediate/baseline_expression/unaggregated/tabula_sapiens/celltype/parquet
         biosample_index: output/biosample
         celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
-        celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/celltype/cellex
-      destination: intermediate/baseline_expression/tabula_sapiens/aggregated/celltype
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
+        celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/celltype/cellex/esmu.csv.gz
+      destination: intermediate/baseline_expression/aggregated/tabula_sapiens/celltype
       requires:
-        # - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise
         - pyspark baseline expression specificity celltype
     - name: pyspark baseline expression aggregate tissue
       pyspark: baseline_expression_aggregate
@@ -170,13 +130,8 @@ steps:
         expression_data: intermediate/baseline_expression/unaggregated/tabula_sapiens/tissue/parquet
         biosample_index: output/biosample
         tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-        tissue_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue/cellex
-      destination: intermediate/baseline_expression/tabula_sapiens/aggregated/tissue
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
+        tissue_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue/cellex/esmu.csv.gz
+      destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue
       requires:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity tissue
@@ -187,15 +142,10 @@ steps:
         biosample_index: output/biosample
         tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
         celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
-        tissue_celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue_celltype/cellex
-      destination: intermediate/baseline_expression/tabula_sapiens/aggregated/tissue_celltype
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
+        tissue_celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue_celltype/cellex/esmu.csv.gz
+      destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue_celltype
       requires:
-        # - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise
         - pyspark baseline expression specificity tissue celltype
 
   baseline_expression_pride:
@@ -213,18 +163,14 @@ steps:
           - PXD020192
           - PXD000865 
           - PXD000561
+          - PXD016999
     - name: pyspark baseline expression aggregate
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/PRIDE/tissue/parquet
         biosample_index: output/biosample
         tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-      destination: intermediate/baseline_expression/PRIDE/aggregated
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
+      destination: intermediate/baseline_expression/aggregated/PRIDE/tissue
       requires:
         - pyspark baseline expression harmonise
 
@@ -240,13 +186,6 @@ steps:
       settings:
         harmoniser: gtex
         matrix: true # Generate a matrix as well as a parquet (true or false)
-      properties:
-        spark.driver.memory: 50g
-        spark.executor.memory: 70g
-        spark.memory.offHeap.enabled: 'true'
-        spark.memory.offHeap.size: 16g
-        spark.driver.maxResultSize: 32g
-        spark.sql.pivotMaxValues: '1000000'
     - name: pyspark baseline expression specificity
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/GTEx/tissue
@@ -257,13 +196,6 @@ steps:
         input_format: true
         mode: matrix
         sample_id: OrigSample
-      properties:
-        spark.driver.memory: 50g
-        spark.executor.memory: 70g
-        spark.memory.offHeap.enabled: 'true'
-        spark.memory.offHeap.size: 16g
-        spark.driver.maxResultSize: 32g
-        spark.sql.pivotMaxValues: '1000000'
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression aggregate
@@ -272,13 +204,8 @@ steps:
         expression_data: intermediate/baseline_expression/unaggregated/GTEx/tissue/parquet
         biosample_index: output/biosample
         tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-        tissue_cellex: intermediate/baseline_expression/specificity/GTEx/cellex
-      destination: intermediate/baseline_expression/GTEx/aggregated
-      properties:
-        spark.driver.memory: 8g
-        spark.executor.memory: 8g
-        spark.driver.userClassPathFirst: 'true'
-        spark.executor.userClassPathFirst: 'true'
+        tissue_cellex: intermediate/baseline_expression/specificity/GTEx/tissue/cellex/esmu.csv.gz
+      destination: intermediate/baseline_expression/aggregated/GTEx/tissue
       requires:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity
