@@ -436,6 +436,17 @@ steps:
         pmda: input/clinical_report/pmda.pdf
         ttd: input/clinical_report/ttd.txt
         ema: input/clinical_report/ema_medicines.xlsx
+        aact_studies: input/clinical_report/aact/studies.parquet
+        aact_interventions: input/clinical_report/aact/interventions.parquet
+        aact_conditions: input/clinical_report/aact/conditions.parquet
+        aact_study_references: input/clinical_report/aact/study_references.parquet
+        aact_designs: input/clinical_report/aact/designs.parquet
+        aact_summaries: input/clinical_report/aact/summaries.parquet
+        chembl_indication: input/clinical_report/chembl/drug_indication.parquet
+        chembl_indication_references: input/clinical_report/chembl/drug_indication_refs.parquet
+        chembl_molecule: input/clinical_report/chembl/molecule_dictionary.parquet
+        chembl_drug_warning: input/clinical_report/chembl/drug_warning.parquet
+        chembl_drug_warning_references: input/clinical_report/chembl/drug_warning_refs.parquet
         # chembl_curation: input/clinical_report/chembl_curation.parquet
         # ner_cache_path: input/clinical_report/ner_cache.parquet
       destination:

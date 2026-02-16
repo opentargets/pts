@@ -11,7 +11,6 @@ from clinical_mining.data_sources.pmda import extract_clinical_report as extract
 from clinical_mining.data_sources.pmda import parse_pmda_approvals
 from clinical_mining.data_sources.ttd import extract_clinical_report as extract_ttd_clinical_report
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.utils.db import construct_db_uri, load_db_table
 from clinical_mining.utils.polars_helpers import union_dfs
 from clinical_mining.utils.spark_helpers import spark_session
 from loguru import logger
@@ -30,84 +29,43 @@ def clinical_report(
         properties: Dictionary containing Spark properties
     """
     logger.info(f'source paths: {source}')
-    aact_uri = construct_db_uri(
-        db_type=settings['aact_db_type'],
-        db_uri=settings['aact_db_uri'],
-    )
-    chembl_uri = construct_db_uri(
-        db_type=settings['chembl_db_type'],
-        db_uri=settings['chembl_db_uri'],
-    )
     spark = spark_session()
 
     # molecule_index_spark = spark.read.parquet(source['chembl_molecule'])
     molecule_index_spark = spark.read.parquet('/Users/irenelopez/EBI/repos/pts/work/intermediate/chembl_molecule')
     disease_index_spark = spark.read.parquet(source['disease'])
     chembl_curation = pl.read_parquet(source['chembl_curation']) if 'chembl_curation' in source else None
-
-    # TODO: replace db loading
-    aact_studies = load_db_table(
-        table_name='studies',
-        db_url=aact_uri,
-        db_schema='ctgov',
-        select_cols=[
-            'nct_id',
-            'overall_status',
-            'phase',
-            'study_type',
-            'start_date',
-            'why_stopped',
-            'number_of_arms',
-            'official_title',
-        ],
+    aact_studies = pl.read_parquet(source['aact_studies']).select(
+        'nct_id',
+        'overall_status',
+        'phase',
+        'study_type',
+        'start_date',
+        'why_stopped',
+        'number_of_arms',
+        'official_title',
     )
-    aact_interventions = load_db_table(
-        table_name='interventions',
-        db_url=aact_uri,
-        db_schema='ctgov',
-        select_cols=['nct_id', 'intervention_type', 'name'],
+    aact_interventions = pl.read_parquet(source['aact_interventions']).select(
+        'nct_id',
+        'intervention_type',
+        'name',
     )
-    aact_conditions = load_db_table(
-        table_name='conditions', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'downcase_name']
+    aact_conditions = pl.read_parquet(source['aact_conditions']).select('nct_id', 'downcase_name')
+    aact_study_references = pl.read_parquet(source['aact_study_references']).select('nct_id', 'pmid', 'reference_type')
+    aact_designs = pl.read_parquet(source['aact_designs']).select('nct_id', 'primary_purpose')
+    aact_summaries = pl.read_parquet(source['aact_summaries']).select('nct_id', 'description')
+    chembl_indication = pl.read_parquet(source['chembl_indication']).select(
+        'drugind_id', 'molregno', 'max_phase_for_ind', 'efo_id', 'efo_term'
     )
-    aact_study_references = load_db_table(
-        table_name='study_references',
-        db_url=aact_uri,
-        db_schema='ctgov',
-        select_cols=['nct_id', 'pmid', 'reference_type'],
+    chembl_indication_references = pl.read_parquet(source['chembl_indication_references']).select(
+        'drugind_id', 'ref_type', 'ref_id', 'ref_url'
     )
-    aact_designs = load_db_table(
-        table_name='designs', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'primary_purpose']
+    chembl_molecule = pl.read_parquet(source['chembl_molecule']).select('molregno', 'chembl_id')
+    chembl_drug_warning = pl.read_parquet(source['chembl_drug_warning']).select(
+        'warning_id', 'molregno', 'warning_type', 'warning_year', 'warning_country', 'efo_id', 'efo_term'
     )
-    aact_summaries = load_db_table(
-        table_name='brief_summaries', db_url=aact_uri, db_schema='ctgov', select_cols=['nct_id', 'description']
-    )
-    chembl_indication = load_db_table(
-        table_name='drug_indication',
-        db_url=chembl_uri,
-        db_schema='public',
-        select_cols=['drugind_id', 'molregno', 'max_phase_for_ind', 'efo_id', 'efo_term'],
-    )
-    chembl_indication_references = load_db_table(
-        table_name='indication_refs',
-        db_url=chembl_uri,
-        db_schema='public',
-        select_cols=['drugind_id', 'ref_type', 'ref_id', 'ref_url'],
-    )
-    chembl_molecule = load_db_table(
-        table_name='molecule_dictionary', db_url=chembl_uri, db_schema='public', select_cols=['molregno', 'chembl_id']
-    )
-    chembl_drug_warning = load_db_table(
-        table_name='drug_warning',
-        db_url=chembl_uri,
-        db_schema='public',
-        select_cols=['warning_id', 'molregno', 'warning_type', 'warning_year', 'warning_country', 'efo_id', 'efo_term'],
-    )
-    chembl_drug_warning_references = load_db_table(
-        table_name='warning_refs',
-        db_url=chembl_uri,
-        db_schema='public',
-        select_cols=['warning_id', 'ref_type', 'ref_id', 'ref_url'],
+    chembl_drug_warning_references = pl.read_parquet(source['chembl_drug_warning_references']).select(
+        'warning_id', 'ref_type', 'ref_id', 'ref_url'
     )
 
     logger.info('extract clinical report')
