@@ -148,10 +148,11 @@ def clinical_report(
         ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
     )
 
-    output = validate_disease(mapped_reports, disease_index=pl.read_parquet(source['disease']))
+    validated_disease = validate_disease(mapped_reports, disease_index=pl.read_parquet(source['disease']))
+    validated_phase_iv = validate_phase_iv(validated_disease)
 
     logger.info(f'destination paths: {destination}')
-    output.df.write_parquet(destination['output'])
+    validated_phase_iv.df.write_parquet(destination['output'])
 
 
 def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> ClinicalReport:
@@ -197,6 +198,41 @@ def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> Cl
             # Reconstruct the nested disease structure
             combined.group_by(reports.df.drop('diseases').columns, maintain_order=True).agg([
                 pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases')
+            ])
+        )
+    )
+
+
+def validate_phase_iv(reports: ClinicalReport) -> ClinicalReport:
+    """Remove Phase IV reports annotation if the association is not approved."""
+    exploded = reports.df.explode('drugs').explode('diseases').unnest(['drugs', 'diseases'])
+
+    non_phase_iv = exploded.filter(pl.col('clinicalStage') != 'PHASE_4')
+    phase_iv = (
+        exploded.filter(pl.col('clinicalStage') == 'PHASE_4')
+        .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
+        .unique()
+    )
+    logger.info(f'validate phase iv reports... Original count: {phase_iv.select("id").unique().height}')
+
+    approved = (
+        (exploded.filter(pl.col('clinicalStage').is_in(['APPROVED', 'PREAPPROVAL'])))
+        .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
+        .unique()
+    )
+
+    approved_phase_iv = phase_iv.join(
+        approved.select(['drugId', 'diseaseId']), on=['drugId', 'diseaseId'], how='semi'
+    ).unique()
+    logger.info(f'validate phase iv reports... Approved count: {approved_phase_iv.select("id").unique().height}')
+
+    combined = pl.concat([non_phase_iv, approved_phase_iv])
+    return ClinicalReport(
+        df=(
+            # Reconstruct the nested disease structure
+            combined.group_by(reports.df.drop('diseases', 'drugs').columns, maintain_order=True).agg([
+                pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases'),
+                pl.struct(['drugFromSource', 'drugId']).alias('drugs'),
             ])
         )
     )
