@@ -60,7 +60,7 @@ def clinical_report(
     chembl_indication_references = pl.read_parquet(source['chembl_indication_references']).select(
         'drugind_id', 'ref_type', 'ref_id', 'ref_url'
     )
-    chembl_molecule = pl.read_parquet(source['chembl_molecule']).select('molregno', 'chembl_id')
+    chembl_molecule = pl.read_parquet(source['chembl_molecule']).select('molregno', 'chembl_id', 'pref_name')
     chembl_drug_warning = pl.read_parquet(source['chembl_drug_warning']).select(
         'warning_id', 'molregno', 'warning_type', 'warning_year', 'warning_country', 'efo_id', 'efo_term'
     )
@@ -108,9 +108,10 @@ def clinical_report(
 
     validated_disease = validate_disease(mapped_reports, disease_index=pl.read_parquet(source['disease']))
     validated_phase_iv = validate_phase_iv(validated_disease)
+    output = create_title(validated_phase_iv)
 
     logger.info(f'destination paths: {destination}')
-    validated_phase_iv.df.write_parquet(destination['output'])
+    output.df.write_parquet(destination['output'])
 
 
 def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> ClinicalReport:
@@ -192,5 +193,58 @@ def validate_phase_iv(reports: ClinicalReport) -> ClinicalReport:
                 pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases'),
                 pl.struct(['drugFromSource', 'drugId']).alias('drugs'),
             ])
+        )
+    )
+
+
+def create_title(reports: ClinicalReport) -> ClinicalReport:
+    """Create a title for the report based on the information on drugs and diseases."""
+    return ClinicalReport(
+        df=(
+            reports.df.with_columns(
+                drugs_count=pl.col('drugs').list.len(),
+                diseases_count=pl.col('diseases').list.len(),
+            )
+            .with_columns(
+                # Building blocks for the report description
+                _stage=pl.col('clinicalStage').str.to_titlecase().str.replace_all('_', ' '),
+                _drug=pl.col('drugs').list.first().struct.field('drugFromSource').str.to_titlecase(),
+                _disease=pl.col('diseases').list.first().struct.field('diseaseFromSource').str.to_titlecase(),
+                _drug_part=pl.when(pl.col('drugs_count') == 1)
+                .then(pl.col('drugs').list.first().struct.field('drugFromSource').str.to_titlecase())
+                .otherwise(pl.concat_str(pl.col('drugs_count').cast(pl.String), pl.lit(' molecules'))),
+                _disease_part=pl.when(pl.col('diseases_count') == 1)
+                .then(pl.col('diseases').list.first().struct.field('diseaseFromSource').str.to_titlecase())
+                .otherwise(pl.concat_str(pl.col('diseases_count').cast(pl.String), pl.lit(' diseases'))),
+                _source_part=pl.when(pl.col('type') == 'REGULATORY_AGENCY')
+                .then(pl.concat_str(pl.lit(' by '), pl.col('source')))
+                .otherwise(pl.lit('')),
+            )
+            .with_columns(
+                title=pl.when(pl.col('trialOfficialTitle').is_not_null())
+                .then(pl.col('trialOfficialTitle'))
+                .otherwise(
+                    pl.concat_str(
+                        pl.lit('Report in '),
+                        pl.col('_stage'),
+                        pl.lit(' stage for '),
+                        pl.col('_drug_part'),
+                        pl.lit(' and '),
+                        pl.col('_disease_part'),
+                        pl.col('_source_part'),
+                        ignore_nulls=True,
+                    )
+                )
+            )
+            .drop(
+                'drugs_count',
+                'diseases_count',
+                '_stage',
+                '_drug',
+                '_disease',
+                '_drug_part',
+                '_disease_part',
+                '_source_part',
+            )
         )
     )
