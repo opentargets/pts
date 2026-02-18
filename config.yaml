@@ -36,8 +36,8 @@ steps:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
       source:
-        dice_directory: input/baseline_expression/DICE
-        mapping_path: input/baseline_expression/DICE/DICE_ontology_mapping.txt
+        dice_directory: input/baseline_expression/bulkRNAseq/DICE
+        mapping_path: input/baseline_expression/bulkRNAseq/DICE/DICE_ontology_mapping.txt
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/DICE/celltype
       settings:
@@ -153,8 +153,8 @@ steps:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
       source:
-        pride_directory: input/baseline_expression/PRIDE
-        tissue_ontology_mapping_path: input/baseline_expression/PRIDE/tissue-complete_mapping.tsv
+        pride_directory: input/baseline_expression/MSproteomics/PRIDE
+        tissue_ontology_mapping_path: input/baseline_expression/MSproteomics/PRIDE/tissue-complete_mapping.tsv
         target_index_path: output/target
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/PRIDE/tissue
@@ -179,9 +179,9 @@ steps:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
       source:
-        gtex_source_data_path: input/baseline_expression/GTEx/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz
-        sample_metadata_path: input/baseline_expression/GTEx/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt
-        subject_metadata_path: input/baseline_expression/GTEx/GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt
+        gtex_source_data_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz
+        sample_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt
+        subject_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/GTEx/tissue
       settings:
