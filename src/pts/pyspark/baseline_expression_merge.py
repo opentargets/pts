@@ -106,7 +106,8 @@ class MergeParquetDatasets:
             self.output_directory_path or f"{self.base_directory_path.rstrip('/')}/{self.aggregation}/merged/parquet"
         )
         sample_json_out = (
-            self.sample_output_directory_path or f"{self.base_directory_path.rstrip('/')}/{self.aggregation}/merged_sample/json"
+            self.sample_output_directory_path or
+            f"{self.base_directory_path.rstrip('/')}/{self.aggregation}/merged_sample/json"
         )
 
         if self.num_output_files is not None and self.num_output_files > 0:
