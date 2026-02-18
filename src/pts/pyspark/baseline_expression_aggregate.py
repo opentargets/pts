@@ -431,7 +431,8 @@ class AggregateExpression:
             for col_name in biosample_cols
         ]).alias('biosample_scores')
 
-        # Convert to long format
+        # Convert to long format, enforcing DOUBLE type for specificity_score
+        # (inferSchema may infer STRING when CSV cells contain "NA" or similar)
         return (
             cellex_df
             .select(f.col(gene_col).alias('targetId'),
@@ -439,7 +440,7 @@ class AggregateExpression:
             .select(
                 'targetId',
                 f.col('x.biosampleId').alias('biosampleId'),
-                f.col('x.specificity_score').alias('specificity_score')
+                f.col('x.specificity_score').cast('double').alias('specificity_score')
             )
             .filter(f.col('specificity_score').isNotNull())  # Remove null scores
         )
@@ -484,11 +485,11 @@ class AggregateExpression:
         #     os.makedirs(output_directory)
         if json:
             self.df.write.mode('overwrite') \
-                .json(output_directory)
+                .json(f'{output_directory}/json/')
         else:
             # If not JSON, write as parquet
             self.df.write.mode('overwrite') \
-                .parquet(output_directory)
+                .parquet(f'{output_directory}/parquet/')
 
 
 # Default Spark properties for the aggregate step
@@ -578,18 +579,6 @@ def baseline_expression_aggregate(
         )
 
     logger.info('Packing data for output...')
-    # Logic from original script to append datasource/format/dataset_name
-    # But here we might want to trust the destination path provided in config
-    # The original script did:
-    # parts = [seg for seg in os.path.normpath(directory).split(os.sep) if seg]
-    # datasource = parts[-3]
-    # dataset_name   = parts[-1]
-    # output_dir = f"{output_dir}/{datasource}/{file_format}/{dataset_name}"
-
-    # If we use the destination from config directly, it is `intermediate/baseline_expression/dice_aggregated`
-    # The user might expect the same structure.
-    # However, `pts` usually defines explicit output paths.
-    # I will use the destination path as is.
 
     eq.write_data(output_dir, json=json_output)
     logger.info(f'Data written to {output_dir}')

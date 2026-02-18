@@ -8,7 +8,6 @@ from pts.pyspark.expression_utils.gtex import GtexBaselineExpression
 from pts.pyspark.expression_utils.pride import PrideBaselineExpression
 from pts.pyspark.expression_utils.pseudobulk_sc import PseudobulkExpression
 
-
 # Default Spark properties per harmoniser type
 _HARMONISE_LIGHT_PROPERTIES: dict[str, str] = {
     'spark.driver.memory': '8g',

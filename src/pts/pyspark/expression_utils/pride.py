@@ -124,6 +124,9 @@ class PrideBaselineExpression:
             # In the sex column, replace not available' with NULL
             .withColumn('sex', when(col('sex') == 'not available', None).otherwise(col('sex')))
             .withColumn('age', when(col('age') == 'not available', None).otherwise(col('age')))
+            # Deduplicate technical replicates: the expression matrix already has
+            # them collapsed, so keep only one SDRF row per assayId.
+            .dropDuplicates(['assayId'])
         )
 
         # Read the PRIDE ontology mapping
@@ -188,7 +191,7 @@ class PrideBaselineExpression:
 
         pride_long.show()
         # Bind the pride long dataframe to the existing self.df DataFrame
-        if hasattr(self, 'df'):
+        if self.df is not None:
             self.df = self.df.unionByName(pride_long, allowMissingColumns=True)
         else:
             self.df = pride_long
@@ -200,12 +203,12 @@ class PrideBaselineExpression:
         else:
             output_path = f'{self.output_directory_path}'
         if json:
-            output_path = f'{output_path}/json/pride_baseline_expression'
+            output_path = f'{output_path}/json/'
             # If JSON output is requested, convert DataFrame to JSON format
             self.df.write.mode('overwrite').json(output_path)
             logger.info(f'Data written to {output_path} in JSON format')
         else:
-            output_path = f'{output_path}/parquet/pride_baseline_expression'
+            output_path = f'{output_path}/parquet/'
             # If parquet output is requested, convert DataFrame to parquet format
             self.df.write.mode('overwrite').parquet(output_path)
             logger.info(f'Data written to {output_path} in Parquet format')
