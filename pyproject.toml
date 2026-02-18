@@ -41,7 +41,7 @@ exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
 [tool.deptry]
 pep621_dev_dependency_groups = ['test']
-exclude = ["src/test/**", "src/conftest.py"]
+exclude = ["test"]
 
 [tool.deptry.package_module_name_map]
 opentargets-otter = 'otter'
@@ -51,7 +51,7 @@ DEP002 = ['openpyxl', 'coverage', 'setuptools']
 DEP004 = ['pytest']
 
 [tool.pytest.ini_options]
-testpaths = ["src/test"]
+testpaths = ["test"]
 markers = ["slow: mark a test as slow (deselect with '-m \"not slow\"')"]
 
 [tool.ruff]
@@ -101,6 +101,7 @@ select = [
 ]
 
 ignore = [
+  'D105',    # we don't want to document every single magic method
   'D107',    # we don't want to document every single init method
   'D213',    # we prefer D212
   'G004',    # we don't care about logging format
@@ -182,11 +183,14 @@ parametrize-values-type = 'list'
 parametrize-values-row-type = 'tuple'
 
 [tool.ruff.lint.per-file-ignores]
-'test/*.py' = ['S108', 'S602', 'D']
+'test/*.py' = ['S108', 'S602', 'D', 'RUF069']
 '**/__init__.py' = ['F401']
 '**/tasks/*.py' = ['D102']
 '**/transformers/*.py' = ['D100', 'D103']
-'**/pyspark/*.py' = ['D100', 'D103']
+'**/pyspark/*.py' = ['RUF069', 'D100', 'D101', 'D102', 'D103']
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ty.src]
+exclude = ["src/pts/pyspark/**", "test/**"]

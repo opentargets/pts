@@ -10,6 +10,7 @@
   "ruff.nativeServer": true,
   "ruff.lint.enable": true,
   "ruff.organizeImports": true,
+  "ruff.lineLength": 120,
   "python.languageServer": "None",
   "files.exclude": {
     "**/__pycache__": true,
@@ -19,9 +20,7 @@
     "build": true,
   },
   "yaml.schemas": {
-    "https://raw.githubusercontent.com/opentargets/otter/refs/heads/main/.vscode/config-schema.json": [
-      "config.yaml"
-    ]
+    "https://raw.githubusercontent.com/opentargets/otter/refs/heads/main/.vscode/config-schema.json": "config.yaml"
   },
   "yaml.format.singleQuote": true,
 }
