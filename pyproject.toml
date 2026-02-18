@@ -15,6 +15,7 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
+  "obonet>=0.3.1",
 ]
 
 [dependency-groups]
@@ -193,4 +194,4 @@ parametrize-values-row-type = 'tuple'
 convention = "google"
 
 [tool.ty.src]
-exclude = ["src/pts/pyspark/**", "test/**"]
+exclude = ["test/**"]
