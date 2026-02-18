@@ -92,23 +92,24 @@ def clinical_report(
 
     reports = union_dfs([pmda.df, aact.df, chembl_indication.df, chembl_drug_warning.df, ttd.df, ema.df])
     logger.info('reports generated. map entities...')
-    mapped_reports = ClinicalReport.map_entities(
-        spark=spark,
-        reports=reports,
-        disease_index=disease_index_spark,
-        drug_index=molecule_index_spark,
-        chembl_curation=chembl_curation,
-        drug_column_name='drugFromSource',
-        disease_column_name='diseaseFromSource',
-        ner_extract_drug=True,
-        ner_batch_size=settings['ner_batch_size'],
-        # ner_cache_path=source['ner_cache_path'],
-        ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
+    output = (
+        ClinicalReport.map_entities(
+            spark=spark,
+            reports=reports,
+            disease_index=disease_index_spark,
+            drug_index=molecule_index_spark,
+            chembl_curation=chembl_curation,
+            drug_column_name='drugFromSource',
+            disease_column_name='diseaseFromSource',
+            ner_extract_drug=True,
+            ner_batch_size=settings['ner_batch_size'],
+            # ner_cache_path=source['ner_cache_path'],
+            ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
+        )
+        .pipe(validate_disease, disease_index=pl.read_parquet(source['disease']))
+        .pipe(validate_phase_iv)
+        .pipe(create_title)
     )
-
-    validated_disease = validate_disease(mapped_reports, disease_index=pl.read_parquet(source['disease']))
-    validated_phase_iv = validate_phase_iv(validated_disease)
-    output = create_title(validated_phase_iv)
 
     logger.info(f'destination paths: {destination}')
     output.df.write_parquet(destination['output'])
@@ -137,6 +138,7 @@ def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> Cl
         on='diseaseId',
         how='anti',  # Keep only rows where diseaseId doesn't exist in diseases
     )
+    logger.info(f'obsolete disease id count: {obsolete_ids.height}')
     updated_ids = (
         obsolete_ids.join(
             diseases.select('diseaseId', 'obsoleteTerms'), left_on='diseaseId', right_on='obsoleteTerms', how='left'
