@@ -31,6 +31,7 @@ steps:
   ##################################################################################################
 
   #: EXPRESSION STEP :##############################################################################
+
   baseline_expression_dice:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
@@ -58,7 +59,7 @@ steps:
         biosample_index: output/biosample
         celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
         celltype_cellex: intermediate/baseline_expression/specificity/DICE/celltype/cellex/esmu.csv.gz
-      destination: intermediate/baseline_expression/aggregated/DICE/celltype/parquet
+      destination: intermediate/baseline_expression/aggregated/DICE/celltype/
       requires:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity
@@ -153,7 +154,7 @@ steps:
       pyspark: baseline_expression_harmonise
       source:
         pride_directory: input/baseline_expression/PRIDE
-        tissue_ontology_mapping_path: input/baseline_expression/PRIDE/pride_ontology_mapping_sorted.txt
+        tissue_ontology_mapping_path: input/baseline_expression/PRIDE/tissue-complete_mapping.tsv
         target_index_path: output/target
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/PRIDE/tissue
@@ -210,19 +211,35 @@ steps:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity
 
-  merge_baseline_expression:
+  baseline_expression_merge:
     - name: pyspark baseline expression merge unaggregated
-      pyspark: merge
-      source: intermediate/baseline_expression/unaggregated
+      pyspark: baseline_expression_merge
+      source: intermediate/baseline_expression
       destination: output/baseline_expression/unaggregated/merged
       settings:
-        merger: unaggregated
+        aggregation: unaggregated
+        datasets: 
+          - GTEx/tissue
+          - PRIDE/tissue
+          - tabula_sapiens/celltype
+          - tabula_sapiens/tissue
+          - tabula_sapiens/tissue_celltype
+          - DICE/celltype
+        rows_per_file: 10000000
     - name: pyspark baseline expression merge aggregated
-      pyspark: merge
-      source: intermediate/baseline_expression/aggregated
+      pyspark: baseline_expression_merge
+      source: intermediate/baseline_expression
       destination: output/baseline_expression/aggregated/merged
       settings:
-        merger: aggregated
+        aggregation: aggregated
+        datasets: 
+          - GTEx/tissue
+          - PRIDE/tissue
+          - tabula_sapiens/celltype
+          - tabula_sapiens/tissue
+          - tabula_sapiens/tissue_celltype
+          - DICE/celltype
+        rows_per_file: 10000000
 
   ##################################################################################################
 

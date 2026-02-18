@@ -5,7 +5,6 @@ from loguru import logger
 from pts.pyspark.common.session import Session
 from pts.pyspark.expression_utils.run_cellex import CellexAnalysis
 
-
 # Default Spark properties for the specificity step
 _SPECIFICITY_DEFAULT_PROPERTIES: dict[str, str] = {
     'spark.driver.memory': '50g',
