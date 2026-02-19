@@ -158,7 +158,7 @@ def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> Cl
         df=(
             # Reconstruct the nested disease structure
             combined.group_by(reports.df.drop('diseases').columns, maintain_order=True).agg([
-                pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases')
+                pl.struct(['diseaseFromSource', 'diseaseId']).unique().alias('diseases')
             ])
         )
     )
@@ -191,9 +191,11 @@ def validate_phase_iv(reports: ClinicalReport) -> ClinicalReport:
     return ClinicalReport(
         df=(
             # Reconstruct the nested disease structure
-            combined.group_by(reports.df.drop('diseases', 'drugs').columns, maintain_order=True).agg([
-                pl.struct(['diseaseFromSource', 'diseaseId']).alias('diseases'),
-                pl.struct(['drugFromSource', 'drugId']).alias('drugs'),
+            combined.unique()
+            .group_by(reports.df.drop('diseases', 'drugs').columns, maintain_order=True)
+            .agg([
+                pl.struct(['diseaseFromSource', 'diseaseId']).unique().alias('diseases'),
+                pl.struct(['drugFromSource', 'drugId']).unique().alias('drugs'),
             ])
         )
     )

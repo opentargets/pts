@@ -449,7 +449,7 @@ steps:
         # chembl_curation: input/clinical_report/chembl_curation.parquet
         # ner_cache_path: input/clinical_report/ner_cache.parquet
       destination:
-        output: output/clinical_report
+        output: output/clinical_report/clinical_report.parquet
       settings:
         aact_db_type: postgresql
         aact_db_uri: localhost:5432/aact
