@@ -15,8 +15,8 @@ dependencies = [
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
   "ontoma",
-  "clinical-mining",
   "polars-hash>=0.5.6",
+  "clinical-mining",
 ]
 
 [dependency-groups]
