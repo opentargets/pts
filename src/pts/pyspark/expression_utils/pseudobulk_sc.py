@@ -45,8 +45,6 @@ class PseudobulkExpression:
         self.adata = sc.read(self.h5ad_path)
         self.adata.var_names_make_unique()
         self.adata.strings_to_categoricals()
-        if self.adata.var.index.name != 'ensg':
-            raise ValueError(f"Expected var index name 'ensg', got '{self.adata.var.index.name}'")
 
     def filter_anndata(self, min_cells=0, min_genes=0, technology='10X'):
         if min_genes > 0:
