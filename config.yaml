@@ -446,7 +446,7 @@ steps:
         chembl_molecule: input/clinical_report/chembl/molecule_dictionary.parquet
         chembl_drug_warning: input/clinical_report/chembl/drug_warning.parquet
         chembl_drug_warning_references: input/clinical_report/chembl/drug_warning_refs.parquet
-        # chembl_curation: input/clinical_report/chembl_curation.parquet
+        chembl_curation: input/clinical_report/chembl_mapping.parquet
         # ner_cache_path: input/clinical_report/ner_cache.parquet
       destination:
         output: output/clinical_report/clinical_report.parquet
@@ -462,8 +462,8 @@ steps:
   #: CLINICAL_INDICATION STEP :####################################################################
   clinical_indication:
     - name: transform clinical_indication
-      source: output/clinical_report
-      destination: output/clinical_indication
+      source: output/clinical_report/clinical_report.parquet
+      destination: output/clinical_indication/clinical_indication.parquet
       transformer: clinical_indication
   ##################################################################################################
 
@@ -471,9 +471,9 @@ steps:
   clinical_target:
     - name: transform clinical_target
       source:
-        clinical_report: output/clinical_report
-        drug_mechanism_of_action: output/drug_mechanism_of_action
-      destination: output/clinical_target
+        clinical_report: output/clinical_report/clinical_report.parquet
+        # drug_mechanism_of_action: output/drug_mechanism_of_action
+      destination: output/clinical_target/clinical_target.parquet
       transformer: clinical_target
   ##################################################################################################
 

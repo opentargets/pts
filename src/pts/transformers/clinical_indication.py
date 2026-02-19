@@ -18,11 +18,12 @@ def clinical_indication(source: Path, destination: Path) -> None:
         NotImplementedError: This step is not yet implemented.
     """
     logger.info(f'Source path: {source}')
+    reports = pl.read_parquet(source)
     indications = (
-        ClinicalIndication.from_report(source)
+        ClinicalIndication.from_report(reports)
         .df.filter(pl.col('mappingStatus') == 'FULLY_MAPPED')
         .drop('drugName', 'diseaseName', 'mappingStatus')
     )
 
     logger.info(f'Destination path: {destination}')
-    indications.write_parquet(destination)
+    indications.write_parquet(destination, mkdir=True)

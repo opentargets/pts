@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import polars as pl
-import polars_helpers as plh
+import polars_hash as plh
 from clinical_mining.dataset.clinical_indication import (
     CATEGORY_RANKS,
     CATEGORY_RANKS_STR,
@@ -27,7 +27,8 @@ def clinical_target(source: dict[str, Path], destination: Path) -> None:
     """
     logger.info(f'Source paths: {source}')
     reports = pl.read_parquet(source['clinical_report'])
-    moa = pl.read_parquet(source['drug_mechanism_of_action'])
+    # moa = pl.read_parquet(source['drug_mechanism_of_action'])
+    moa = pl.read_parquet('/Users/irenelopez/EBI/repos/pts/work/output/drug_mechanism_of_action')
 
     drug_max_stage = (
         # TODO: bring this from drug molecule
@@ -79,4 +80,4 @@ def clinical_target(source: dict[str, Path], destination: Path) -> None:
         .join(drug_max_stage, 'drugId')
     )
     logger.info(f'Destination path: {destination}')
-    clinical_target.write_parquet(destination)
+    clinical_target.write_parquet(destination, mkdir=True)

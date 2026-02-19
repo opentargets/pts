@@ -76,7 +76,7 @@ def clinical_report(
         conditions=aact_conditions,
         additional_metadata=[aact_study_references, aact_designs, aact_summaries],
         aggregation_specs={'pmid': {'group_by': 'nct_id', 'alias': 'literature'}},
-    )  # TODO: join with stop reasons
+    )
     chembl_indication = extract_chembl_clinical_report(
         drug_indication=chembl_indication,
         molecule_dictionary=chembl_molecule,
@@ -112,7 +112,7 @@ def clinical_report(
     )
 
     logger.info(f'destination paths: {destination}')
-    output.df.write_parquet(destination['output'])
+    output.df.write_parquet(destination['output'], mkdir=True)
 
 
 def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> ClinicalReport:
