@@ -494,8 +494,11 @@ class AggregateExpression:
 
 # Default Spark properties for the aggregate step
 _AGGREGATE_DEFAULT_PROPERTIES: dict[str, str] = {
-    'spark.driver.memory': '8g',
-    'spark.executor.memory': '8g',
+    'spark.driver.memory': '50g',
+    'spark.executor.memory': '70g',
+    'spark.memory.offHeap.enabled': 'true',
+    'spark.memory.offHeap.size': '16g',
+    'spark.driver.maxResultSize': '32g',
     'spark.driver.userClassPathFirst': 'true',
     'spark.executor.userClassPathFirst': 'true',
 }
