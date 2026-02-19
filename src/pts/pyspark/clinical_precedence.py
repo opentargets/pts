@@ -10,7 +10,7 @@ from pts.pyspark.common.session import Session
 
 def clinical_precedence(
     source: dict[str, str],
-    destination: str,
+    destination: dict[str, str],
     settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
@@ -20,8 +20,11 @@ def clinical_precedence(
         source: Dictionary with paths to:
             - clinical_report: Clinical report parquet from clinical_report step
             - drug_mechanism_of_action: Drug mechanism of action parquet
-        destination: Path to write the output parquet file.
-        settings: Custom settings (not used).
+        destination: Dictionary with paths to:
+            - output: Path to write the clinical precedence evidence parquet.
+            - excluded: Path to write excluded clinical reports that failed QC.
+        settings: Custom settings with:
+            - invalid_clinical_report_qc: List of QC reason strings to exclude.
         properties: Spark configuration options.
     """
     spark = Session(app_name='clinical_precedence', properties=properties)
@@ -29,6 +32,23 @@ def clinical_precedence(
     logger.info(f'Loading data from {source}')
     clinical_report_df = spark.load_data(source['clinical_report'])
     drug_moa_df = spark.load_data(source['drug_mechanism_of_action'])
+
+    # Filter out clinical reports that fail QC
+    invalid_qc_reasons = settings.get('invalid_clinical_report_qc', [])
+
+    if invalid_qc_reasons:
+        invalid_qc_array = f.array([f.lit(reason) for reason in invalid_qc_reasons])
+        has_invalid_qc = f.coalesce(
+            f.arrays_overlap(f.col('qualityControls'), invalid_qc_array),
+            f.lit(False),
+        )
+        excluded_cr = clinical_report_df.filter(has_invalid_qc)
+        clinical_report_df = clinical_report_df.filter(~has_invalid_qc)
+    else:
+        excluded_cr = clinical_report_df.filter(f.lit(False))
+
+    logger.info(f'Writing excluded clinical reports to {destination["excluded"]}')
+    excluded_cr.write.mode('overwrite').parquet(destination['excluded'])
 
     # Explode clinical_report: diseases and drugs
     exploded_cr = (
@@ -56,7 +76,6 @@ def clinical_precedence(
             'clinicalReportId',
             'clinicalStage',
             'trialWhyStopped',
-            'trialStopReasonCategories',
             'studyStartDate',
             'literature',
             'diseaseFromSource',
@@ -69,5 +88,7 @@ def clinical_precedence(
         )
     )
 
-    logger.info(f'Writing clinical precedence evidence to {destination}')
-    evidence.write.parquet(destination, mode='overwrite')
+    evidence = evidence.distinct()
+
+    logger.info(f'Writing clinical precedence evidence to {destination["output"]}')
+    evidence.write.mode('overwrite').parquet(destination['output'])
