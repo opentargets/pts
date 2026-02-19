@@ -501,6 +501,7 @@ _AGGREGATE_DEFAULT_PROPERTIES: dict[str, str] = {
     'spark.driver.maxResultSize': '32g',
     'spark.driver.userClassPathFirst': 'true',
     'spark.executor.userClassPathFirst': 'true',
+    'spark.sql.shuffle.partitions': '2000',
 }
 
 
