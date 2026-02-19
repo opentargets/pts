@@ -21,9 +21,6 @@ def clinical_target(source: dict[str, Path], destination: Path) -> None:
             - clinical_report: Path to clinical report data (output/clinical_report)
             - drug_mechanism_of_action: Path to drug mechanism of action data (output/drug_mechanism_of_action)
         destination: Path to write clinical target data (output/clinical_target)
-
-    Raises:
-        NotImplementedError: This step is not yet implemented.
     """
     logger.info(f'Source paths: {source}')
     reports = pl.read_parquet(source['clinical_report'])

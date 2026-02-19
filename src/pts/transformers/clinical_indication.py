@@ -13,9 +13,6 @@ def clinical_indication(source: Path, destination: Path) -> None:
     Args:
         source: Path to clinical report data (output/clinical_report)
         destination: Path to write clinical indication data (output/clinical_indication)
-
-    Raises:
-        NotImplementedError: This step is not yet implemented.
     """
     logger.info(f'Source path: {source}')
     reports = pl.read_parquet(source)
