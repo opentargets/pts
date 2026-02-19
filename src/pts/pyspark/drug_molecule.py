@@ -17,8 +17,8 @@ from pts.pyspark.common.session import Session
 
 def drug_molecule(
     source: dict[str, str],
-    destination: str,
-    _settings: dict[str, Any],
+    destination: dict[str, str],
+    settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
     """Generate the drug molecule index.
@@ -30,23 +30,44 @@ def drug_molecule(
             - mechanism_of_action: Mechanism of action parquet
             - clinical_report: Clinical report parquet from clinical_report step
             - disease: Disease/EFO parquet
-        destination: Path to write the output parquet file.
-        _settings: Custom settings (not used).
+        destination: Dictionary with paths to:
+            - output: Path to write the output parquet file.
+            - excluded: Path to write excluded clinical reports that failed QC.
+        settings: Custom settings with:
+            - invalid_clinical_report_qc: List of QC reason strings to exclude.
         properties: Spark configuration options.
     """
+    spark = Session(app_name='drug_molecule', properties=properties)
+
+    logger.info(f'Loading data from {source}')
+    clinical_report_df = spark.load_data(source['clinical_report'])
+
+    # Filter out clinical reports that fail QC
+    invalid_qc_reasons = settings.get('invalid_clinical_report_qc', [])
+
+    if invalid_qc_reasons:
+        invalid_qc_array = f.array([f.lit(reason) for reason in invalid_qc_reasons])
+        has_invalid_qc = f.coalesce(
+            f.arrays_overlap(f.col('qualityControls'), invalid_qc_array),
+            f.lit(False),
+        )
+        excluded_cr = clinical_report_df.filter(has_invalid_qc)
+        clinical_report_df = clinical_report_df.filter(~has_invalid_qc)
+    else:
+        excluded_cr = clinical_report_df.filter(f.lit(False))
+
+    logger.info(f'Writing excluded clinical reports to {destination["excluded"]}')
+    excluded_cr.write.mode('overwrite').parquet(destination['excluded'])
+
     # TODO: Implement indication processing using clinical_report dataset
     raise NotImplementedError(
         'drug_molecule step is temporarily disabled. '
         'The logic to process indications from clinical_report is not yet implemented.'
     )
 
-    spark = Session(app_name='drug_molecule', properties=properties)
-
-    logger.info(f'Loading data from {source}')
     molecule_df = spark.load_data(source['molecule'])
     chemical_probes_df = spark.load_data(source['chemical_probes'])
     mechanism_df = spark.load_data(source['mechanism_of_action'])
-    clinical_report_df = spark.load_data(source['clinical_report'])  # noqa: F841
     disease_df = spark.load_data(source['disease'])
 
     logger.info('Processing drug index')
