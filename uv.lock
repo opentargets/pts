@@ -1699,6 +1699,7 @@ dependencies = [
     { name = "polars-hash" },
     { name = "pyspark" },
     { name = "setuptools" },
+    { name = "torch" },
 ]
 
 [package.optional-dependencies]
@@ -1731,6 +1732,7 @@ requires-dist = [
     { name = "pyspark", specifier = "==3.5.7" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.1" },
     { name = "setuptools", specifier = ">=80.9.0" },
+    { name = "torch", specifier = ">=2.10.0" },
 ]
 provides-extras = ["test"]
 

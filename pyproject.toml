@@ -17,6 +17,7 @@ dependencies = [
   "ontoma",
   "polars-hash>=0.5.6",
   "clinical-mining",
+  "torch>=2.10.0",
 ]
 
 [dependency-groups]
