@@ -125,7 +125,7 @@ def compute_target_prioritisation(
         f.col('Nr_TEP').alias('hasTEP'),
         f.col('negScaledHarmonicSum').alias('mouseKOScore'),
         f.col('Nr_chprob').alias('hasHighQualityChemicalProbes'),
-        f.col('inClinicalTrials').alias('maxClinicalTrialPhase'),
+        f.col('inClinicalTrials').alias('maxClinicalStage'),
         f.col('Nr_specificity').alias('tissueSpecificity'),
         f.col('Nr_distribution').alias('tissueDistribution'),
     )
@@ -731,10 +731,10 @@ def _clin_trials_query(
     mechanism_of_action: DataFrame,
     molecule: DataFrame,
 ) -> DataFrame:
-    """Compute maximum clinical trial phase from MoA and molecule data.
+    """Compute maximum clinical stage score from MoA and molecule data.
 
     Uses MoA to find drug-target relationships, joins with molecule to get
-    clinical trial phases, then normalizes to 0-1 scale (phase / 4).
+    clinical stage names, then maps each to a 0-1 score and takes the max.
     """
     # Get drug-target relationships from MoA
     drug_targets = (
@@ -748,7 +748,7 @@ def _clin_trials_query(
     # Get clinical trial phase from molecule data
     molecule_phase = molecule.select(
         f.col('id').alias('drugId'),
-        f.col('maximumClinicalTrialPhase'),
+        f.col('maximumClinicalStage'),
     )
 
     # Join drug-target with molecule to get clinical trial phase per target
@@ -758,17 +758,27 @@ def _clin_trials_query(
         'left',
     )
 
-    # Get max clinical trial phase per target, normalized to 0-1 scale
+    # Map clinical stage names to 0-1 scores and take max per target
+    stage_score_map = f.create_map(
+        f.lit('approved'), f.lit(1.0),
+        f.lit('pre-approval'), f.lit(0.8),
+        f.lit('phase III'), f.lit(0.7),
+        f.lit('phase II/III'), f.lit(0.5),
+        f.lit('phase II'), f.lit(0.2),
+        f.lit('phase I/II'), f.lit(0.15),
+        f.lit('phase I'), f.lit(0.1),
+        f.lit('early phase I'), f.lit(0.05),
+        f.lit('IND'), f.lit(0.05),
+        f.lit('preclinical'), f.lit(0.01),
+        f.lit('unknown'), f.lit(0.01),
+    )
+
     max_phase_per_target = (
-        drug_target_phase.dropDuplicates(['target', 'maximumClinicalTrialPhase'])
+        drug_target_phase
+        .withColumn('clinicalStageScore', stage_score_map[f.col('maximumClinicalStage')])
+        .dropDuplicates(['target', 'maximumClinicalStage'])
         .groupBy('target')
-        .agg(f.max('maximumClinicalTrialPhase').alias('maxClinTrialPhase'))
-        .withColumn(
-            'inClinicalTrials',
-            f.when(f.col('maxClinTrialPhase') >= 0, f.col('maxClinTrialPhase') / 4).otherwise(
-                f.lit(None)
-            ),
-        )
+        .agg(f.max('clinicalStageScore').alias('inClinicalTrials'))
     )
 
     return queryset.join(
