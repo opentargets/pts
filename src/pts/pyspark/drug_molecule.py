@@ -1,8 +1,8 @@
 """Drug index generation.
 
-Combines molecule data with indications, mechanisms of action, chemical probes,
-and warnings to produce the final drug index. Filters to include only molecules
-that qualify as "drugs" and generates human-readable descriptions.
+Combines molecule data with clinical reports, mechanisms of action, and chemical probes
+to produce the final drug index. Filters to include only molecules that qualify as
+"drugs" and generates human-readable descriptions.
 """
 
 from typing import Any
@@ -13,6 +13,41 @@ from pyspark.sql import DataFrame
 from pyspark.sql.types import StringType
 
 from pts.pyspark.common.session import Session
+
+# Stage ranking: lower rank = more advanced stage
+CLINICAL_STAGE_RANKS = {
+    'APPROVAL': 1,
+    'PREAPPROVAL': 2,
+    'PHASE_3': 3,
+    'PHASE_2_3': 4,
+    'PHASE_2': 5,
+    'PHASE_1_2': 6,
+    'PHASE_1': 7,
+    'EARLY_PHASE_1': 8,
+    'IND': 9,
+    'PRECLINICAL': 10,
+    'UNKNOWN': 11,
+}
+
+# Stages that should be treated as APPROVAL when computing the max
+STAGE_FOR_MAX_MAPPING = {'WITHDRAWN': 'APPROVAL', 'PHASE_4': 'APPROVAL'}
+
+STAGE_DISPLAY_NAMES = {
+    'APPROVAL': 'approved',
+    'PREAPPROVAL': 'pre-approval',
+    'PHASE_3': 'phase III',
+    'PHASE_2_3': 'phase II/III',
+    'PHASE_2': 'phase II',
+    'PHASE_1_2': 'phase I/II',
+    'PHASE_1': 'phase I',
+    'EARLY_PHASE_1': 'early phase I',
+    'IND': 'IND',
+    'PRECLINICAL': 'preclinical',
+    'UNKNOWN': 'unknown',
+}
+
+# Inverse mapping: rank -> stage string
+RANK_TO_STAGE = {v: k for k, v in CLINICAL_STAGE_RANKS.items()}
 
 
 def drug_molecule(
@@ -42,10 +77,10 @@ def drug_molecule(
     logger.info(f'Loading data from {source}')
     clinical_report_df = spark.load_data(source['clinical_report'])
 
-    # Filter out clinical reports that fail QC
+    # Filter out clinical reports that fail QC (only if qualityControls column exists)
     invalid_qc_reasons = settings.get('invalid_clinical_report_qc', [])
 
-    if invalid_qc_reasons:
+    if invalid_qc_reasons and 'qualityControls' in clinical_report_df.columns:
         invalid_qc_array = f.array([f.lit(reason) for reason in invalid_qc_reasons])
         has_invalid_qc = f.coalesce(
             f.arrays_overlap(f.col('qualityControls'), invalid_qc_array),
@@ -59,12 +94,6 @@ def drug_molecule(
     logger.info(f'Writing excluded clinical reports to {destination["excluded"]}')
     excluded_cr.write.mode('overwrite').parquet(destination['excluded'])
 
-    # TODO: Implement indication processing using clinical_report dataset
-    raise NotImplementedError(
-        'drug_molecule step is temporarily disabled. '
-        'The logic to process indications from clinical_report is not yet implemented.'
-    )
-
     molecule_df = spark.load_data(source['molecule'])
     chemical_probes_df = spark.load_data(source['chemical_probes'])
     mechanism_df = spark.load_data(source['mechanism_of_action'])
@@ -75,20 +104,19 @@ def drug_molecule(
         molecule_df,
         chemical_probes_df,
         mechanism_df,
-        indication_raw_df,
+        clinical_report_df,
         disease_df,
     )
 
-    logger.info(f'Writing drug index to {destination}')
-    output_df.write.parquet(destination, mode='overwrite')
+    logger.info(f'Writing drug index to {destination["output"]}')
+    output_df.write.mode('overwrite').parquet(destination['output'])
 
 
 def process_drug_index(
     molecule: DataFrame,
     chemical_probes: DataFrame,
     mechanism_of_action: DataFrame,
-    drug_warning: DataFrame,
-    indication_raw: DataFrame,
+    clinical_report: DataFrame,
     disease: DataFrame,
 ) -> DataFrame:
     """Process and combine all drug data into the final index.
@@ -97,21 +125,30 @@ def process_drug_index(
         molecule: Processed molecule data.
         chemical_probes: Chemical probes data.
         mechanism_of_action: Mechanism of action data.
-        drug_warning: Drug warnings data.
-        indication_raw: Raw ChEMBL indication data.
+        clinical_report: Clinical report data with drugs, diseases, and clinicalStage.
         disease: Disease/EFO data for indication mapping.
 
     Returns:
         Final drug index DataFrame.
     """
-    # Process indications
-    indications = _process_indications(indication_raw, disease)
+    # Compute overall max clinical stage per drug
+    max_phase = _compute_max_phase_per_drug(clinical_report)
 
-    # Get chemical probe drug IDs
-    probes = (
+    # Compute per-indication max stage for description generation
+    indications = _process_clinical_report_indications(clinical_report, disease)
+
+    # Get all chemical probe drug IDs (for is_drug filter)
+    probe_drug_ids = (
         chemical_probes.filter(f.col('drugId').isNotNull())
         .select(f.col('drugId').alias('chemicalProbeDrugId'))
         .distinct()
+    )
+
+    # Get probe compound IDs grouped per drug (for cross-references)
+    probe_xrefs = (
+        chemical_probes.filter(f.col('drugId').isNotNull() & f.col('drugFromSourceId').isNotNull())
+        .groupBy(f.col('drugId').alias('_probeXrefDrugId'))
+        .agg(f.collect_set('drugFromSourceId').alias('_probeIds'))
     )
 
     # Get molecules with mechanism of action
@@ -121,36 +158,37 @@ def process_drug_index(
         .withColumn('hasMechanismOfAction', f.lit(True))
     )
 
-    # Process warnings to get blackBoxWarning and hasBeenWithdrawn flags
-    warnings = _process_warnings(drug_warning)
-
     # Join all data together
     drug_df = (
-        molecule.join(probes, molecule['id'] == probes['chemicalProbeDrugId'], 'left_outer')
+        molecule.join(max_phase, on='id', how='left_outer')
+        .join(indications, on='id', how='left_outer')
+        .join(probe_drug_ids, molecule['id'] == probe_drug_ids['chemicalProbeDrugId'], 'left_outer')
+        .join(probe_xrefs, molecule['id'] == probe_xrefs['_probeXrefDrugId'], 'left_outer')
         .join(has_mechanism, on='id', how='left_outer')
-        .join(indications.select('id', 'indications'), on='id', how='left_outer')
-        .join(warnings, on='id', how='left_outer')
-        # Coalesce null warning flags to false
-        .withColumn('blackBoxWarning', f.coalesce(f.col('blackBoxWarning'), f.lit(False)))
-        .withColumn('hasBeenWithdrawn', f.coalesce(f.col('hasBeenWithdrawn'), f.lit(False)))
+    )
+
+    # Append probes&drugs cross-reference when the molecule is a chemical probe
+    drug_df = drug_df.withColumn(
+        'crossReferences',
+        f.when(
+            f.col('_probeIds').isNotNull(),
+            f.concat(
+                f.coalesce(f.col('crossReferences'), f.array()),
+                f.array(f.struct(f.lit('probes&drugs').alias('source'), f.col('_probeIds').alias('ids'))),
+            ),
+        ).otherwise(f.col('crossReferences')),
     )
 
     # Filter to only include "drugs" - molecules that have:
     # - a drugbank cross-reference, OR
-    # - indications, OR
+    # - are present in clinical reports (maximumClinicalStage is not null), OR
     # - mechanism of action, OR
     # - are a chemical probe
     is_drug = (
         f.expr("array_contains(transform(crossReferences, x -> x.source), 'drugbank')")
-        | f.col('indications').isNotNull()
+        | f.col('maximumClinicalStage').isNotNull()
         | f.col('hasMechanismOfAction').isNotNull()
         | f.col('chemicalProbeDrugId').isNotNull()
-    )
-
-    # Compute maximumClinicalTrialPhase from indications
-    drug_df = drug_df.withColumn(
-        'maximumClinicalTrialPhase',
-        f.expr('aggregate(indications, cast(0 as double), (acc, x) -> greatest(acc, x.maxPhaseForIndication))'),
     )
 
     # Add description
@@ -159,8 +197,14 @@ def process_drug_index(
     # Filter and cleanup
     return (
         drug_df.filter(is_drug)
+        .withColumn(
+            'maximumClinicalStage',
+            f.coalesce(f.col('maximumClinicalStage'), f.lit(STAGE_DISPLAY_NAMES['UNKNOWN'])),
+        )
         .drop(
             'chemicalProbeDrugId',
+            '_probeXrefDrugId',
+            '_probeIds',
             'hasMechanismOfAction',
             'indications',
         )
@@ -169,107 +213,150 @@ def process_drug_index(
     )
 
 
-def _process_indications(indication_raw: DataFrame, disease: DataFrame) -> DataFrame:
-    """Process raw ChEMBL indication data.
+def _compute_max_phase_per_drug(clinical_report: DataFrame) -> DataFrame:
+    """Compute the overall maximum clinical stage for each drug across all clinical reports.
+
+    Explodes the drugs array, maps WITHDRAWN/PHASE_4 to APPROVAL, ranks stages,
+    and returns the best (most advanced) stage per drug.
 
     Args:
-        indication_raw: Raw ChEMBL indication JSONL data.
-        disease: Disease/EFO data for name mapping.
+        clinical_report: Clinical report DataFrame with drugs array and clinicalStage.
 
     Returns:
-        DataFrame with id and indications columns.
+        DataFrame with columns: id (drugId), maximumClinicalStage (string display name).
     """
-    # Prepare EFO lookup - handle obsolete terms
-    efo = disease.select(
-        f.col('id').alias('updatedEfo'),
+    # Build mapping expression for stage normalization
+    stage_mapping = f.create_map(*[
+        item for pair in STAGE_FOR_MAX_MAPPING.items() for item in (f.lit(pair[0]), f.lit(pair[1]))
+    ])
+    # Build mapping expression for stage -> rank
+    rank_mapping = f.create_map(*[
+        item for pair in CLINICAL_STAGE_RANKS.items() for item in (f.lit(pair[0]), f.lit(pair[1]))
+    ])
+    # Build mapping expression for rank -> display name
+    rank_to_display = f.create_map(*[
+        item
+        for rank, stage in RANK_TO_STAGE.items()
+        for item in (f.lit(rank), f.lit(STAGE_DISPLAY_NAMES[stage]))
+    ])
+
+    return (
+        clinical_report.select(
+            f.explode(f.col('drugs')).alias('drug'),
+            f.col('clinicalStage'),
+        )
+        .select(
+            f.col('drug.drugId').alias('id'),
+            f.col('clinicalStage'),
+        )
+        .filter(f.col('id').isNotNull())
+        # Normalize: map WITHDRAWN/PHASE_4 -> APPROVAL
+        .withColumn(
+            'normalizedStage',
+            f.coalesce(stage_mapping[f.col('clinicalStage')], f.col('clinicalStage')),
+        )
+        # Map stage to rank
+        .withColumn(
+            'stageRank',
+            f.coalesce(rank_mapping[f.col('normalizedStage')], f.lit(CLINICAL_STAGE_RANKS['UNKNOWN'])),
+        )
+        # Group by drug, take minimum rank (= best stage)
+        .groupBy('id')
+        .agg(f.min('stageRank').alias('bestRank'))
+        # Map rank to display name
+        .withColumn('maximumClinicalStage', rank_to_display[f.col('bestRank')])
+        .drop('bestRank')
+    )
+
+
+def _process_clinical_report_indications(
+    clinical_report: DataFrame,
+    disease: DataFrame,
+) -> DataFrame:
+    """Process clinical reports to extract per-drug, per-indication max stage.
+
+    Explodes both drugs and diseases arrays, computes the best clinical stage
+    per (drugId, diseaseId) pair, joins with disease data for names, and
+    aggregates into an array of indication structs per drug.
+
+    Args:
+        clinical_report: Clinical report DataFrame with drugs, diseases, clinicalStage.
+        disease: Disease/EFO DataFrame with id and name columns.
+
+    Returns:
+        DataFrame with columns: id (drugId), indications (array of structs).
+    """
+    # Build mapping expressions
+    stage_mapping = f.create_map(*[
+        item for pair in STAGE_FOR_MAX_MAPPING.items() for item in (f.lit(pair[0]), f.lit(pair[1]))
+    ])
+    rank_mapping = f.create_map(*[
+        item for pair in CLINICAL_STAGE_RANKS.items() for item in (f.lit(pair[0]), f.lit(pair[1]))
+    ])
+    rank_to_display = f.create_map(*[
+        item
+        for rank, stage in RANK_TO_STAGE.items()
+        for item in (f.lit(rank), f.lit(STAGE_DISPLAY_NAMES[stage]))
+    ])
+
+    # Explode drugs and diseases, filter to rows with both IDs
+    exploded = (
+        clinical_report.select(
+            f.explode(f.col('drugs')).alias('drug'),
+            f.explode(f.col('diseases')).alias('disease'),
+            f.col('clinicalStage'),
+        )
+        .select(
+            f.col('drug.drugId').alias('drugId'),
+            f.col('disease.diseaseId').alias('diseaseId'),
+            f.col('clinicalStage'),
+        )
+        .filter(f.col('drugId').isNotNull() & f.col('diseaseId').isNotNull())
+        # Normalize stage
+        .withColumn(
+            'normalizedStage',
+            f.coalesce(stage_mapping[f.col('clinicalStage')], f.col('clinicalStage')),
+        )
+        # Map to rank
+        .withColumn(
+            'stageRank',
+            f.coalesce(rank_mapping[f.col('normalizedStage')], f.lit(CLINICAL_STAGE_RANKS['UNKNOWN'])),
+        )
+    )
+
+    # Best stage per (drugId, diseaseId)
+    per_indication = (
+        exploded.groupBy('drugId', 'diseaseId')
+        .agg(f.min('stageRank').alias('bestRank'))
+        .withColumn('maxClinicalStage', rank_to_display[f.col('bestRank')])
+        .drop('bestRank')
+    )
+
+    # Join with disease to get efoName
+    disease_names = disease.select(
+        f.col('id').alias('diseaseId'),
         f.trim(f.lower(f.col('name'))).alias('efoName'),
-        f.array_union(
-            f.array(f.col('id')),
-            f.coalesce(f.col('obsoleteTerms'), f.array()),
-        ).alias('allEfoIds'),
-    ).withColumn(
-        'allEfoIds',
-        f.transform(f.col('allEfoIds'), lambda x: f.translate(x, ':', '_')),
     )
 
-    # Process raw indication data
-    indication = (
-        indication_raw.select(
-            f.col('_metadata.all_molecule_chembl_ids').alias('ids'),
-            f.explode(f.col('indication_refs')).alias('ref'),
-            f.col('max_phase_for_ind').alias('maxPhaseForIndication'),
-            f.translate(f.col('efo_id'), ':', '_').alias('disease'),
-        )
-        .withColumn('ref_id', f.split(f.col('ref.ref_id'), ','))
-        .withColumn('source', f.col('ref.ref_type'))
-        .drop('ref')
-        .groupBy('ids', 'maxPhaseForIndication', 'disease', 'source')
-        .agg(f.collect_set('ref_id').alias('ref_id'))
-        .withColumn(
-            'references',
-            f.struct(
-                f.col('source'),
-                f.flatten(f.col('ref_id')).alias('ids'),
-            ),
-        )
-        .groupBy('ids', 'maxPhaseForIndication', 'disease')
-        .agg(f.collect_set('references').alias('references'))
-    )
+    per_indication_with_names = per_indication.join(disease_names, on='diseaseId', how='left')
 
-    # Join with EFO to get disease names and updated IDs
-    indication_with_disease = (
-        indication.join(
-            efo,
-            f.array_contains(efo['allEfoIds'], indication['disease']),
-        )
-        .drop('allEfoIds', 'disease')
-        .withColumnRenamed('updatedEfo', 'disease')
-    )
-
-    # Create final indication structure grouped by molecule ID
+    # Group by drugId -> array of indication structs
     return (
-        indication_with_disease.withColumn('id', f.explode(f.col('ids')))
-        .withColumn(
-            'indications',
+        per_indication_with_names.withColumn(
+            'indication',
             f.struct(
-                f.col('disease'),
+                f.col('diseaseId').alias('disease'),
                 f.col('efoName'),
-                f.col('references'),
-                f.col('maxPhaseForIndication').cast('double').alias('maxPhaseForIndication'),
+                f.col('maxClinicalStage'),
             ),
         )
-        .groupBy('id')
-        .agg(f.collect_set('indications').alias('indications'))
-    )
-
-
-def _process_warnings(drug_warning: DataFrame) -> DataFrame:
-    """Process drug warnings to extract blackBoxWarning and hasBeenWithdrawn flags.
-
-    Args:
-        drug_warning: Drug warnings data.
-
-    Returns:
-        DataFrame with id, blackBoxWarning, and hasBeenWithdrawn columns.
-    """
-    return (
-        drug_warning.select(
-            f.explode(f.col('chemblIds')).alias('id'),
-            f.col('warningType'),
-        )
-        .groupBy('id')
-        .agg(
-            f.max(f.when(f.col('warningType') == 'Black Box Warning', True).otherwise(False)).alias('blackBoxWarning'),
-            f.max(f.when(f.col('warningType') == 'Withdrawn', True).otherwise(False)).alias('hasBeenWithdrawn'),
-        )
+        .groupBy(f.col('drugId').alias('id'))
+        .agg(f.collect_set('indication').alias('indications'))
     )
 
 
 def _add_description(df: DataFrame) -> DataFrame:
     """Add human-readable description to drug data.
-
-    The description summarizes key drug attributes including type, clinical phase,
-    indications, and safety information.
 
     Args:
         df: Drug DataFrame with required columns.
@@ -277,7 +364,6 @@ def _add_description(df: DataFrame) -> DataFrame:
     Returns:
         DataFrame with description column added.
     """
-    # Register UDF for description generation
     from pyspark.sql import SparkSession
 
     spark = SparkSession.getActiveSession()
@@ -288,8 +374,8 @@ def _add_description(df: DataFrame) -> DataFrame:
 
     # Prepare indication data for description
     df = df.withColumn(
-        '_indication_phases',
-        f.expr('transform(coalesce(indications, array()), x -> x.maxPhaseForIndication)'),
+        '_indication_stages',
+        f.expr('transform(coalesce(indications, array()), x -> x.maxClinicalStage)'),
     ).withColumn(
         '_indication_labels',
         f.expr('transform(coalesce(indications, array()), x -> x.efoName)'),
@@ -301,35 +387,29 @@ def _add_description(df: DataFrame) -> DataFrame:
         f.expr(
             """generate_description(
             drugType,
-            coalesce(maximumClinicalTrialPhase, cast(-1 as double)),
-            _indication_phases,
-            _indication_labels,
-            coalesce(hasBeenWithdrawn, false),
-            coalesce(blackBoxWarning, false)
+            maximumClinicalStage,
+            _indication_stages,
+            _indication_labels
         )"""
         ),
     )
 
-    return df.drop('_indication_phases', '_indication_labels')
+    return df.drop('_indication_stages', '_indication_labels')
 
 
 def _generate_description(
     drug_type: str | None,
-    max_phase: float | None,
-    indication_phases: list[float] | None,
+    max_phase: str | None,
+    indication_stages: list[str] | None,
     indication_labels: list[str] | None,
-    is_withdrawn: bool,
-    black_box_warning: bool,
 ) -> str:
     """Generate a human-readable description of a drug.
 
     Args:
         drug_type: Type of drug (e.g., "Small molecule").
-        max_phase: Maximum clinical trial phase (-1 if unknown).
-        indication_phases: List of indication phases.
+        max_phase: Maximum clinical stage as a display name (e.g., "approved").
+        indication_stages: List of per-indication max clinical stage display names.
         indication_labels: List of indication disease names.
-        is_withdrawn: Whether the drug has been withdrawn.
-        black_box_warning: Whether the drug has a black box warning.
 
     Returns:
         Human-readable description string.
@@ -337,29 +417,26 @@ def _generate_description(
     if drug_type is None:
         drug_type = 'Unknown'
 
-    roman_numbers = {4.0: 'IV', 3.0: 'III', 2.0: 'II', 1.0: 'I', 0.5: 'I (Early)'}
+    approved_display = STAGE_DISPLAY_NAMES['APPROVAL']
 
-    # Main drug type note
     main_note = f'{drug_type.capitalize()} drug'
 
     # Clinical phase
     phase_str = ''
-    if max_phase is not None and max_phase > 0:
-        phase_roman = roman_numbers.get(max_phase, '')
-        if phase_roman:
-            label_count = len(indication_labels) if indication_labels else 0
-            multi_indication = ' (across all indications)' if label_count > 1 else ''
-            phase_str = f' with a maximum clinical trial phase of {phase_roman}{multi_indication}'
+    if max_phase is not None:
+        label_count = len(indication_labels) if indication_labels else 0
+        multi_indication = ' (across all indications)' if label_count > 1 else ''
+        phase_str = f' with a maximum clinical stage of {max_phase}{multi_indication}'
 
     # Process indications
     indication_str = ''
-    if indication_phases is not None and indication_labels is not None:
-        indications = list(zip(indication_phases, indication_labels, strict=False))
-        indications = [(phase, label) for phase, label in indications if phase is not None and label is not None]
+    if indication_stages is not None and indication_labels is not None:
+        indications = list(zip(indication_stages, indication_labels, strict=False))
+        indications = [(stage, label) for stage, label in indications if stage is not None and label is not None]
         indications = list(set(indications))
 
-        approved = [label for phase, label in indications if phase == 4.0]
-        investigational_count = sum(1 for phase, _ in indications if phase < 4.0)
+        approved = [label for stage, label in indications if stage == approved_display]
+        investigational_count = sum(1 for stage, _ in indications if stage != approved_display)
 
         if approved and not investigational_count:
             if len(approved) <= 2:
@@ -382,16 +459,7 @@ def _generate_description(
                     f' and has {len(approved)} approved and {investigational_count} investigational indication{s}'
                 )
 
-    # Main sentence
-    main_sentence = f'{main_note}{phase_str}{indication_str}.'
-
-    # Withdrawn note
-    withdrawn_note = ' It was withdrawn in at least one region.' if is_withdrawn else ''
-
-    # Black box warning note
-    black_box_note = ' This drug has a black box warning from the FDA.' if black_box_warning else ''
-
-    return f'{main_sentence}{withdrawn_note}{black_box_note}'
+    return f'{main_note}{phase_str}{indication_str}.'
 
 
 def _join_semantic(items: list[str]) -> str:

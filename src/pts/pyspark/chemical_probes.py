@@ -258,6 +258,7 @@ def generate_chemical_probes_evidence(
     grouping_cols = [
         'targetFromSourceId',
         'id',
+        'pdid',
         'drugId',
         'mechanismOfAction',
         'origin',
@@ -276,4 +277,5 @@ def generate_chemical_probes_evidence(
         .join(drugs_xref_data, on='pdid', how='left')
         .groupBy(grouping_cols)
         .agg(f.collect_set(f.struct(f.col('datasourceId').alias('niceName'), f.col('url').alias('url'))).alias('urls'))
+        .withColumnRenamed('pdid', 'drugFromSourceId')
     )
