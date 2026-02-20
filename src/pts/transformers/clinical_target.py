@@ -28,7 +28,7 @@ def clinical_target(source: dict[str, Path], destination: Path) -> None:
     moa = pl.read_parquet('/Users/irenelopez/EBI/repos/pts/work/output/drug_mechanism_of_action')
 
     drug_max_stage = (
-        # TODO: bring this from drug molecule
+        # TODO: bring this from drug molecule AND treat phase iv/withdrawn as approval
         reports.explode('drugs')
         .unnest('drugs')
         .filter(pl.col('drugId').is_not_null())

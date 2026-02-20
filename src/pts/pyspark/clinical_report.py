@@ -1,6 +1,7 @@
 """Clinical report dataset generation."""
 
 import os
+from enum import StrEnum
 from functools import lru_cache
 
 import polars as pl
@@ -20,6 +21,12 @@ from clinical_mining.utils.polars_helpers import union_dfs
 from clinical_mining.utils.spark_helpers import spark_session
 from loguru import logger
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+from pts.transformers.utils import update_quality_flag
+
+
+class ClinicalReportFlags(StrEnum):
+    PHASE_IV_NOT_APPROVED = 'phase_iv_not_approved'
 
 
 def clinical_report(
@@ -124,8 +131,8 @@ def clinical_report(
             ner_cache_path='/Users/irenelopez/EBI/repos/pts/work/input/clinical_report/ner_cache.parquet',
         )
         .pipe(validate_disease, disease_index=pl.read_parquet(source['disease']))
-        .pipe(validate_phase_iv)
         .pipe(create_title)
+        .pipe(flag_phase_iv_not_approved)
     )
 
     logger.info(f'destination paths: {destination}')
@@ -181,47 +188,52 @@ def validate_disease(reports: ClinicalReport, disease_index: pl.DataFrame) -> Cl
     )
 
 
-def validate_phase_iv(reports: ClinicalReport) -> ClinicalReport:
-    """Remove Phase IV reports annotation if the association is not approved."""
-    exploded = reports.df.explode('drugs').explode('diseases').unnest(['drugs', 'diseases'])
+def flag_phase_iv_not_approved(reports: ClinicalReport) -> ClinicalReport:
+    """Flag Phase IV trials that are not approved.
 
-    non_phase_iv = exploded.filter(pl.col('clinicalStage') != ClinicalStageCategory.PHASE_4.value)
-    phase_iv = (
-        exploded.filter(pl.col('clinicalStage') == ClinicalStageCategory.PHASE_4.value)
-        .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
-        .unique()
-    )
-    logger.info(f'validate phase iv reports... Original count: {phase_iv.select("id").unique().height}')
+    Args:
+        reports: ClinicalReport object with clinical reports
 
-    approved = (
-        (
-            exploded.filter(
-                pl.col('clinicalStage').is_in([
-                    ClinicalStageCategory.APPROVED.value,
-                    ClinicalStageCategory.PREAPPROVAL.value,
-                ])
-            )
-        )
-        .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
-        .unique()
+    Returns:
+        ClinicalReport object with qualityFlag column updated
+    """
+    exploded = (
+        reports.df.explode('drugs')
+        .explode('diseases')
+        .with_columns([
+            pl.col('drugs').struct.field('drugId'),
+            pl.col('diseases').struct.field('diseaseId'),
+        ])
     )
 
-    approved_phase_iv = phase_iv.join(
-        approved.select(['drugId', 'diseaseId']), on=['drugId', 'diseaseId'], how='semi'
-    ).unique()
-    logger.info(f'validate phase iv reports... Approved count: {approved_phase_iv.select("id").unique().height}')
-
-    combined = pl.concat([non_phase_iv, approved_phase_iv])
-    return ClinicalReport(
-        df=(
-            # Reconstruct the nested disease structure
-            combined.unique()
-            .group_by(reports.df.drop('diseases', 'drugs').columns, maintain_order=True)
-            .agg([
-                pl.struct(['diseaseFromSource', 'diseaseId']).unique().alias('diseases'),
-                pl.struct(['drugFromSource', 'drugId']).unique().alias('drugs'),
+    approved_pairs = (
+        exploded.filter(
+            pl.col('clinicalStage').is_in([
+                ClinicalStageCategory.APPROVAL.value,
+                ClinicalStageCategory.PREAPPROVAL.value,
             ])
         )
+        .filter(pl.col('drugId').is_not_null() & pl.col('diseaseId').is_not_null())
+        .select(['drugId', 'diseaseId'])
+        .unique()
+    )
+
+    phase_iv_flagged_ids = (
+        exploded.filter(pl.col('clinicalStage') == ClinicalStageCategory.PHASE_4)
+        .filter(pl.col('drugId').is_not_null() & pl.col('diseaseId').is_not_null())
+        .select(['id', 'drugId', 'diseaseId'])
+        .unique()
+        .join(approved_pairs, on=['drugId', 'diseaseId'], how='anti')
+        .select('id')
+        .unique()
+    )
+
+    flag_condition = pl.col('clinicalStage').eq(ClinicalStageCategory.PHASE_4) & pl.col('id').is_in(
+        phase_iv_flagged_ids['id'].to_list()
+    )
+
+    return ClinicalReport(
+        df=update_quality_flag(reports.df, flag_condition, ClinicalReportFlags.PHASE_IV_NOT_APPROVED.value)
     )
 
 
@@ -276,6 +288,9 @@ def create_title(reports: ClinicalReport) -> ClinicalReport:
             )
         )
     )
+
+
+# STOP REASONS UTILS
 
 
 def get_device() -> torch.device:
