@@ -250,7 +250,13 @@ steps:
       source:
         clinical_report: output/clinical_report
         drug_mechanism_of_action: output/drug_mechanism_of_action
-      destination: intermediate/evidence/clinical_precedence.parquet
+      destination:
+        output: intermediate/evidence/clinical_precedence.parquet
+        excluded: excluded/clinical_precedence_failed_report
+      settings:
+        invalid_clinical_report_qc:
+          - PLACEHOLDER_REASON_1
+          - PLACEHOLDER_REASON_2
   ##################################################################################################
 
   #: EVIDENCE_CANCER_BIOMARKERS STEP :################################################################
@@ -423,7 +429,13 @@ steps:
         mechanism_of_action: output/drug_mechanism_of_action
         clinical_report: output/clinical_report
         disease: output/disease
-      destination: output/drug_molecule
+      destination:
+        output: output/drug_molecule
+        excluded: excluded/drug_molecule_failed_report
+      settings:
+        invalid_clinical_report_qc:
+          - PLACEHOLDER_REASON_1
+          - PLACEHOLDER_REASON_2
   ##################################################################################################
 
   #: CLINICAL_REPORT STEP :#######################################################################
