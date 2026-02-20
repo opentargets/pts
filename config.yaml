@@ -475,8 +475,14 @@ steps:
   clinical_indication:
     - name: transform clinical_indication
       source: output/clinical_report/clinical_report.parquet
-      destination: output/clinical_indication/clinical_indication.parquet
+      destination:
+        output: output/clinical_indication/clinical_indication.parquet
+        excluded: excluded/clinical_indication_failed_report.parquet
       transformer: clinical_indication
+      settings:
+        invalid_clinical_report_qc:
+          - PLACEHOLDER_REASON_1
+          - PLACEHOLDER_REASON_2
   ##################################################################################################
 
   #: CLINICAL_TARGET STEP :#######################################################################
@@ -484,9 +490,15 @@ steps:
     - name: transform clinical_target
       source:
         clinical_report: output/clinical_report/clinical_report.parquet
-        # drug_mechanism_of_action: output/drug_mechanism_of_action
-      destination: output/clinical_target/clinical_target.parquet
+        drug_mechanism_of_action: output/drug_mechanism_of_action
+      destination:
+        output: output/clinical_target/clinical_target.parquet
+        excluded: excluded/clinical_target_failed_report.parquet
       transformer: clinical_target
+      settings:
+        invalid_clinical_report_qc:
+          - PLACEHOLDER_REASON_1
+          - PLACEHOLDER_REASON_2
   ##################################################################################################
 
   #: TARGET_PRIORITISATION STEP :###################################################################

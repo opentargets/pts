@@ -1,6 +1,7 @@
 """Clinical target dataset generation."""
 
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import polars_hash as plh
@@ -13,19 +14,34 @@ from clinical_mining.dataset.clinical_indication import (
 from loguru import logger
 
 
-def clinical_target(source: dict[str, Path], destination: Path) -> None:
+def clinical_target(source: dict[str, Path], destination: dict[str, Path], settings: dict[str, Any]) -> None:
     """Generate clinical target dataset from clinical report and drug mechanism of action data.
 
     Args:
         source: Dictionary containing paths to input data:
             - clinical_report: Path to clinical report data (output/clinical_report)
             - drug_mechanism_of_action: Path to drug mechanism of action data (output/drug_mechanism_of_action)
-        destination: Path to write clinical target data (output/clinical_target)
+        destination: Dictionary with destination paths:
+            - output: Path to write clinical target data
+            - excluded: Path to write excluded clinical reports
+        settings: Dictionary with settings:
+            - invalid_clinical_report_qc: List of QC reasons to exclude
     """
     logger.info(f'Source paths: {source}')
     reports = pl.read_parquet(source['clinical_report'])
-    # moa = pl.read_parquet(source['drug_mechanism_of_action'])
-    moa = pl.read_parquet('/Users/irenelopez/EBI/repos/pts/work/output/drug_mechanism_of_action')
+    moa = pl.read_parquet(source['drug_mechanism_of_action'])
+
+    # Filter out clinical reports that fail QC
+    invalid_qc_reasons = settings.get('invalid_clinical_report_qc', [])
+    if invalid_qc_reasons:
+        has_invalid_qc = pl.col('qualityControls').list.set_intersection(invalid_qc_reasons).list.len() > 0
+        excluded = reports.filter(has_invalid_qc)
+        reports = reports.filter(~has_invalid_qc)
+    else:
+        excluded = reports.filter(pl.lit(False))
+
+    logger.info(f'Writing excluded clinical reports to {destination["excluded"]}')
+    excluded.write_parquet(destination['excluded'], mkdir=True)
 
     drug_max_stage = (
         # TODO: bring this from drug molecule AND treat phase iv/withdrawn as approval
@@ -76,5 +92,5 @@ def clinical_target(source: dict[str, Path], destination: Path) -> None:
         )
         .join(drug_max_stage, 'drugId')
     )
-    logger.info(f'Destination path: {destination}')
-    clinical_target.write_parquet(destination, mkdir=True)
+    logger.info(f'Destination path: {destination["output"]}')
+    clinical_target.write_parquet(destination['output'], mkdir=True)
