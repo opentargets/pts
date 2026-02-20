@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from loguru import logger
 from otter.manifest.model import Artifact
@@ -13,7 +13,7 @@ from otter.util.fs import check_destination
 TRANSFORMER_PACKAGE = 'pts.transformers'
 
 path_or_paths = str | dict[str, str]
-transformer_type = Callable[[Path | dict[str, Path], Path | dict[str, Path]], None]
+transformer_type = Callable[..., None]
 
 
 class TransformSpec(Spec):
@@ -31,6 +31,8 @@ class TransformSpec(Spec):
         The function should read the data from the source path, transform it,
         and write the result to the destination path. Both paths will be local.
     """
+    settings: dict[str, Any] | None = None
+    """A dictionary with settings to pass to the transformer."""
 
 
 class Transform(Task):
@@ -95,7 +97,10 @@ class Transform(Task):
         # run the transformation - pass dict or single Path based on whether input was dict
         s = self.srcs_local if isinstance(self.spec.source, dict) else self.srcs_local['default']
         d = self.dsts_local if isinstance(self.spec.destination, dict) else self.dsts_local['default']
-        self.transformer(s, d)
+        if self.spec.settings:
+            self.transformer(s, d, self.spec.settings)
+        else:
+            self.transformer(s, d)
 
         # upload the results to remote storage
         if self.dsts_remote:
