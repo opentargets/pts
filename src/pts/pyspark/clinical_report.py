@@ -15,6 +15,7 @@ from clinical_mining.data_sources.pmda import extract_clinical_report as extract
 from clinical_mining.data_sources.pmda import parse_pmda_approvals
 from clinical_mining.data_sources.ttd import extract_clinical_report as extract_ttd_clinical_report
 from clinical_mining.dataset import ClinicalReport
+from clinical_mining.schemas import ClinicalReportType, ClinicalStageCategory
 from clinical_mining.utils.polars_helpers import union_dfs
 from clinical_mining.utils.spark_helpers import spark_session
 from loguru import logger
@@ -184,16 +185,23 @@ def validate_phase_iv(reports: ClinicalReport) -> ClinicalReport:
     """Remove Phase IV reports annotation if the association is not approved."""
     exploded = reports.df.explode('drugs').explode('diseases').unnest(['drugs', 'diseases'])
 
-    non_phase_iv = exploded.filter(pl.col('clinicalStage') != 'PHASE_4')
+    non_phase_iv = exploded.filter(pl.col('clinicalStage') != ClinicalStageCategory.PHASE_4.value)
     phase_iv = (
-        exploded.filter(pl.col('clinicalStage') == 'PHASE_4')
+        exploded.filter(pl.col('clinicalStage') == ClinicalStageCategory.PHASE_4.value)
         .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
         .unique()
     )
     logger.info(f'validate phase iv reports... Original count: {phase_iv.select("id").unique().height}')
 
     approved = (
-        (exploded.filter(pl.col('clinicalStage').is_in(['APPROVED', 'PREAPPROVAL'])))
+        (
+            exploded.filter(
+                pl.col('clinicalStage').is_in([
+                    ClinicalStageCategory.APPROVED.value,
+                    ClinicalStageCategory.PREAPPROVAL.value,
+                ])
+            )
+        )
         .filter(pl.col('diseaseId').is_not_null() | pl.col('drugId').is_not_null())
         .unique()
     )
@@ -236,7 +244,7 @@ def create_title(reports: ClinicalReport) -> ClinicalReport:
                 _disease_part=pl.when(pl.col('diseases_count') == 1)
                 .then(pl.col('diseases').list.first().struct.field('diseaseFromSource').str.to_titlecase())
                 .otherwise(pl.concat_str(pl.col('diseases_count').cast(pl.String), pl.lit(' diseases'))),
-                _source_part=pl.when(pl.col('type') == 'REGULATORY_AGENCY')
+                _source_part=pl.when(pl.col('type') == ClinicalReportType.REGULATORY.value)
                 .then(pl.concat_str(pl.lit(' by '), pl.col('source')))
                 .otherwise(pl.lit('')),
             )
