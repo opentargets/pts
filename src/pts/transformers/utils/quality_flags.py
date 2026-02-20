@@ -18,6 +18,10 @@ def update_quality_flag(
     Returns:
         A new Polars DataFrame with updated qualityControls column
     """
+    # First ensure qualityControls column exists
+    if 'qualityControls' not in df.columns:
+        df = df.with_columns(pl.lit(None, dtype=pl.List(pl.String)).alias('qualityControls'))
+
     return df.with_columns(
         pl.when(flag_condition)
         .then(

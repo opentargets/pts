@@ -228,12 +228,16 @@ def flag_phase_iv_not_approved(reports: ClinicalReport) -> ClinicalReport:
         .unique()
     )
 
-    flag_condition = pl.col('clinicalStage').eq(ClinicalStageCategory.PHASE_4) & pl.col('id').is_in(
-        phase_iv_flagged_ids['id'].to_list()
-    )
-
     return ClinicalReport(
-        df=update_quality_flag(reports.df, flag_condition, ClinicalReportFlags.PHASE_IV_NOT_APPROVED.value)
+        df=update_quality_flag(
+            df=reports.df,
+            flag_condition=(
+                # Flag consists of Phase IV trials that are not approved
+                pl.col('clinicalStage').eq(ClinicalStageCategory.PHASE_4)
+                & pl.col('id').is_in(phase_iv_flagged_ids['id'].to_list())
+            ),
+            flag_text=ClinicalReportFlags.PHASE_IV_NOT_APPROVED.value,
+        )
     )
 
 
