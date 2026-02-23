@@ -529,10 +529,6 @@ def baseline_expression_aggregate(
     celltype_cellex = source.get('celltype_cellex')
     both_cellex = source.get('both_cellex')
 
-    if isinstance(destination, str):
-        output_dir = destination
-    else:
-        output_dir = list(destination.values())[0]
 
     # Settings
     json_output = settings.get('json', False)
