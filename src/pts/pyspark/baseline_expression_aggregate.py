@@ -505,8 +505,8 @@ _AGGREGATE_DEFAULT_PROPERTIES: dict[str, str] = {
 
 
 def baseline_expression_aggregate(
-    source: str | dict[str, str],
-    destination: str | dict[str, str],
+    source: dict[str, str],
+    destination: str,
     settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
@@ -523,11 +523,8 @@ def baseline_expression_aggregate(
     spark = session.spark
 
     # Extract arguments
-    if not isinstance(source, dict):
-        raise TypeError(f'Source must be a dictionary containing file paths. Got: {type(source)}')
-
-    directory = source.get('expression_data')
-    biosample_index = source.get('biosample_index')
+    directory = source['expression_data']
+    biosample_index = source['biosample_index']
     tissue_parents = source.get('tissue_parents')
     celltype_parents = source.get('celltype_parents')
     tissue_cellex = source.get('tissue_cellex')
