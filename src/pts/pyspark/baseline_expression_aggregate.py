@@ -513,8 +513,6 @@ def baseline_expression_aggregate(
     logger.info('Starting baseline expression aggregation')
 
     # Initialize Spark Session
-    if properties is None:
-        properties = {}
 
     # Merge step defaults with any caller-supplied overrides
     effective_properties = {**_AGGREGATE_DEFAULT_PROPERTIES, **properties}
