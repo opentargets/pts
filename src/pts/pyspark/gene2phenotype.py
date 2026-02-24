@@ -8,7 +8,6 @@ from loguru import logger
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as f
 from pyspark.sql import types as t
-from pyspark.sql.functions import UserDefinedFunctionLike
 
 from pts.pyspark.common.ontology import add_efo_mapping
 from pts.pyspark.common.session import Session
