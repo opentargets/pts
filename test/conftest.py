@@ -1,5 +1,7 @@
 """Pytest configuration and shared fixtures for PTS tests."""
 
+import tempfile
+
 import pytest
 from pyspark.sql import SparkSession
 
@@ -24,6 +26,12 @@ def spark():
         .getOrCreate()
     )
     spark_session.sparkContext.setLogLevel('ERROR')
+
+    # Set checkpoint directory to avoid checkpoint errors
+    if spark_session.sparkContext.getCheckpointDir() is None:
+        checkpoint_dir = tempfile.mkdtemp(prefix='spark-checkpoint-test-')
+        spark_session.sparkContext.setCheckpointDir(checkpoint_dir)
+
     yield spark_session
     spark_session.stop()
 

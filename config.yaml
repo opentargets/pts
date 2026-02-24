@@ -28,13 +28,6 @@ steps:
       transformer: disease_phenotype
   ##################################################################################################
 
-  #: GO STEP :######################################################################################
-  go:
-    - name: transform go
-      transformer: go
-      source: input/go/go.obo
-      destination: output/go/go.parquet
-
   #: EXPRESSION STEP :##############################################################################
   expression:
     - name: unzip normal tissue
@@ -51,6 +44,25 @@ steps:
       source: input/expression/map_with_efos.json
       destination: intermediate/expression/tissue-translation-map.parquet
       transformer: expression_tissue
+  ##################################################################################################
+
+  #: GENE_SETS STEP :###############################################################################
+  gene_sets:
+    - name: pyspark gene sets
+      pyspark: gene_sets
+      source:
+        targets: input/target
+        go_processed: output/go
+        reactome: input/reactome
+      destination: output/gene_sets
+  ##################################################################################################
+
+  #: GO STEP :######################################################################################
+  go:
+    - name: transform go
+      transformer: go
+      source: input/go/go.obo
+      destination: output/go/go.parquet
   ##################################################################################################
 
   #: MOUSE_PHENOTYPES STEP :########################################################################
