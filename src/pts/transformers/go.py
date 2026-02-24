@@ -60,12 +60,12 @@ def _rows_from_obo(graph) -> list[dict]:
             'id': go_id,
             'label': label,
             'namespace': namespace,
-            'alt_ids': alt_ids,
-            'is_a': is_a,
-            'part_of': part_of,
+            'altIds': alt_ids,
+            'isA': is_a,
+            'partOf': part_of,
             'regulates': regulates,
-            'negatively_regulates': negatively_regulates,
-            'positively_regulates': positively_regulates,
+            'negativelyRegulates': negatively_regulates,
+            'positivelyRegulates': positively_regulates,
             'isObsolete': is_obsolete,
         })
     logger.info(f'parsed {len(rows)} go terms, {obsolete_count} obsolete')
