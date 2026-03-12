@@ -88,7 +88,7 @@ class PrideBaselineExpression:
             # if the proteinId column is NULL use the original Protein IDs
             .withColumn('proteinId', coalesce(col('proteinId'), col('Protein IDs')))
             .join(target_mapping, on='proteinId', how='left')
-            .select('id', 'proteinId', 'Gene Symbol', 'Protein IDs', *orig_cols)
+            .select('proteinId', *orig_cols)
             .drop('ENSG')
         )
 
@@ -189,7 +189,6 @@ class PrideBaselineExpression:
             .withColumn('datasourceId', lit('PRIDE'))  # Add datasourceId column with constant value "PRIDE"
         )
 
-        pride_long.show()
         # Bind the pride long dataframe to the existing self.df DataFrame
         if self.df is not None:
             self.df = self.df.unionByName(pride_long, allowMissingColumns=True)

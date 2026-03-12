@@ -103,7 +103,7 @@ wheels = [
 [[package]]
 name = "cellex"
 version = "1.2.2"
-source = { git = "https://github.com/Tobi1kenobi/CELLEX#e4f132a8c015953a49d2c8f1f438e3017ec136b6" }
+source = { git = "https://github.com/Tobi1kenobi/CELLEX?rev=aec954f3b7bc2235b0b38e8ffc1a59f011ad4459#aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }
 dependencies = [
     { name = "adjusttext" },
     { name = "h5py" },
@@ -1646,7 +1646,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cellex", git = "https://github.com/Tobi1kenobi/CELLEX" },
+    { name = "cellex", git = "https://github.com/Tobi1kenobi/CELLEX?rev=aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" },
     { name = "coverage", marker = "extra == 'test'", specifier = "==7.9.1" },
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "loguru", specifier = "==0.7.3" },

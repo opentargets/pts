@@ -1,4 +1,3 @@
-# !/usr/bin/env python
 import cellex
 import numpy as np
 import pandas as pd
@@ -80,10 +79,6 @@ class CellexAnalysis:
             metadata = metadata[['sampleId', biosample_col]].drop_duplicates()
             metadata = metadata.set_index('sampleId')
         elif self.biosample == 'tissuecelltype':
-            # For 'both' mode, concatenate donorId with both celltype and tissue biosample
-            metadata['sampleId'] = (metadata['donorId'] + '__' +
-                                    metadata['celltypeBiosampleId'] + '__' +
-                                    metadata['tissueBiosampleId'])
             # If sampleId not in metadata columns, create sampleId by
             # concatenating donorId, celltypeBiosampleId and tissueBiosampleId
             if self.sample_id not in metadata.columns:

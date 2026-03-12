@@ -6,7 +6,7 @@ from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, 
 
 
 class PseudobulkExpression:
-    """Process cellxgene formatted single-cell AnnData into pseudobulked JSON.
+    """Process cellxgene formatted single-cell AnnData into pseudobulked JSON/parquet.
 
     This class reads an AnnData object, filters it, normalizes it,
     and then aggregates the data into pseudobulk format.
@@ -180,7 +180,7 @@ class PseudobulkExpression:
             # instead of appending to all_data, write _this_ merged_df immediately:
             self._save_chunk(merged_df, output_dir)
 
-        logger.info(f'Finished writing JSON to {output_dir}')
+        logger.info(f'Finished writing {"JSON" if self.json else "parquet"} to {output_dir}')
 
     def _save_chunk(self, df: pd.DataFrame, output_dir: str):
         # Make sure the df contains all the right columns and that they are in the right order
@@ -201,7 +201,7 @@ class PseudobulkExpression:
             raw_sdf.write.mode('append') \
                 .parquet(output_dir)
 
-        logger.info(f'  → Appended {df.shape[0]} rows into Spark and wrote JSON chunk.')
+        logger.info(f'  → Appended {df.shape[0]} rows into Spark and wrote {"JSON" if self.json else "parquet"} chunk.')
 
     def run(self, min_cells, min_genes, technology,
      normalise, aggregation_min_cells, aggregation_method,

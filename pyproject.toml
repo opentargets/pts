@@ -186,4 +186,4 @@ convention = "google"
 ignore-decorators = ["pts.tasks.report", "pts.manifest.task_reporter.report"]
 
 [tool.uv.sources]
-cellex = { git = "https://github.com/Tobi1kenobi/CELLEX" }
+cellex = { git = "https://github.com/Tobi1kenobi/CELLEX", rev = "aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }
