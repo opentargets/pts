@@ -40,13 +40,7 @@ def baseline_expression_harmonise(
 ) -> None:
     logger.info('Starting baseline expression computation')
 
-    # Initialize Spark Session
-    if properties is None:
-        properties = {}
-
     harmoniser = settings['harmoniser']
-    if isinstance(harmoniser, list):
-        harmoniser = harmoniser[0]
 
     # Merge step defaults with any caller-supplied overrides
     default_props = _HARMONISE_PROPERTIES.get(harmoniser, _HARMONISE_LIGHT_PROPERTIES)
@@ -104,7 +98,7 @@ def baseline_expression_harmonise(
 
     elif harmoniser == 'pride':
         pride_source_data_dir = source['pride_directory']
-        pride_codes = settings.get('pride_codes')
+        pride_codes = settings['pride_codes']
         tissue_ontology_mapping_path = source['tissue_ontology_mapping_path']
         target_index_path = source['target_index_path']
         output_directory_path = destination['baseline_expression']

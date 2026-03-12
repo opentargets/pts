@@ -506,16 +506,12 @@ _AGGREGATE_DEFAULT_PROPERTIES: dict[str, str] = {
 
 
 def baseline_expression_aggregate(
-    source: str | dict[str, str],
-    destination: str | dict[str, str],
+    source: dict[str, str],
+    destination: str,
     settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
     logger.info('Starting baseline expression aggregation')
-
-    # Initialize Spark Session
-    if properties is None:
-        properties = {}
 
     # Merge step defaults with any caller-supplied overrides
     effective_properties = {**_AGGREGATE_DEFAULT_PROPERTIES, **properties}
@@ -523,22 +519,13 @@ def baseline_expression_aggregate(
     session = Session(app_name='baseline_expression_aggregate', properties=effective_properties)
     spark = session.spark
 
-    # Extract arguments
-    if not isinstance(source, dict):
-        raise TypeError(f'Source must be a dictionary containing file paths. Got: {type(source)}')
-
-    directory = source.get('expression_data')
-    biosample_index = source.get('biosample_index')
+    directory = source['expression_data']
+    biosample_index = source['biosample_index']
     tissue_parents = source.get('tissue_parents')
     celltype_parents = source.get('celltype_parents')
     tissue_cellex = source.get('tissue_cellex')
     celltype_cellex = source.get('celltype_cellex')
-    both_cellex = source.get('both_cellex')
-
-    if isinstance(destination, str):
-        output_dir = destination
-    else:
-        output_dir = list(destination.values())[0]
+    both_cellex = source.get('tissue_celltype_cellex')
 
     # Settings
     json_output = settings.get('json', False)
@@ -584,5 +571,5 @@ def baseline_expression_aggregate(
 
     logger.info('Packing data for output...')
 
-    eq.write_data(output_dir, json=json_output)
-    logger.info(f'Data written to {output_dir}')
+    eq.write_data(destination, json=json_output)
+    logger.info(f'Data written to {destination}')

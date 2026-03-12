@@ -49,7 +49,6 @@ steps:
       settings:
         specificity_method: cellex
         biosample: celltype
-        datasource: dice
       requires:
         - pyspark baseline expression harmonise
     - name: pyspark baseline expression aggregate
@@ -68,7 +67,7 @@ steps:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
       source:
-        h5ad_path: input/baseline_expression/scRNAseq/tabula_sapiens-CxG.h5ad
+        h5ad_path: input/baseline_expression/scRNAseq/CxG-tabula_sapiens.h5ad
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/tabula_sapiens/
       settings:
@@ -179,9 +178,9 @@ steps:
     - name: pyspark baseline expression harmonise
       pyspark: baseline_expression_harmonise
       source:
-        gtex_source_data_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz
-        sample_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt
-        subject_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt
+        gtex_source_data_path: input/baseline_expression/bulkRNAseq/GTEx/gene_tpm.gct.gz
+        sample_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/sample_attributes.txt
+        subject_metadata_path: input/baseline_expression/bulkRNAseq/GTEx/subject_phenotypes.txt
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/GTEx/tissue
       settings:
@@ -215,7 +214,7 @@ steps:
     - name: pyspark baseline expression merge unaggregated
       pyspark: baseline_expression_merge
       source: intermediate/baseline_expression
-      destination: output/baseline_expression/unaggregated/merged
+      destination: output/baseline_expression/unaggregated/merged/parquet
       settings:
         aggregation: unaggregated
         datasets: 
@@ -229,7 +228,7 @@ steps:
     - name: pyspark baseline expression merge aggregated
       pyspark: baseline_expression_merge
       source: intermediate/baseline_expression
-      destination: output/baseline_expression/aggregated/merged
+      destination: output/baseline_expression/aggregated/merged/parquet
       settings:
         aggregation: aggregated
         datasets: 

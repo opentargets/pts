@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -1612,7 +1612,7 @@ wheels = [
 
 [[package]]
 name = "pts"
-version = "26.0.0.dev3"
+version = "26.3.0.dev6"
 source = { editable = "." }
 dependencies = [
     { name = "cellex" },

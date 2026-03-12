@@ -24,10 +24,6 @@ def baseline_expression_specificity(
 ) -> None:
     logger.info('Starting baseline expression specificity computation')
 
-    # Initialize Spark Session
-    if properties is None:
-        properties = {}
-
     # Merge step defaults with any caller-supplied overrides
     effective_properties = {**_SPECIFICITY_DEFAULT_PROPERTIES, **properties}
 
@@ -41,15 +37,8 @@ def baseline_expression_specificity(
 
     if specificity_method == 'cellex':
         # Extract settings
-        datasource = settings.get('datasource')
-        biosample = settings.get('biosample')
+        biosample = settings['biosample']
         mode = settings.get('mode', 'parquet')
-
-        if not all([datasource, biosample]):
-            logger.warning(
-                 'Missing required settings for CELLEX: datasource or biosample. '
-                 'Attempting to proceed but might fail if not inferred.'
-             )
 
         cellex_analysis = CellexAnalysis(
             spark=spark,

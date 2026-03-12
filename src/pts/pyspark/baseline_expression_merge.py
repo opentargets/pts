@@ -205,16 +205,12 @@ class MergeParquetDatasets:
 
 
 def baseline_expression_merge(
-    source: str | dict[str, str],
-    destination: str | dict[str, str],
+    source: str,
+    destination: str,
     settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
     logger.info('Starting baseline expression merge')
-
-    # Initialize Spark Session
-    if properties is None:
-        properties = {}
 
     # Merge step defaults with any caller-supplied overrides
     effective_properties = {**_MERGE_DEFAULT_PROPERTIES, **properties}
@@ -222,18 +218,8 @@ def baseline_expression_merge(
     session = Session(app_name='baseline_expression_merge', properties=effective_properties)
     spark = session.spark
 
-    # Extract arguments from source/destination/settings
-    if isinstance(source, str):
-        base_directory_path = source
-    else:
-        base_directory_path = source.get('base_directory_path', '')
-
-    if isinstance(destination, str):
-        output_directory_path = destination
-        sample_output_directory_path = None
-    else:
-        output_directory_path = destination.get('merged_output')
-        sample_output_directory_path = destination.get('sample_output')
+    base_directory_path = source
+    output_directory_path = destination
 
     aggregation = settings.get('aggregation', 'aggregated')
     datasets = settings.get('datasets', 'gtex,pride,tabula_sapiens,dice')
@@ -245,7 +231,6 @@ def baseline_expression_merge(
         aggregation=aggregation,
         datasets=datasets,
         output_directory_path=output_directory_path,
-        sample_output_directory_path=sample_output_directory_path,
         rows_per_file=settings.get('rows_per_file', 10_000_000),
         num_output_files=settings.get('num_output_files'),
         sample_rows=settings.get('sample_rows', 100),
