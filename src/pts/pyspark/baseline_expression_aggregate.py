@@ -519,6 +519,7 @@ def baseline_expression_aggregate(
     session = Session(app_name='baseline_expression_aggregate', properties=effective_properties)
     spark = session.spark
 
+    # Extract arguments
     directory = source['expression_data']
     biosample_index = source['biosample_index']
     tissue_parents = source.get('tissue_parents')
