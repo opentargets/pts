@@ -13,6 +13,14 @@ from otter.config.model import Config
 
 from pts.transformers.utils import load_spark_schema_as_polars
 
+ASSOCIATION_MINIMAL_SCHEMA: dict[str, Any] = {
+    'diseaseId': pl.String,
+    'targetId': pl.String,
+    'datasourceId': pl.String,
+    'aggregationType': pl.String,
+    'aggregationValue': pl.String,
+}
+
 
 def _document_total_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
     return pl.DataFrame({
@@ -196,6 +204,9 @@ def _calculate_metrics(
     drugs: pl.DataFrame,
     run_id: str,
 ) -> pl.DataFrame:
+    associations_direct_datasource = _association_datasource_view(associations_direct)
+    associations_indirect_datasource = _association_datasource_view(associations_indirect)
+
     columns_to_report = _get_columns_to_report(evidence.columns)
     datasets: list[pl.DataFrame] = [
         _document_total_count(evidence, 'evidenceTotalCount'),
@@ -244,12 +255,12 @@ def _calculate_metrics(
             associations_direct.select('diseaseId', 'targetId').unique(),
             'associationsDirectTotalCount',
         ),
-        _document_count_by(associations_direct, 'datasourceId', 'associationsDirectByDatasource'),
+        _document_count_by(associations_direct_datasource, 'datasourceId', 'associationsDirectByDatasource'),
         _document_total_count(
             associations_indirect.select('diseaseId', 'targetId').unique(),
             'associationsIndirectTotalCount',
         ),
-        _document_count_by(associations_indirect, 'datasourceId', 'associationsIndirectByDatasource'),
+        _document_count_by(associations_indirect_datasource, 'datasourceId', 'associationsIndirectByDatasource'),
         _document_total_count(diseases, 'diseasesTotalCount'),
         _not_null_fields_count(diseases, 'diseasesNotNullCount', group_by_datasource=False),
         _document_total_count(targets, 'targetsTotalCount'),
@@ -272,9 +283,6 @@ def _calculate_metrics(
 
 
 def _read_evidence_with_canonical_schema(path: str, schema: dict[str, Any]) -> pl.DataFrame:
-    if '.parquet' not in path:
-        path = f'{path.rstrip("/")}/*.parquet'
-
     return pl.scan_parquet(
         path,
         glob=True,
@@ -282,6 +290,49 @@ def _read_evidence_with_canonical_schema(path: str, schema: dict[str, Any]) -> p
         missing_columns='insert',
         extra_columns='ignore',
     ).collect()
+
+
+def _read_associations_minimal(path: str) -> pl.DataFrame:
+    return pl.scan_parquet(
+        path,
+        glob=True,
+        schema=ASSOCIATION_MINIMAL_SCHEMA,
+        missing_columns='insert',
+        extra_columns='ignore',
+    ).collect()
+
+
+def _to_parquet_glob(path: str | Path) -> str:
+    path_str = str(path)
+    if '.parquet' in path_str:
+        return path_str
+    return f'{path_str.rstrip("/")}/*.parquet'
+
+
+def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
+    columns = set(df.columns)
+
+    if {'datasourceId', 'aggregationType', 'aggregationValue'}.issubset(columns):
+        datasource_expr = pl.coalesce([
+            pl.col('datasourceId'),
+            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None),
+        ])
+    elif 'datasourceId' in columns:
+        datasource_expr = pl.col('datasourceId')
+    elif {'aggregationType', 'aggregationValue'}.issubset(columns):
+        datasource_expr = (
+            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None)
+        )
+    else:
+        msg = 'Association datasource columns not found. Expected datasourceId or aggregationType/aggregationValue.'
+        raise ValueError(msg)
+
+    return (
+        df
+        .with_columns(datasourceId=datasource_expr)
+        .filter(pl.col('datasourceId').is_not_null())
+        .select('datasourceId', 'diseaseId', 'targetId')
+    )
 
 
 def release_metrics(
@@ -305,13 +356,13 @@ def release_metrics(
     evidence_schema = load_spark_schema_as_polars('evidence.json')
 
     logger.info(f'Loading metrics inputs for release {ot_release}')
-    evidence = _read_evidence_with_canonical_schema(str(source['evidence']), evidence_schema)
-    evidence_failed = _read_evidence_with_canonical_schema(str(source['evidence_failed']), evidence_schema)
-    associations_direct = pl.read_parquet(str(source['associations_source_direct']))
-    associations_indirect = pl.read_parquet(str(source['associations_source_indirect']))
-    diseases = pl.read_parquet(str(source['diseases']))
-    targets = pl.read_parquet(str(source['targets']))
-    drugs = pl.read_parquet(str(source['drugs']))
+    evidence = _read_evidence_with_canonical_schema(_to_parquet_glob(source['evidence']), evidence_schema)
+    evidence_failed = _read_evidence_with_canonical_schema(_to_parquet_glob(source['evidence_failed']), evidence_schema)
+    associations_direct = _read_associations_minimal(_to_parquet_glob(source['associations_source_direct']))
+    associations_indirect = _read_associations_minimal(_to_parquet_glob(source['associations_source_indirect']))
+    diseases = pl.read_parquet(_to_parquet_glob(source['diseases']))
+    targets = pl.read_parquet(_to_parquet_glob(source['targets']))
+    drugs = pl.read_parquet(_to_parquet_glob(source['drugs']))
 
     logger.info('Calculating release metrics')
     metrics = _calculate_metrics(

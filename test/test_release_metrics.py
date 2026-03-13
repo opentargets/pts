@@ -137,6 +137,41 @@ def test_release_metrics_core_counts() -> None:
     assert _metric_value(metrics, 'drugsTotalCount') == 2
 
 
+def test_release_metrics_association_new_schema_counts() -> None:
+    tables = _input_tables()
+
+    associations_direct = pl.DataFrame(
+        {
+            'diseaseId': ['D1', 'D1', 'D2'],
+            'targetId': ['T1', 'T1', 'T2'],
+            'aggregationType': ['datasourceId', 'datasourceId', 'datasourceId'],
+            'aggregationValue': ['ds1', 'ds1', 'ds2'],
+        }
+    )
+    associations_indirect = pl.DataFrame(
+        {
+            'diseaseId': ['D3', 'D2'],
+            'targetId': ['T3', 'T2'],
+            'aggregationType': ['datasourceId', 'datasourceId'],
+            'aggregationValue': ['ds1', 'ds2'],
+        }
+    )
+
+    metrics = _calculate_metrics(
+        evidence=tables['evidence'],
+        evidence_failed=tables['evidence_failed'],
+        associations_direct=associations_direct,
+        associations_indirect=associations_indirect,
+        diseases=tables['diseases'],
+        targets=tables['targets'],
+        drugs=tables['drugs'],
+        run_id='26.03_2026-03-13',
+    )
+
+    assert _metric_value(metrics, 'associationsDirectByDatasource', datasource='ds1') == 2
+    assert _metric_value(metrics, 'associationsIndirectByDatasource', datasource='ds2') == 1
+
+
 def test_release_metrics_hf_upload_failure_does_not_fail(tmp_path, monkeypatch) -> None:
     tables = _input_tables()
 
