@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ import polars as pl
 from huggingface_hub import HfApi
 from loguru import logger
 from otter.config.model import Config
+from otter.storage.synchronous.handle import StorageHandle
 
 from pts.transformers.utils import load_spark_schema_as_polars
 
@@ -21,26 +23,41 @@ ASSOCIATION_MINIMAL_SCHEMA: dict[str, Any] = {
     'aggregationValue': pl.String,
 }
 
+CORE_RICH_PATHS: dict[str, str] = {
+    '/output/association_by_datasource_direct': 'associations_direct',
+    '/output/association_by_datasource_indirect': 'associations_indirect',
+    '/output/disease': 'diseases',
+    '/output/target': 'targets',
+    '/output/drug_molecule': 'drugs',
+}
+
+
+def _empty_metrics_frame() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            'datasourceId': pl.String,
+            'variable': pl.String,
+            'field': pl.String,
+            'value': pl.Int64,
+            'runId': pl.String,
+        }
+    )
+
 
 def _document_total_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
-    return pl.DataFrame({
-        'datasourceId': ['all'],
-        'variable': [variable],
-        'field': [None],
-        'value': [df.height],
-    })
+    return pl.DataFrame({'datasourceId': ['all'], 'variable': [variable], 'field': [None], 'value': [df.height]})
+
+
+def _document_total_value(value: int, variable: str) -> pl.DataFrame:
+    return pl.DataFrame({'datasourceId': ['all'], 'variable': [variable], 'field': [None], 'value': [value]})
 
 
 def _document_count_by(df: pl.DataFrame, column: str, variable: str) -> pl.DataFrame:
     return (
-        df
-        .group_by(column)
+        df.group_by(column)
         .len()
         .rename({column: 'datasourceId', 'len': 'value'})
-        .with_columns(
-            variable=pl.lit(variable),
-            field=pl.lit(None, dtype=pl.String),
-        )
+        .with_columns(variable=pl.lit(variable), field=pl.lit(None, dtype=pl.String))
         .select('datasourceId', 'variable', 'field', 'value')
     )
 
@@ -155,13 +172,28 @@ def _distinct_fields_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
     return melted.with_columns(variable=pl.lit(variable)).select('datasourceId', 'variable', 'field', 'value')
 
 
-def _get_columns_to_report(dataset_columns: list[str]) -> list[str]:
+def _get_evidence_columns_to_report(dataset_columns: list[str]) -> list[str]:
     return [
         'datasourceId',
         'targetFromSourceId',
         'diseaseFromSourceMappedId' if 'diseaseFromSourceMappedId' in dataset_columns else 'diseaseFromSourceId',
         'drugId',
         'literature',
+    ]
+
+
+def _metric_prefix(dataset_rel_path: str) -> str:
+    dataset_name = Path(dataset_rel_path).name
+    parts = dataset_name.split('_')
+    return parts[0] + ''.join(part.capitalize() for part in parts[1:])
+
+
+def _global_rich_metrics(df: pl.DataFrame, metric_prefix: str) -> list[pl.DataFrame]:
+    global_df = df.with_columns(datasourceId=pl.lit('all'))
+    return [
+        _document_total_count(df, f'{metric_prefix}TotalCount'),
+        _not_null_fields_count(global_df, f'{metric_prefix}NotNullCount', group_by_datasource=False),
+        _distinct_fields_count(global_df, f'{metric_prefix}DistinctFieldsCount'),
     ]
 
 
@@ -173,46 +205,163 @@ def _build_run_id(ot_release: str) -> str:
     return f'{run_release}_{release_timestamp}'
 
 
-def _upload_metrics_to_hf_hub(
-    csv_data: bytes,
-    csv_filename: str,
-    token_filename: Path,
-    repo_id: str,
-    data_dir: str,
-) -> None:
-    hf_token = token_filename.read_text().strip()
-    if not hf_token:
-        msg = f'HF token file is empty: {token_filename}'
+def _to_parquet_glob(path: str | Path) -> str:
+    path_str = str(path)
+    if '.parquet' in path_str:
+        return path_str
+    return f'{path_str.rstrip("/")}/*.parquet'
+
+
+def _to_release_relative_path(path: str, release_uri: str) -> str:
+    release_root = release_uri.rstrip('/')
+    if path.startswith(release_root):
+        relative = path[len(release_root):]
+    else:
+        relative = path
+
+    relative = relative.rstrip('/')
+    if not relative.startswith('/'):
+        relative = f'/{relative}'
+    return relative
+
+
+def _build_absolute_scope_pattern(release_uri: str, scope: str) -> str:
+    scope_path = scope if scope.startswith('/') else f'/{scope}'
+    return f'{release_uri.rstrip("/")}{scope_path}'
+
+
+def _expand_storage_glob(path_pattern: str, config: Config) -> list[str]:
+    wildcard_positions = [
+        idx
+        for idx in (path_pattern.find('*'), path_pattern.find('?'), path_pattern.find('['))
+        if idx != -1
+    ]
+    if not wildcard_positions:
+        return [path_pattern]
+
+    first_wildcard = min(wildcard_positions)
+    slash_idx = path_pattern.rfind('/', 0, first_wildcard)
+    if slash_idx == -1:
+        msg = f'Invalid scope pattern: {path_pattern}'
         raise ValueError(msg)
 
-    api = HfApi(token=hf_token)
-    api.upload_file(
-        path_or_fileobj=csv_data,
-        path_in_repo=f'{data_dir}/{csv_filename}',
-        repo_id=repo_id,
-        repo_type='dataset',
+    root = path_pattern[:slash_idx]
+    pattern = path_pattern[slash_idx + 1 :]
+    return sorted(StorageHandle(root, config=config).glob(pattern))
+
+
+def _discover_dataset_paths(release_uri: str, scope_globs: list[str], config: Config) -> dict[str, str]:
+    discovered: dict[str, str] = {}
+    for scope in scope_globs:
+        abs_pattern = _build_absolute_scope_pattern(release_uri, scope)
+        for match in _expand_storage_glob(abs_pattern, config):
+            relative = _to_release_relative_path(match, release_uri)
+            discovered[relative] = match.rstrip('/')
+    return discovered
+
+
+def _resolve_metric_lists(
+    discovered_dataset_paths: dict[str, str],
+    rich_dataset_whitelist: list[str],
+) -> tuple[set[str], set[str]]:
+    discovered = set(discovered_dataset_paths)
+    rich = {
+        dataset
+        for dataset in discovered
+        if any(
+            fnmatch(dataset, pattern if pattern.startswith('/') else f'/{pattern}')
+            for pattern in rich_dataset_whitelist
+        )
+    }
+    minimal = discovered - rich
+    return rich, minimal
+
+
+def _read_evidence_with_canonical_schema(path: str, schema: dict[str, Any]) -> pl.DataFrame:
+    return pl.scan_parquet(
+        path,
+        glob=True,
+        schema=schema,
+        missing_columns='insert',
+        extra_columns='ignore',
+    ).collect()
+
+
+def _read_evidence_with_canonical_schema_from_paths(paths: list[str], schema: dict[str, Any]) -> pl.DataFrame:
+    if not paths:
+        return pl.DataFrame(schema=schema)
+
+    return pl.scan_parquet(
+        paths,
+        glob=True,
+        schema=schema,
+        missing_columns='insert',
+        extra_columns='ignore',
+    ).collect()
+
+
+def _read_associations_minimal(path: str) -> pl.DataFrame:
+    return pl.scan_parquet(
+        path,
+        glob=True,
+        schema=ASSOCIATION_MINIMAL_SCHEMA,
+        missing_columns='insert',
+        extra_columns='ignore',
+    ).collect()
+
+
+def _load_parquet_dataset(path: str) -> pl.DataFrame:
+    return pl.read_parquet(_to_parquet_glob(path))
+
+
+def _count_parquet_rows(path: str) -> int:
+    return int(pl.scan_parquet(_to_parquet_glob(path), glob=True).select(pl.len()).collect().item())
+
+
+def _single_discovered_path(discovered: dict[str, str], rel_path: str) -> str | None:
+    path = discovered.get(rel_path)
+    if not path:
+        logger.warning(f'Requested dataset `{rel_path}` not found in discovered scopes')
+    return path
+
+
+def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
+    columns = set(df.columns)
+
+    if {'datasourceId', 'aggregationType', 'aggregationValue'}.issubset(columns):
+        datasource_expr = pl.coalesce([
+            pl.col('datasourceId'),
+            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None),
+        ])
+    elif 'datasourceId' in columns:
+        datasource_expr = pl.col('datasourceId')
+    elif {'aggregationType', 'aggregationValue'}.issubset(columns):
+        datasource_expr = (
+            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None)
+        )
+    else:
+        msg = 'Association datasource columns not found. Expected datasourceId or aggregationType/aggregationValue.'
+        raise ValueError(msg)
+
+    return (
+        df.with_columns(datasourceId=datasource_expr)
+        .filter(pl.col('datasourceId').is_not_null())
+        .select('datasourceId', 'diseaseId', 'targetId')
     )
 
 
-def _calculate_metrics(
-    evidence: pl.DataFrame,
-    evidence_failed: pl.DataFrame,
-    associations_direct: pl.DataFrame,
-    associations_indirect: pl.DataFrame,
-    diseases: pl.DataFrame,
-    targets: pl.DataFrame,
-    drugs: pl.DataFrame,
-    run_id: str,
-) -> pl.DataFrame:
-    associations_direct_datasource = _association_datasource_view(associations_direct)
-    associations_indirect_datasource = _association_datasource_view(associations_indirect)
-
-    columns_to_report = _get_columns_to_report(evidence.columns)
-    datasets: list[pl.DataFrame] = [
+def _emit_evidence_metrics(evidence: pl.DataFrame) -> list[pl.DataFrame]:
+    columns_to_report = _get_evidence_columns_to_report(evidence.columns)
+    return [
         _document_total_count(evidence, 'evidenceTotalCount'),
         _document_count_by(evidence, 'datasourceId', 'evidenceCountByDatasource'),
         _not_null_fields_count(evidence, 'evidenceFieldNotNullCountByDatasource', group_by_datasource=True),
         _distinct_fields_count(evidence.select(columns_to_report), 'evidenceDistinctFieldsCountByDatasource'),
+    ]
+
+
+def _emit_evidence_failed_metrics(evidence_failed: pl.DataFrame) -> list[pl.DataFrame]:
+    return [
         _document_total_count(evidence_failed, 'evidenceInvalidTotalCount'),
         _document_total_count(
             evidence_failed.filter(pl.col('qualityControls').list.contains('Duplicated')),
@@ -251,87 +400,153 @@ def _calculate_metrics(
             'datasourceId',
             'evidenceUnresolvedDiseaseCountByDatasource',
         ),
-        _document_total_count(
-            associations_direct.select('diseaseId', 'targetId').unique(),
-            'associationsDirectTotalCount',
-        ),
-        _document_count_by(associations_direct_datasource, 'datasourceId', 'associationsDirectByDatasource'),
-        _document_total_count(
-            associations_indirect.select('diseaseId', 'targetId').unique(),
-            'associationsIndirectTotalCount',
-        ),
-        _document_count_by(associations_indirect_datasource, 'datasourceId', 'associationsIndirectByDatasource'),
-        _document_total_count(diseases, 'diseasesTotalCount'),
-        _not_null_fields_count(diseases, 'diseasesNotNullCount', group_by_datasource=False),
-        _document_total_count(targets, 'targetsTotalCount'),
-        _document_total_count(drugs, 'drugsTotalCount'),
-        _not_null_fields_count(drugs, 'drugsNotNullCount', group_by_datasource=False),
     ]
 
+
+def _emit_association_metrics(df: pl.DataFrame, kind: str) -> list[pl.DataFrame]:
+    datasource_view = _association_datasource_view(df)
+    return [
+        _document_total_count(df.select('diseaseId', 'targetId').unique(), f'associations{kind}TotalCount'),
+        _document_count_by(datasource_view, 'datasourceId', f'associations{kind}ByDatasource'),
+        _not_null_fields_count(
+            datasource_view,
+            f'associations{kind}NotNullCountByDatasource',
+            group_by_datasource=True,
+        ),
+        _distinct_fields_count(datasource_view, f'associations{kind}DistinctFieldsCountByDatasource'),
+    ]
+
+
+def _emit_global_core_metrics(df: pl.DataFrame, prefix: str) -> list[pl.DataFrame]:
+    global_df = df.with_columns(datasourceId=pl.lit('all'))
+    return [
+        _document_total_count(df, f'{prefix}TotalCount'),
+        _not_null_fields_count(df, f'{prefix}NotNullCount', group_by_datasource=False),
+        _distinct_fields_count(global_df, f'{prefix}DistinctFieldsCount'),
+    ]
+
+
+def _compute_metrics(
+    settings: dict[str, Any],
+    config: Config,
+    run_id: str,
+) -> pl.DataFrame:
+    release_uri = config.release_uri
+    if not release_uri:
+        msg = 'release_metrics requires config.release_uri to discover dataset scopes'
+        raise ValueError(msg)
+
+    scope_globs = list(settings.get('metric_scopes', ['/output/*', '/excluded/evidence/*']))
+    rich_patterns = list(settings.get('rich_dataset_whitelist', []))
+    evidence_schema = load_spark_schema_as_polars('evidence.json')
+
+    discovered = _discover_dataset_paths(release_uri, scope_globs, config)
+    rich_dataset_list, minimal_dataset_list = _resolve_metric_lists(discovered, rich_patterns)
+
+    metric_frames: list[pl.DataFrame] = []
+    handled_paths: set[str] = set()
+
+    if any(fnmatch(dataset, '/output/evidence_*') for dataset in rich_dataset_list):
+        evidence_paths = [
+            _to_parquet_glob(path)
+            for rel, path in discovered.items()
+            if fnmatch(rel, '/output/evidence_*')
+        ]
+        if evidence_paths:
+            evidence = _read_evidence_with_canonical_schema_from_paths(evidence_paths, evidence_schema)
+            metric_frames.extend(_emit_evidence_metrics(evidence))
+            handled_paths.update(path for path in discovered if fnmatch(path, '/output/evidence_*'))
+        else:
+            logger.warning('Evidence requested in whitelist but no /output/evidence_* datasets were discovered')
+
+    if any(fnmatch(dataset, '/excluded/evidence/*') for dataset in rich_dataset_list):
+        evidence_failed_paths = [
+            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, '/excluded/evidence/*')
+        ]
+        if evidence_failed_paths:
+            evidence_failed = _read_evidence_with_canonical_schema_from_paths(evidence_failed_paths, evidence_schema)
+            metric_frames.extend(_emit_evidence_failed_metrics(evidence_failed))
+            handled_paths.update(path for path in discovered if fnmatch(path, '/excluded/evidence/*'))
+        else:
+            logger.warning(
+                'Excluded evidence requested in whitelist but no /excluded/evidence/* datasets were discovered'
+            )
+
+    for rel_path in CORE_RICH_PATHS:
+        if rel_path not in rich_dataset_list:
+            continue
+
+        dataset_path = _single_discovered_path(discovered, rel_path)
+        if not dataset_path:
+            continue
+
+        if rel_path == '/output/association_by_datasource_direct':
+            df = _read_associations_minimal(_to_parquet_glob(dataset_path))
+            metric_frames.extend(_emit_association_metrics(df, 'Direct'))
+        elif rel_path == '/output/association_by_datasource_indirect':
+            df = _read_associations_minimal(_to_parquet_glob(dataset_path))
+            metric_frames.extend(_emit_association_metrics(df, 'Indirect'))
+        elif rel_path == '/output/disease':
+            df = pl.read_parquet(_to_parquet_glob(dataset_path))
+            metric_frames.extend(_emit_global_core_metrics(df, 'diseases'))
+        elif rel_path == '/output/target':
+            df = pl.read_parquet(_to_parquet_glob(dataset_path))
+            metric_frames.extend(_emit_global_core_metrics(df, 'targets'))
+        elif rel_path == '/output/drug_molecule':
+            df = pl.read_parquet(_to_parquet_glob(dataset_path))
+            metric_frames.extend(_emit_global_core_metrics(df, 'drugs'))
+
+        handled_paths.add(rel_path)
+
+    generic_rich = sorted(dataset for dataset in rich_dataset_list if dataset not in handled_paths)
+    generic_minimal = sorted(dataset for dataset in minimal_dataset_list if dataset not in handled_paths)
+
+    for rel_path in generic_rich:
+        df = _load_parquet_dataset(discovered[rel_path])
+        metric_frames.extend(_global_rich_metrics(df, _metric_prefix(rel_path)))
+
+    for rel_path in generic_minimal:
+        total = _count_parquet_rows(discovered[rel_path])
+        metric_frames.append(_document_total_value(total, f'{_metric_prefix(rel_path)}TotalCount'))
+
+    logger.info(
+        'Metrics execution summary: '
+        f'discovered={len(discovered)}, '
+        f'rich={len(rich_dataset_list)}, '
+        f'minimal={len(minimal_dataset_list)}, '
+        f'handled_special={len(handled_paths)}, '
+        f'generic_rich={len(generic_rich)}, '
+        f'generic_minimal={len(generic_minimal)}'
+    )
+
+    if not metric_frames:
+        return _empty_metrics_frame()
+
     return (
-        pl
-        .concat(datasets, how='vertical_relaxed')
+        pl.concat(metric_frames, how='vertical_relaxed')
         .with_columns(runId=pl.lit(run_id))
-        .select(
-            'datasourceId',
-            'variable',
-            'field',
-            'value',
-            'runId',
-        )
+        .select('datasourceId', 'variable', 'field', 'value', 'runId')
     )
 
 
-def _read_evidence_with_canonical_schema(path: str, schema: dict[str, Any]) -> pl.DataFrame:
-    return pl.scan_parquet(
-        path,
-        glob=True,
-        schema=schema,
-        missing_columns='insert',
-        extra_columns='ignore',
-    ).collect()
-
-
-def _read_associations_minimal(path: str) -> pl.DataFrame:
-    return pl.scan_parquet(
-        path,
-        glob=True,
-        schema=ASSOCIATION_MINIMAL_SCHEMA,
-        missing_columns='insert',
-        extra_columns='ignore',
-    ).collect()
-
-
-def _to_parquet_glob(path: str | Path) -> str:
-    path_str = str(path)
-    if '.parquet' in path_str:
-        return path_str
-    return f'{path_str.rstrip("/")}/*.parquet'
-
-
-def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
-    columns = set(df.columns)
-
-    if {'datasourceId', 'aggregationType', 'aggregationValue'}.issubset(columns):
-        datasource_expr = pl.coalesce([
-            pl.col('datasourceId'),
-            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None),
-        ])
-    elif 'datasourceId' in columns:
-        datasource_expr = pl.col('datasourceId')
-    elif {'aggregationType', 'aggregationValue'}.issubset(columns):
-        datasource_expr = (
-            pl.when(pl.col('aggregationType') == 'datasourceId').then(pl.col('aggregationValue')).otherwise(None)
-        )
-    else:
-        msg = 'Association datasource columns not found. Expected datasourceId or aggregationType/aggregationValue.'
+def _upload_metrics_to_hf_hub(
+    csv_data: bytes,
+    csv_filename: str,
+    token_filename: Path,
+    repo_id: str,
+    data_dir: str,
+) -> None:
+    hf_token = token_filename.read_text().strip()
+    if not hf_token:
+        msg = f'HF token file is empty: {token_filename}'
         raise ValueError(msg)
 
-    return (
-        df
-        .with_columns(datasourceId=datasource_expr)
-        .filter(pl.col('datasourceId').is_not_null())
-        .select('datasourceId', 'diseaseId', 'targetId')
+    api = HfApi(token=hf_token)
+    api.upload_file(
+        path_or_fileobj=csv_data,
+        path_in_repo=f'{data_dir}/{csv_filename}',
+        repo_id=repo_id,
+        repo_type='dataset',
     )
 
 
@@ -341,40 +556,14 @@ def release_metrics(
     settings: dict[str, Any],
     config: Config,
 ) -> None:
-    """Generate release metrics table.
-
-    Args:
-        source: Required source paths for post-ETL outputs.
-        destination: Destination paths, requires `parquet`.
-        settings: Runtime settings, requires `ot_release`.
-        config: Otter config object.
-    """
-    del config
+    """Generate release metrics table."""
+    del source
 
     ot_release = settings['ot_release']
     run_id = _build_run_id(ot_release)
-    evidence_schema = load_spark_schema_as_polars('evidence.json')
 
-    logger.info(f'Loading metrics inputs for release {ot_release}')
-    evidence = _read_evidence_with_canonical_schema(_to_parquet_glob(source['evidence']), evidence_schema)
-    evidence_failed = _read_evidence_with_canonical_schema(_to_parquet_glob(source['evidence_failed']), evidence_schema)
-    associations_direct = _read_associations_minimal(_to_parquet_glob(source['associations_source_direct']))
-    associations_indirect = _read_associations_minimal(_to_parquet_glob(source['associations_source_indirect']))
-    diseases = pl.read_parquet(_to_parquet_glob(source['diseases']))
-    targets = pl.read_parquet(_to_parquet_glob(source['targets']))
-    drugs = pl.read_parquet(_to_parquet_glob(source['drugs']))
-
-    logger.info('Calculating release metrics')
-    metrics = _calculate_metrics(
-        evidence=evidence,
-        evidence_failed=evidence_failed,
-        associations_direct=associations_direct,
-        associations_indirect=associations_indirect,
-        diseases=diseases,
-        targets=targets,
-        drugs=drugs,
-        run_id=run_id,
-    )
+    logger.info(f'Loading and calculating metrics for release {ot_release}')
+    metrics = _compute_metrics(settings, config, run_id)
 
     logger.info(f'Writing metrics parquet to {destination["parquet"]}')
     metrics.write_parquet(destination['parquet'], mkdir=True)
