@@ -8,7 +8,6 @@ from pts.transformers.release_metrics import (
     _emit_association_metrics,
     _emit_evidence_failed_metrics,
     _emit_evidence_metrics,
-    _emit_global_core_metrics,
     _global_rich_metrics,
     release_metrics,
 )
@@ -83,9 +82,9 @@ def _core_metrics_frame(tables: dict[str, pl.DataFrame]) -> pl.DataFrame:
         *_emit_evidence_failed_metrics(tables['evidence_failed']),
         *_emit_association_metrics(tables['associations_direct'], 'Direct'),
         *_emit_association_metrics(tables['associations_indirect'], 'Indirect'),
-        *_emit_global_core_metrics(tables['diseases'], 'diseases'),
-        *_emit_global_core_metrics(tables['targets'], 'targets'),
-        *_emit_global_core_metrics(tables['drugs'], 'drugs'),
+        *_global_rich_metrics(tables['diseases'], 'diseases'),
+        *_global_rich_metrics(tables['targets'], 'targets'),
+        *_global_rich_metrics(tables['drugs'], 'drugs'),
     ]
     return pl.concat(metrics, how='vertical_relaxed').with_columns(runId=pl.lit('26.03_2026-03-13'))
 
@@ -181,6 +180,30 @@ def test_generic_rich_metrics_profile() -> None:
 
     assert _metric_value(metrics, 'biosampleTotalCount') == 2
     assert metrics.filter(pl.col('variable') == 'biosampleDistinctFieldsCount').height > 0
+
+
+def test_generic_rich_metrics_with_heterogeneous_list_struct() -> None:
+    df = pl.DataFrame(
+        {
+            'studyId': ['s1', 's2'],
+            'ldPopulationStructure': [
+                [{'ldPopulation': 'nfe'}],
+                [{'relativeSampleSize': 0.5}],
+            ],
+        }
+    )
+
+    metrics = pl.concat(_global_rich_metrics(df, 'study'), how='vertical_relaxed').with_columns(
+        runId=pl.lit('26.03_2026-03-13')
+    )
+
+    assert _metric_value(metrics, 'studyTotalCount') == 2
+    assert (
+        metrics
+        .filter(pl.col('variable') == 'studyNotNullCount', pl.col('field') == 'ldPopulationStructure')
+        .height
+        == 1
+    )
 
 
 def test_release_metrics_hf_upload_failure_does_not_fail(tmp_path, monkeypatch) -> None:

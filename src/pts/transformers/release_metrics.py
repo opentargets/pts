@@ -23,14 +23,6 @@ ASSOCIATION_MINIMAL_SCHEMA: dict[str, Any] = {
     'aggregationValue': pl.String,
 }
 
-CORE_RICH_PATHS: dict[str, str] = {
-    '/output/association_by_datasource_direct': 'associations_direct',
-    '/output/association_by_datasource_indirect': 'associations_indirect',
-    '/output/disease': 'diseases',
-    '/output/target': 'targets',
-    '/output/drug_molecule': 'drugs',
-}
-
 
 def _empty_metrics_frame() -> pl.DataFrame:
     return pl.DataFrame(
@@ -54,7 +46,8 @@ def _document_total_value(value: int, variable: str) -> pl.DataFrame:
 
 def _document_count_by(df: pl.DataFrame, column: str, variable: str) -> pl.DataFrame:
     return (
-        df.group_by(column)
+        df
+        .group_by(column)
         .len()
         .rename({column: 'datasourceId', 'len': 'value'})
         .with_columns(variable=pl.lit(variable), field=pl.lit(None, dtype=pl.String))
@@ -154,6 +147,34 @@ def _not_null_fields_count(df: pl.DataFrame, variable: str, group_by_datasource:
     return melted.select('datasourceId', 'variable', 'field', 'value')
 
 
+def _not_null_fields_count_top_level(df: pl.DataFrame, variable: str, group_by_datasource: bool) -> pl.DataFrame:
+    columns_to_count = list(df.columns)
+    if group_by_datasource:
+        columns_to_count = [column for column in columns_to_count if column != 'datasourceId']
+
+    count_exprs = [pl.col(column).is_not_null().sum().alias(column) for column in columns_to_count]
+
+    if group_by_datasource:
+        aggregated = df.group_by('datasourceId').agg(count_exprs)
+        id_vars = ['datasourceId']
+    else:
+        aggregated = df.select(count_exprs)
+        id_vars = []
+
+    value_columns = [column for column in aggregated.columns if column not in id_vars]
+    melted = aggregated.unpivot(
+        on=value_columns,
+        index=id_vars,
+        variable_name='field',
+        value_name='value',
+    ).with_columns(variable=pl.lit(variable))
+
+    if not group_by_datasource:
+        melted = melted.with_columns(datasourceId=pl.lit('all'))
+
+    return melted.select('datasourceId', 'variable', 'field', 'value')
+
+
 def _distinct_fields_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
     flat_columns = _flatten_columns(df.schema)
     flat_df = df.select([pl.col(column).alias(column) for column in flat_columns])
@@ -162,6 +183,21 @@ def _distinct_fields_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
     unique_exprs = [pl.col(column).n_unique().alias(column.replace('.', '_')) for column in value_columns]
 
     aggregated = flat_df.group_by('datasourceId').agg(unique_exprs)
+    melted = aggregated.unpivot(
+        on=[column for column in aggregated.columns if column != 'datasourceId'],
+        index=['datasourceId'],
+        variable_name='field',
+        value_name='value',
+    )
+
+    return melted.with_columns(variable=pl.lit(variable)).select('datasourceId', 'variable', 'field', 'value')
+
+
+def _distinct_fields_count_top_level(df: pl.DataFrame, variable: str) -> pl.DataFrame:
+    value_columns = [column for column in df.columns if column != 'datasourceId']
+    unique_exprs = [pl.col(column).n_unique().alias(column) for column in value_columns]
+
+    aggregated = df.group_by('datasourceId').agg(unique_exprs)
     melted = aggregated.unpivot(
         on=[column for column in aggregated.columns if column != 'datasourceId'],
         index=['datasourceId'],
@@ -184,6 +220,17 @@ def _get_evidence_columns_to_report(dataset_columns: list[str]) -> list[str]:
 
 def _metric_prefix(dataset_rel_path: str) -> str:
     dataset_name = Path(dataset_rel_path).name
+    aliases = {
+        'association_by_datasource_direct': 'associationsDirect',
+        'association_by_datasource_indirect': 'associationsIndirect',
+        'disease': 'diseases',
+        'target': 'targets',
+        'drug_molecule': 'drugs',
+    }
+    alias = aliases.get(dataset_name)
+    if alias:
+        return alias
+
     parts = dataset_name.split('_')
     return parts[0] + ''.join(part.capitalize() for part in parts[1:])
 
@@ -192,8 +239,8 @@ def _global_rich_metrics(df: pl.DataFrame, metric_prefix: str) -> list[pl.DataFr
     global_df = df.with_columns(datasourceId=pl.lit('all'))
     return [
         _document_total_count(df, f'{metric_prefix}TotalCount'),
-        _not_null_fields_count(global_df, f'{metric_prefix}NotNullCount', group_by_datasource=False),
-        _distinct_fields_count(global_df, f'{metric_prefix}DistinctFieldsCount'),
+        _not_null_fields_count_top_level(global_df, f'{metric_prefix}NotNullCount', group_by_datasource=False),
+        _distinct_fields_count_top_level(global_df, f'{metric_prefix}DistinctFieldsCount'),
     ]
 
 
@@ -215,7 +262,7 @@ def _to_parquet_glob(path: str | Path) -> str:
 def _to_release_relative_path(path: str, release_uri: str) -> str:
     release_root = release_uri.rstrip('/')
     if path.startswith(release_root):
-        relative = path[len(release_root):]
+        relative = path[len(release_root) :]
     else:
         relative = path
 
@@ -232,9 +279,7 @@ def _build_absolute_scope_pattern(release_uri: str, scope: str) -> str:
 
 def _expand_storage_glob(path_pattern: str, config: Config) -> list[str]:
     wildcard_positions = [
-        idx
-        for idx in (path_pattern.find('*'), path_pattern.find('?'), path_pattern.find('['))
-        if idx != -1
+        idx for idx in (path_pattern.find('*'), path_pattern.find('?'), path_pattern.find('[')) if idx != -1
     ]
     if not wildcard_positions:
         return [path_pattern]
@@ -325,6 +370,29 @@ def _single_discovered_path(discovered: dict[str, str], rel_path: str) -> str | 
     return path
 
 
+def _datasource_view_for_dataset(df: pl.DataFrame) -> pl.DataFrame | None:
+    columns = set(df.columns)
+    if 'datasourceId' in columns:
+        return df.select('datasourceId')
+
+    if {'aggregationType', 'aggregationValue'}.issubset(columns):
+        return (
+            df
+            .with_columns(
+                datasourceId=(
+                    pl
+                    .when(pl.col('aggregationType') == 'datasourceId')
+                    .then(pl.col('aggregationValue'))
+                    .otherwise(None)
+                )
+            )
+            .filter(pl.col('datasourceId').is_not_null())
+            .select('datasourceId')
+        )
+
+    return None
+
+
 def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
     columns = set(df.columns)
 
@@ -344,7 +412,8 @@ def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
         raise ValueError(msg)
 
     return (
-        df.with_columns(datasourceId=datasource_expr)
+        df
+        .with_columns(datasourceId=datasource_expr)
         .filter(pl.col('datasourceId').is_not_null())
         .select('datasourceId', 'diseaseId', 'targetId')
     )
@@ -352,12 +421,28 @@ def _association_datasource_view(df: pl.DataFrame) -> pl.DataFrame:
 
 def _emit_evidence_metrics(evidence: pl.DataFrame) -> list[pl.DataFrame]:
     columns_to_report = _get_evidence_columns_to_report(evidence.columns)
-    return [
-        _document_total_count(evidence, 'evidenceTotalCount'),
-        _document_count_by(evidence, 'datasourceId', 'evidenceCountByDatasource'),
-        _not_null_fields_count(evidence, 'evidenceFieldNotNullCountByDatasource', group_by_datasource=True),
-        _distinct_fields_count(evidence.select(columns_to_report), 'evidenceDistinctFieldsCountByDatasource'),
-    ]
+    try:
+        return [
+            _document_total_count(evidence, 'evidenceTotalCount'),
+            _document_count_by(evidence, 'datasourceId', 'evidenceCountByDatasource'),
+            _not_null_fields_count(evidence, 'evidenceFieldNotNullCountByDatasource', group_by_datasource=True),
+            _distinct_fields_count(evidence.select(columns_to_report), 'evidenceDistinctFieldsCountByDatasource'),
+        ]
+    except (pl.exceptions.StructFieldNotFoundError, pl.exceptions.ColumnNotFoundError):
+        logger.warning('Nested evidence metrics failed; falling back to top-level evidence richness')
+        return [
+            _document_total_count(evidence, 'evidenceTotalCount'),
+            _document_count_by(evidence, 'datasourceId', 'evidenceCountByDatasource'),
+            _not_null_fields_count_top_level(
+                evidence,
+                'evidenceFieldNotNullCountByDatasource',
+                group_by_datasource=True,
+            ),
+            _distinct_fields_count_top_level(
+                evidence,
+                'evidenceDistinctFieldsCountByDatasource',
+            ),
+        ]
 
 
 def _emit_evidence_failed_metrics(evidence_failed: pl.DataFrame) -> list[pl.DataFrame]:
@@ -417,15 +502,6 @@ def _emit_association_metrics(df: pl.DataFrame, kind: str) -> list[pl.DataFrame]
     ]
 
 
-def _emit_global_core_metrics(df: pl.DataFrame, prefix: str) -> list[pl.DataFrame]:
-    global_df = df.with_columns(datasourceId=pl.lit('all'))
-    return [
-        _document_total_count(df, f'{prefix}TotalCount'),
-        _not_null_fields_count(df, f'{prefix}NotNullCount', group_by_datasource=False),
-        _distinct_fields_count(global_df, f'{prefix}DistinctFieldsCount'),
-    ]
-
-
 def _compute_metrics(
     settings: dict[str, Any],
     config: Config,
@@ -448,9 +524,7 @@ def _compute_metrics(
 
     if any(fnmatch(dataset, '/output/evidence_*') for dataset in rich_dataset_list):
         evidence_paths = [
-            _to_parquet_glob(path)
-            for rel, path in discovered.items()
-            if fnmatch(rel, '/output/evidence_*')
+            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, '/output/evidence_*')
         ]
         if evidence_paths:
             evidence = _read_evidence_with_canonical_schema_from_paths(evidence_paths, evidence_schema)
@@ -472,10 +546,10 @@ def _compute_metrics(
                 'Excluded evidence requested in whitelist but no /excluded/evidence/* datasets were discovered'
             )
 
-    for rel_path in CORE_RICH_PATHS:
-        if rel_path not in rich_dataset_list:
-            continue
+    generic_rich = sorted(dataset for dataset in rich_dataset_list if dataset not in handled_paths)
+    generic_minimal = sorted(dataset for dataset in minimal_dataset_list if dataset not in handled_paths)
 
+    for rel_path in generic_rich:
         dataset_path = _single_discovered_path(discovered, rel_path)
         if not dataset_path:
             continue
@@ -483,27 +557,20 @@ def _compute_metrics(
         if rel_path == '/output/association_by_datasource_direct':
             df = _read_associations_minimal(_to_parquet_glob(dataset_path))
             metric_frames.extend(_emit_association_metrics(df, 'Direct'))
-        elif rel_path == '/output/association_by_datasource_indirect':
+            continue
+
+        if rel_path == '/output/association_by_datasource_indirect':
             df = _read_associations_minimal(_to_parquet_glob(dataset_path))
             metric_frames.extend(_emit_association_metrics(df, 'Indirect'))
-        elif rel_path == '/output/disease':
-            df = pl.read_parquet(_to_parquet_glob(dataset_path))
-            metric_frames.extend(_emit_global_core_metrics(df, 'diseases'))
-        elif rel_path == '/output/target':
-            df = pl.read_parquet(_to_parquet_glob(dataset_path))
-            metric_frames.extend(_emit_global_core_metrics(df, 'targets'))
-        elif rel_path == '/output/drug_molecule':
-            df = pl.read_parquet(_to_parquet_glob(dataset_path))
-            metric_frames.extend(_emit_global_core_metrics(df, 'drugs'))
+            continue
 
-        handled_paths.add(rel_path)
+        df = _load_parquet_dataset(dataset_path)
+        prefix = _metric_prefix(rel_path)
+        metric_frames.extend(_global_rich_metrics(df, prefix))
 
-    generic_rich = sorted(dataset for dataset in rich_dataset_list if dataset not in handled_paths)
-    generic_minimal = sorted(dataset for dataset in minimal_dataset_list if dataset not in handled_paths)
-
-    for rel_path in generic_rich:
-        df = _load_parquet_dataset(discovered[rel_path])
-        metric_frames.extend(_global_rich_metrics(df, _metric_prefix(rel_path)))
+        datasource_view = _datasource_view_for_dataset(df)
+        if datasource_view is not None:
+            metric_frames.append(_document_count_by(datasource_view, 'datasourceId', f'{prefix}ByDatasource'))
 
     for rel_path in generic_minimal:
         total = _count_parquet_rows(discovered[rel_path])
@@ -523,7 +590,8 @@ def _compute_metrics(
         return _empty_metrics_frame()
 
     return (
-        pl.concat(metric_frames, how='vertical_relaxed')
+        pl
+        .concat(metric_frames, how='vertical_relaxed')
         .with_columns(runId=pl.lit(run_id))
         .select('datasourceId', 'variable', 'field', 'value', 'runId')
     )
