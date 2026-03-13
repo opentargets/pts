@@ -1525,7 +1525,7 @@ steps:
       properties:
         spark.driver.memory: 16g
   ##################################################################################################
-  
+
   #: ASSOCIATION TIMESERIES VIEW STEP :#############################################################
   association_timeseries_view:
     - name: pyspark timeseries view
@@ -1538,4 +1538,23 @@ steps:
       destination: view/association_timeseries
       properties:
         spark.driver.memory: 12g
+  ##################################################################################################
+
+  #: RELEASE METRICS STEP :##########################################################################
+  release_metrics:
+    - name: transform release_metrics
+      transformer: release_metrics
+      source:
+        evidence: output/evidence_*
+        evidence_failed: excluded/evidence/*
+        associations_source_direct: output/association_by_datasource_direct
+        associations_source_indirect: output/association_by_datasource_indirect
+        diseases: output/disease
+        targets: output/target
+        drugs: output/drug_molecule
+      destination:
+        parquet: output/release_metrics/release_metrics.parquet
+        csv: output/release_metrics/release_metrics.csv
+      settings:
+        ot_release: '26.03-test4'
   ##################################################################################################
