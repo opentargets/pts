@@ -11,6 +11,8 @@ from huggingface_hub import HfApi
 from loguru import logger
 from otter.config.model import Config
 
+from pts.transformers.utils import load_spark_schema_as_polars
+
 
 def _document_total_count(df: pl.DataFrame, variable: str) -> pl.DataFrame:
     return pl.DataFrame({
@@ -38,7 +40,7 @@ def _document_count_by(df: pl.DataFrame, column: str, variable: str) -> pl.DataF
 def _flatten_columns(schema: pl.Schema) -> list[str]:
     flat_names: list[str] = []
 
-    def _walk(prefix: str | None, dtype: pl.DataType) -> None:
+    def _walk(prefix: str | None, dtype: Any) -> None:
         if isinstance(dtype, pl.List):
             _walk(prefix, dtype.inner)
             return
@@ -62,7 +64,7 @@ def _flattened_select_expressions(df: pl.DataFrame) -> tuple[list[pl.Expr], list
     expressions: list[pl.Expr] = []
     output_names: list[str] = []
 
-    def _walk(path: str, dtype: pl.DataType, expr: pl.Expr, inside_list: bool) -> None:
+    def _walk(path: str, dtype: Any, expr: pl.Expr, inside_list: bool) -> None:
         if isinstance(dtype, pl.List):
             _walk(path, dtype.inner, expr, inside_list=True)
             return
@@ -269,6 +271,19 @@ def _calculate_metrics(
     )
 
 
+def _read_evidence_with_canonical_schema(path: str, schema: dict[str, Any]) -> pl.DataFrame:
+    if '.parquet' not in path:
+        path = f'{path.rstrip("/")}/*.parquet'
+
+    return pl.scan_parquet(
+        path,
+        glob=True,
+        schema=schema,
+        missing_columns='insert',
+        extra_columns='ignore',
+    ).collect()
+
+
 def release_metrics(
     source: dict[str, Path],
     destination: dict[str, Path],
@@ -287,15 +302,16 @@ def release_metrics(
 
     ot_release = settings['ot_release']
     run_id = _build_run_id(ot_release)
+    evidence_schema = load_spark_schema_as_polars('evidence.json')
 
     logger.info(f'Loading metrics inputs for release {ot_release}')
-    evidence = pl.read_parquet(source['evidence'])
-    evidence_failed = pl.read_parquet(source['evidence_failed'])
-    associations_direct = pl.read_parquet(source['associations_source_direct'])
-    associations_indirect = pl.read_parquet(source['associations_source_indirect'])
-    diseases = pl.read_parquet(source['diseases'])
-    targets = pl.read_parquet(source['targets'])
-    drugs = pl.read_parquet(source['drugs'])
+    evidence = _read_evidence_with_canonical_schema(str(source['evidence']), evidence_schema)
+    evidence_failed = _read_evidence_with_canonical_schema(str(source['evidence_failed']), evidence_schema)
+    associations_direct = pl.read_parquet(str(source['associations_source_direct']))
+    associations_indirect = pl.read_parquet(str(source['associations_source_indirect']))
+    diseases = pl.read_parquet(str(source['diseases']))
+    targets = pl.read_parquet(str(source['targets']))
+    drugs = pl.read_parquet(str(source['drugs']))
 
     logger.info('Calculating release metrics')
     metrics = _calculate_metrics(
