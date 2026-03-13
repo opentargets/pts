@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-import polars as pl
+from typing import cast
 
-from pts.transformers.release_metrics import _calculate_metrics
+import polars as pl
+from otter.config.model import Config
+
+from pts.transformers import release_metrics as release_metrics_module
+from pts.transformers.release_metrics import _calculate_metrics, release_metrics
 
 
 def _input_tables() -> dict[str, pl.DataFrame]:
@@ -131,3 +135,50 @@ def test_release_metrics_core_counts() -> None:
     assert _metric_value(metrics, 'diseasesTotalCount') == 2
     assert _metric_value(metrics, 'targetsTotalCount') == 3
     assert _metric_value(metrics, 'drugsTotalCount') == 2
+
+
+def test_release_metrics_hf_upload_failure_does_not_fail(tmp_path, monkeypatch) -> None:
+    tables = _input_tables()
+
+    source = {
+        'evidence': tmp_path / 'evidence.parquet',
+        'evidence_failed': tmp_path / 'evidence_failed.parquet',
+        'associations_source_direct': tmp_path / 'assoc_direct.parquet',
+        'associations_source_indirect': tmp_path / 'assoc_indirect.parquet',
+        'diseases': tmp_path / 'diseases.parquet',
+        'targets': tmp_path / 'targets.parquet',
+        'drugs': tmp_path / 'drugs.parquet',
+    }
+    tables['evidence'].write_parquet(source['evidence'])
+    tables['evidence_failed'].write_parquet(source['evidence_failed'])
+    tables['associations_direct'].write_parquet(source['associations_source_direct'])
+    tables['associations_indirect'].write_parquet(source['associations_source_indirect'])
+    tables['diseases'].write_parquet(source['diseases'])
+    tables['targets'].write_parquet(source['targets'])
+    tables['drugs'].write_parquet(source['drugs'])
+
+    destination = {
+        'parquet': tmp_path / 'out' / 'release_metrics.parquet',
+    }
+    token_path = tmp_path / 'hf_token'
+    token_path.write_text('dummy-token')
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError('upload failure')
+
+    monkeypatch.setattr(release_metrics_module, '_upload_metrics_to_hf_hub', _boom)
+
+    release_metrics(
+        source=source,
+        destination=destination,
+        settings={
+            'ot_release': '26.03',
+            'upload_to_hf_hub': True,
+            'hf_token_filename': str(token_path),
+            'hf_repo_id': 'opentargets/ot-release-metrics',
+            'hf_data_dir': 'metrics',
+        },
+        config=cast(Config, None),
+    )
+
+    assert destination['parquet'].exists()

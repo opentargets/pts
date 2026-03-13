@@ -1554,7 +1554,10 @@ steps:
         drugs: output/drug_molecule
       destination:
         parquet: output/release_metrics/release_metrics.parquet
-        csv: output/release_metrics/release_metrics.csv
       settings:
         ot_release: '26.03-test4'
+        upload_to_hf_hub: false
+        hf_token_filename: /var/run/secrets/hf_token
+        hf_repo_id: opentargets/ot-release-metrics
+        hf_data_dir: metrics
   ##################################################################################################

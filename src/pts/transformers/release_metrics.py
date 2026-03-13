@@ -1,8 +1,4 @@
-"""Release-level metrics generation in Polars.
-
-This transformer ports the metrics previously produced by the standalone
-Spark metric-calculation job, excluding benchmark metrics.
-"""
+"""Release-level metrics generation in Polars."""
 
 from __future__ import annotations
 
@@ -11,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+from huggingface_hub import HfApi
 from loguru import logger
 from otter.config.model import Config
 
@@ -166,6 +163,27 @@ def _build_run_id(ot_release: str) -> str:
     return f'{run_release}_{release_timestamp}'
 
 
+def _upload_metrics_to_hf_hub(
+    csv_data: bytes,
+    csv_filename: str,
+    token_filename: Path,
+    repo_id: str,
+    data_dir: str,
+) -> None:
+    hf_token = token_filename.read_text().strip()
+    if not hf_token:
+        msg = f'HF token file is empty: {token_filename}'
+        raise ValueError(msg)
+
+    api = HfApi(token=hf_token)
+    api.upload_file(
+        path_or_fileobj=csv_data,
+        path_in_repo=f'{data_dir}/{csv_filename}',
+        repo_id=repo_id,
+        repo_type='dataset',
+    )
+
+
 def _calculate_metrics(
     evidence: pl.DataFrame,
     evidence_failed: pl.DataFrame,
@@ -261,7 +279,7 @@ def release_metrics(
 
     Args:
         source: Required source paths for post-ETL outputs.
-        destination: Destination paths, requires `parquet` and optionally `csv`.
+        destination: Destination paths, requires `parquet`.
         settings: Runtime settings, requires `ot_release`.
         config: Otter config object.
     """
@@ -294,6 +312,25 @@ def release_metrics(
     logger.info(f'Writing metrics parquet to {destination["parquet"]}')
     metrics.write_parquet(destination['parquet'], mkdir=True)
 
-    if 'csv' in destination:
-        logger.info(f'Writing metrics csv to {destination["csv"]}')
-        metrics.write_csv(destination['csv'], include_header=True)
+    if settings.get('upload_to_hf_hub'):
+        hf_token_filename = settings.get('hf_token_filename')
+        if not hf_token_filename:
+            logger.warning('HF upload requested but settings["hf_token_filename"] is missing; skipping upload')
+            return
+
+        hf_repo_id = settings.get('hf_repo_id', 'opentargets/ot-release-metrics')
+        hf_data_dir = settings.get('hf_data_dir', 'metrics')
+        csv_filename = f'{run_id}.csv'
+        csv_data = metrics.write_csv(include_header=True).encode('utf-8')
+
+        try:
+            _upload_metrics_to_hf_hub(
+                csv_data=csv_data,
+                csv_filename=csv_filename,
+                token_filename=Path(hf_token_filename),
+                repo_id=hf_repo_id,
+                data_dir=hf_data_dir,
+            )
+            logger.info(f'Uploaded metrics CSV to hf://datasets/{hf_repo_id}/{hf_data_dir}/{csv_filename}')
+        except Exception:
+            logger.exception('HF upload failed; continuing without failing the step')
