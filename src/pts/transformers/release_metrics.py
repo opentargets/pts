@@ -225,6 +225,24 @@ def _build_absolute_scope_pattern(release_uri: str, scope: str) -> str:
     return f'{release_uri.rstrip("/")}{scope_path}'
 
 
+def _scope_to_parquet_file_glob(scope: str) -> str:
+    """Convert a dataset scope into a parquet-file scope for robust discovery."""
+    normalized = scope.rstrip('/')
+    if normalized.endswith('.parquet'):
+        return normalized
+    return f'{normalized}/*.parquet'
+
+
+def _dataset_path_from_parquet_file(path: str) -> str:
+    """Return the dataset directory path for a parquet file URI/path."""
+    return path.rsplit('/', maxsplit=1)[0]
+
+
+def _has_glob_wildcards(path_pattern: str) -> bool:
+    """Return whether a path pattern contains glob wildcards."""
+    return any(char in path_pattern for char in '*?[')
+
+
 def _expand_storage_glob(path_pattern: str, config: Config) -> list[str]:
     """Expand a storage glob pattern into concrete dataset paths."""
     wildcard_positions = [
@@ -249,9 +267,17 @@ def _discover_dataset_paths(release_uri: str, scope_globs: list[str], config: Co
     discovered: dict[str, str] = {}
     for scope in scope_globs:
         abs_pattern = _build_absolute_scope_pattern(release_uri, scope)
-        for match in _expand_storage_glob(abs_pattern, config):
-            relative = _to_release_relative_path(match, release_uri)
-            discovered[relative] = match.rstrip('/')
+        if not _has_glob_wildcards(scope):
+            for match in _expand_storage_glob(abs_pattern, config):
+                dataset_path = _dataset_path_from_parquet_file(match) if '.parquet' in match else match.rstrip('/')
+                relative = _to_release_relative_path(dataset_path, release_uri)
+                discovered[relative] = dataset_path
+
+        abs_parquet_pattern = _build_absolute_scope_pattern(release_uri, _scope_to_parquet_file_glob(scope))
+        for parquet_file in _expand_storage_glob(abs_parquet_pattern, config):
+            dataset_path = _dataset_path_from_parquet_file(parquet_file)
+            relative = _to_release_relative_path(dataset_path, release_uri)
+            discovered[relative] = dataset_path
     return discovered
 
 
