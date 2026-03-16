@@ -29,8 +29,8 @@ def ensembl(
             start: .start,
             end: .end,
             SignalP: .SignalP,
-            uniprot_trembl: ."Uniprot/SPTREMBL",
-            uniprot_swissprot: ."Uniprot/SWISSPROT",
+            uniprot_trembl: (."Uniprot/SPTREMBL" // [(.transcripts[]? | ."Uniprot/SPTREMBL"[]?)] | unique),
+            uniprot_swissprot: (."Uniprot/SWISSPROT" // [(.transcripts[]? | ."Uniprot/SWISSPROT"[]?)] | unique),
             uniprot_isoform: .Uniprot_isoform,
             alphafold: .alphafold,
             transcripts: [(.transcripts // [])[] | {
