@@ -150,7 +150,7 @@ def process_drug_index(
         chemical_probes
         .filter(f.col('drugId').isNotNull())  # ty:ignore[missing-argument]
         .groupBy(f.col('drugId').alias('_probeXrefDrugId'))
-        .agg(f.collect_set('id').alias('_probeIds'))
+        .agg(f.collect_set('drugFromSourceId').alias('_probeIds'))
     )
 
     # Get molecules with mechanism of action
@@ -171,8 +171,6 @@ def process_drug_index(
         .join(has_mechanism, on='id', how='left_outer')
     )
 
-    drug_df = drug_df.withColumn('maximumClinicalStage', f.coalesce(f.col('maximumClinicalStage'), f.lit('UNKNOWN')))
-
     # Append probes&drugs cross-reference when the molecule is a chemical probe
     drug_df = drug_df.withColumn(
         'crossReferences',
@@ -190,11 +188,10 @@ def process_drug_index(
     # - are present in clinical reports (maximumClinicalStage is not null), OR
     # - mechanism of action, OR
     # - are a chemical probe
-    has_valid_stage = f.col('maximumClinicalStage').isNotNull() & (f.col('maximumClinicalStage') != 'UNKNOWN')
 
     is_drug = (
         f.expr("array_contains(transform(crossReferences, x -> x.source), 'drugbank')")
-        | has_valid_stage  # ty:ignore[missing-argument]
+        | f.col('maximumClinicalStage').isNotNull()  # ty:ignore[missing-argument]
         | f.col('hasMechanismOfAction').isNotNull()  # ty:ignore[missing-argument]
         | f.col('chemicalProbeDrugId').isNotNull()  # ty:ignore[missing-argument]
     )
@@ -206,6 +203,7 @@ def process_drug_index(
     return (
         drug_df
         .filter(is_drug)
+        .withColumn('maximumClinicalStage', f.coalesce(f.col('maximumClinicalStage'), f.lit('UNKNOWN')))
         .drop(
             'chemicalProbeDrugId',
             '_probeXrefDrugId',
