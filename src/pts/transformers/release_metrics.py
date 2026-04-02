@@ -487,16 +487,13 @@ def _compute_metrics(
     run_id: str,
 ) -> pl.DataFrame:
     """Discover datasets and compute rich/minimal metrics according to whitelist rules."""
-    release_uri = config.release_uri
-    if not release_uri:
-        msg = 'release_metrics requires config.release_uri to discover dataset scopes'
-        raise ValueError(msg)
+    data_root_uri = config.release_uri or str(config.work_path)
 
     scope_globs = list(settings.get('metric_scopes', ['/output/*', '/excluded/evidence/*']))
     rich_patterns = list(settings.get('rich_dataset_whitelist', []))
     evidence_schema = load_spark_schema_as_polars('evidence.json')
 
-    discovered = _discover_dataset_paths(release_uri, scope_globs, config)
+    discovered = _discover_dataset_paths(data_root_uri, scope_globs, config)
     rich_dataset_list, minimal_dataset_list = _resolve_metric_lists(discovered, rich_patterns)
 
     metric_frames: list[pl.DataFrame] = []
@@ -612,8 +609,10 @@ def release_metrics(
         source: Source paths (unused).
         destination: Destination paths (parquet). Relative paths resolve to ``release_uri`` when set.
         settings: Step settings. ``ot_release`` is used to build ``runId``. Set
-            ``write_local_destination`` to write under ``work_path`` or ``release_uri``
-        config: Application configuration. Dataset discovery always reads from ``release_uri``.
+            ``write_local_destination`` to force writes under ``work_path`` even
+            when ``release_uri`` is set.
+        config: Application configuration (automatically injected). Dataset discovery reads from
+            ``release_uri`` when set, otherwise from ``work_path``.
     """
     del source
 
