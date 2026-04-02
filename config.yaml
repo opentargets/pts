@@ -1571,7 +1571,7 @@ steps:
       transformer: release_metrics
       source: {}
       destination:
-        parquet: output/release_metrics/release_metrics.parquet
+        parquet: metrics.parquet
       settings:
         ot_release: '26.03-test4'
         metric_scopes:

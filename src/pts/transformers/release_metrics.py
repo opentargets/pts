@@ -24,6 +24,9 @@ ASSOCIATION_MINIMAL_SCHEMA: dict[str, Any] = {
     'aggregationValue': pl.String,
 }
 
+EVIDENCE_OUTPUT_PATTERN = '/output/evidence_*'
+EVIDENCE_EXCLUDED_PATTERN = '/excluded/evidence/*'
+
 
 def _empty_metrics_frame() -> pl.DataFrame:
     """Metrics frame following the canonical output schema."""
@@ -499,28 +502,29 @@ def _compute_metrics(
     metric_frames: list[pl.DataFrame] = []
     handled_paths: set[str] = set()
 
-    if any(fnmatch(dataset, '/output/evidence_*') for dataset in rich_dataset_list):
+    if any(fnmatch(dataset, EVIDENCE_OUTPUT_PATTERN) for dataset in rich_dataset_list):
         evidence_paths = [
-            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, '/output/evidence_*')
+            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, EVIDENCE_OUTPUT_PATTERN)
         ]
         if evidence_paths:
             evidence = _read_evidence_with_canonical_schema_from_paths(evidence_paths, evidence_schema)
             metric_frames.extend(_emit_evidence_metrics(evidence))
-            handled_paths.update(path for path in discovered if fnmatch(path, '/output/evidence_*'))
+            handled_paths.update(rel for rel in discovered if fnmatch(rel, EVIDENCE_OUTPUT_PATTERN))
         else:
-            logger.warning('Evidence requested in whitelist but no /output/evidence_* datasets were discovered')
+            logger.warning(f'Evidence requested in whitelist but no {EVIDENCE_OUTPUT_PATTERN} datasets were discovered')
 
-    if any(fnmatch(dataset, '/excluded/evidence/*') for dataset in rich_dataset_list):
+    if any(fnmatch(dataset, EVIDENCE_EXCLUDED_PATTERN) for dataset in rich_dataset_list):
         evidence_failed_paths = [
-            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, '/excluded/evidence/*')
+            _to_parquet_glob(path) for rel, path in discovered.items() if fnmatch(rel, EVIDENCE_EXCLUDED_PATTERN)
         ]
         if evidence_failed_paths:
             evidence_failed = _read_evidence_with_canonical_schema_from_paths(evidence_failed_paths, evidence_schema)
             metric_frames.extend(_emit_evidence_failed_metrics(evidence_failed))
-            handled_paths.update(path for path in discovered if fnmatch(path, '/excluded/evidence/*'))
+            handled_paths.update(rel for rel in discovered if fnmatch(rel, EVIDENCE_EXCLUDED_PATTERN))
         else:
             logger.warning(
-                'Excluded evidence requested in whitelist but no /excluded/evidence/* datasets were discovered'
+                'Excluded evidence requested in whitelist '
+                f'but no {EVIDENCE_EXCLUDED_PATTERN} datasets were discovered'
             )
 
     generic_rich = sorted(dataset for dataset in rich_dataset_list if dataset not in handled_paths)
