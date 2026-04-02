@@ -192,12 +192,61 @@ def _quality_control_flag_total_metrics(df: pl.DataFrame, metric_prefix: str) ->
 
 
 def _build_run_id(ot_release: str) -> str:
-    """Build a run identifier compatible with previous metric outputs."""
+    """Build a normalised run identifier from release labels.
+
+    Expected canonical format is ``YY.MM-(ppp|pub).N-YYYY-MM-DD``. Legacy values are normalised when possible.
+    """
     release_timestamp = datetime.today().strftime('%Y-%m-%d')
-    run_release = ot_release
-    if run_release.startswith('partners/'):
-        run_release = run_release.split('/', maxsplit=1)[1] + '_ppp'
-    return f'{run_release}_{release_timestamp}'
+    canonical_pattern = re.compile(r'^(?P<yy>\d{2})\.(?P<mm>\d{2})-(?P<channel>ppp|pub)\.(?P<run>\d+)$')
+    legacy_test_pattern = re.compile(r'^(?P<yy>\d{2})\.(?P<mm>\d{2})-test(?P<run>\d+)$')
+
+    run_release_normalised = ot_release
+
+    canonical_match = canonical_pattern.match(ot_release)
+    if canonical_match:
+        run_release_normalised = ot_release
+    else:
+        legacy_test_match = legacy_test_pattern.match(ot_release)
+        if legacy_test_match:
+            run_release_normalised = (
+                f'{legacy_test_match.group("yy")}.{legacy_test_match.group("mm")}-pub.{legacy_test_match.group("run")}'
+            )
+        elif ot_release.startswith('partners/'):
+            partner_release = ot_release.split('/', maxsplit=1)[1]
+            canonical_partner_match = canonical_pattern.match(partner_release)
+            if canonical_partner_match:
+                run_release_normalised = (
+                    f'{canonical_partner_match.group("yy")}.{canonical_partner_match.group("mm")}'
+                    f'-ppp.{canonical_partner_match.group("run")}'
+                )
+            else:
+                legacy_partner_match = legacy_test_pattern.match(partner_release)
+                if legacy_partner_match:
+                    run_release_normalised = (
+                        f'{legacy_partner_match.group("yy")}.{legacy_partner_match.group("mm")}'
+                        f'-ppp.{legacy_partner_match.group("run")}'
+                    )
+                else:
+                    year_month_match = re.search(r'(?P<yy>\d{2})\.(?P<mm>\d{2})', partner_release)
+                    if year_month_match:
+                        suffix_after_year_month = partner_release[year_month_match.end() :]
+                        run_match = re.search(r'(?P<run>\d+)', suffix_after_year_month)
+                        run_number = run_match.group('run') if run_match else '1'
+                        if not run_match:
+                            logger.warning(
+                                f'Partner release `{ot_release}` missing run number; defaulting to `{run_number}`'
+                            )
+                        run_release_normalised = (
+                            f'{year_month_match.group("yy")}.{year_month_match.group("mm")}-ppp.{run_number}'
+                        )
+                    else:
+                        logger.warning(
+                            f'Could not normalise partner release `{ot_release}` to `YY.MM-ppp.N`; using raw value'
+                        )
+        else:
+            logger.warning(f'Could not normalise ot_release `{ot_release}` to `YY.MM-(ppp|pub).N`; using raw value')
+
+    return f'{run_release_normalised}-{release_timestamp}'
 
 
 def _to_parquet_glob(path: str | Path) -> str:
@@ -523,8 +572,7 @@ def _compute_metrics(
             handled_paths.update(rel for rel in discovered if fnmatch(rel, EVIDENCE_EXCLUDED_PATTERN))
         else:
             logger.warning(
-                'Excluded evidence requested in whitelist '
-                f'but no {EVIDENCE_EXCLUDED_PATTERN} datasets were discovered'
+                f'Excluded evidence requested in whitelist but no {EVIDENCE_EXCLUDED_PATTERN} datasets were discovered'
             )
 
     generic_rich = sorted(dataset for dataset in rich_dataset_list if dataset not in handled_paths)

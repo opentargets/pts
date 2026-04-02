@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import cast
 
 import polars as pl
+import pytest
 from otter.config.model import Config
 
 from pts.transformers.release_metrics import (
+    _build_run_id,
     _discover_dataset_paths,
     _emit_association_metrics,
     _emit_evidence_failed_metrics,
@@ -263,3 +266,25 @@ def test_discover_dataset_paths_scope_trailing_slash_equivalent(monkeypatch) -> 
 
     assert discovered_without_slash == discovered_with_slash
     assert set(discovered_without_slash) == {'/output/disease', '/output/target'}
+
+
+@pytest.mark.parametrize(
+    ('ot_release', 'expected_run_id'),
+    [
+        ('26.03-pub.4', '26.03-pub.4-2026-04-02'),
+        ('26.03-test4', '26.03-pub.4-2026-04-02'),
+        ('partners/26.03-test4', '26.03-ppp.4-2026-04-02'),
+        ('partners/26.03-pub.7', '26.03-ppp.7-2026-04-02'),
+        ('partners/26.03', '26.03-ppp.1-2026-04-02'),
+        ('custom-release', 'custom-release-2026-04-02'),
+    ],
+)
+def test_build_run_id_normalisation(monkeypatch, ot_release: str, expected_run_id: str) -> None:
+    class _FixedDateTime:
+        @classmethod
+        def today(cls) -> datetime:
+            return datetime(2026, 4, 2)
+
+    monkeypatch.setattr('pts.transformers.release_metrics.datetime', _FixedDateTime)
+
+    assert _build_run_id(ot_release) == expected_run_id
