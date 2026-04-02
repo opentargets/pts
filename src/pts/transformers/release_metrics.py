@@ -296,7 +296,19 @@ def _has_glob_wildcards(path_pattern: str) -> bool:
 
 
 def _expand_storage_glob(path_pattern: str, config: Config) -> list[str]:
-    """Expand a storage glob pattern into concrete dataset paths."""
+    """Expand a storage glob pattern into concrete dataset paths.
+
+    Example:
+        path_pattern='gs://bucket/release/output/*/*.parquet'
+        -> root='gs://bucket/release/output'
+        -> glob pattern='*/*.parquet'
+        -> returns e.g.
+           [
+               'gs://bucket/release/output/disease/part-00000.parquet',
+               'gs://bucket/release/output/target/part-00000.parquet',
+           ]
+    If no wildcards are present, returns [path_pattern] unchanged.
+    """
     wildcard_positions = [
         idx for idx in (path_pattern.find('*'), path_pattern.find('?'), path_pattern.find('[')) if idx != -1
     ]
