@@ -606,7 +606,15 @@ def release_metrics(
     settings: dict[str, Any],
     config: Config,
 ) -> None:
-    """Generate release metrics parquet and optionally upload CSV to Hugging Face."""
+    """Generate release metrics parquet and optionally upload CSV to Hugging Face.
+
+    Args:
+        source: Source paths (unused).
+        destination: Destination paths (parquet). Relative paths resolve to ``release_uri`` when set.
+        settings: Step settings. ``ot_release`` is used to build ``runId``. Set
+            ``write_local_destination`` to write under ``work_path`` or ``release_uri``
+        config: Application configuration. Dataset discovery always reads from ``release_uri``.
+    """
     del source
 
     ot_release = settings['ot_release']
@@ -615,8 +623,12 @@ def release_metrics(
     logger.info(f'Loading and calculating metrics for release {ot_release}')
     metrics = _compute_metrics(settings, config, run_id)
 
-    logger.info(f'Writing metrics parquet to {destination["parquet"]}')
-    metrics.write_parquet(destination['parquet'], mkdir=True)
+    destination_parquet = destination['parquet']
+    if settings.get('write_local_destination'):
+        destination_parquet = StorageHandle(destination_parquet, config=config, force_local=True).absolute
+
+    logger.info(f'Writing metrics parquet to {destination_parquet}')
+    metrics.write_parquet(destination_parquet, mkdir=True)
 
     if settings.get('upload_to_hf_hub'):
         hf_token_filename = settings.get('hf_token_filename')
