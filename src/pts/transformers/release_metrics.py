@@ -672,9 +672,7 @@ def release_metrics(
     Args:
         source: Source paths (unused).
         destination: Destination paths (parquet). Relative paths resolve to ``release_uri`` when set.
-        settings: Step settings. ``ot_release`` is used to build ``runId``. Set
-            ``write_local_destination`` to force writes under ``work_path`` even
-            when ``release_uri`` is set.
+        settings: Step settings. ``ot_release`` is used to build ``runId``.
         config: Application configuration (automatically injected). Dataset discovery reads from
             ``release_uri`` when set, otherwise from ``work_path``.
     """
@@ -686,12 +684,8 @@ def release_metrics(
     logger.info(f'Loading and calculating metrics for release {ot_release}')
     metrics = _compute_metrics(settings, config, run_id)
 
-    destination_parquet = destination['parquet']
-    if settings.get('write_local_destination'):
-        destination_parquet = StorageHandle(destination_parquet, config=config, force_local=True).absolute
-
-    logger.info(f'Writing metrics parquet to {destination_parquet}')
-    metrics.write_parquet(destination_parquet, mkdir=True)
+    logger.info(f'Writing metrics parquet to {destination["parquet"]}')
+    metrics.write_parquet(destination['parquet'], mkdir=True)
 
     if settings.get('upload_to_hf_hub'):
         hf_token_filename = settings.get('hf_token_filename')
