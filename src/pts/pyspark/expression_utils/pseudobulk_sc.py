@@ -1,8 +1,18 @@
 import numpy as np
 import pandas as pd
-import scanpy as sc
 from loguru import logger
 from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, StructType
+
+
+def _import_scanpy():
+    try:
+        import scanpy as scanpy
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            'scanpy is an optional dependency for single-cell pseudobulk workflows. '
+            'Install PTS with the scanpy extra to use this feature.'
+        ) from error
+    return scanpy
 
 
 class PseudobulkExpression:
@@ -41,12 +51,14 @@ class PseudobulkExpression:
         self.json = json
 
     def read_h5ad(self):
+        sc = _import_scanpy()
         logger.info(f'Reading h5ad file: {self.h5ad_path}')
         self.adata = sc.read(self.h5ad_path)
         self.adata.var_names_make_unique()
         self.adata.strings_to_categoricals()
 
     def filter_anndata(self, min_cells=0, min_genes=0, technology='10X'):
+        sc = _import_scanpy()
         if min_genes > 0:
             sc.pp.filter_cells(self.adata, min_genes=min_genes)
         if min_cells > 0:
@@ -56,6 +68,7 @@ class PseudobulkExpression:
 
     def normalise_anndata(self):
         """Normalise the AnnData object using logCP10K method."""
+        sc = _import_scanpy()
         logger.info('Normalising data using logCP10K')
         # Check that the .X layer is truly counts by checking if the sum of one column is an integer
         if not np.sum(self.adata.X[:, 0]) % 1 == 0:

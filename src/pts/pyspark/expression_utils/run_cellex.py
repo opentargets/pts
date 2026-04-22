@@ -1,8 +1,18 @@
-import cellex
 import numpy as np
 import pandas as pd
 from loguru import logger
 from pyspark.sql.functions import col, concat_ws
+
+
+def _import_cellex():
+    try:
+        import cellex
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            'cellex is an optional dependency for specificity workflows. '
+            'Install PTS with the cellex extra to use this feature.'
+        ) from error
+    return cellex
 
 
 class CellexAnalysis:
@@ -30,6 +40,7 @@ class CellexAnalysis:
 
     def run_cellex_analysis(self, expression_matrix, metadata):
         """Run CELLEX analysis on expression matrix and metadata."""
+        cellex = _import_cellex()
         logger.info('Processing CELLEX analysis')
 
         # Create ESObject (Expression Specificity Object)
