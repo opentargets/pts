@@ -1,30 +1,61 @@
 [project]
 name = "PTS"
-version = "26.3.0-dev.6"
+version = "26.03.12"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "loguru==0.7.3",
-  "opentargets-otter==25.0.16",
+  "opentargets-otter==26.3.4",
   "pandas>=2.3.2",
-  "ontoma==2.1.1",
-  "polars==1.31.0",
+  "polars==1.38.1",
   "pyspark==3.5.7",
   "openai>=2.7.2",
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
   "numpy>=2.2.6",
-  "scanpy>=1.10.0",
-  "cellex",
+  "obonet>=0.3.1",
+  "polars-hash>=0.5.6",
+  "torch>=2.10.0",
+  "ontoma==2.3.1",
+  "transformers>=4.40.0,<5.0.0",
+  "gcsfs>=2026.2.0",
+  "pdfplumber>=0.11.9",
+  "clinical-mining",
+  "huggingface-hub>=0.32.4",
+  "networkx>=3.6.1",
 ]
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
+cellex = { git = "https://github.com/Tobi1kenobi/CELLEX", rev = "aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }
+
+
 [dependency-groups]
-dev = ["deptry==0.23.0", "pre-commit>=4.3.0", "pytest>=8.4.1", "ruff==0.12.2"]
+dev = ["ruff==0.15.2", "ty==0.0.17", "deptry==0.24.0", "pre-commit>=4.3.0"]
 
 [project.optional-dependencies]
-test = ["pytest==8.4.1", "coverage==7.9.1"]
+cellex = [
+  "cellex",
+]
+scanpy = [
+  "scanpy>=1.10.0",
+]
+test = [
+  "coverage==7.13.4",
+  "freezegun==1.5.5",
+  "pytest==9.0.2",
+  "pytest-asyncio==1.3.0",
+  "pytest-mock==3.15.1",
+]
 
 [project.scripts]
 pts = "pts.core:main"
@@ -38,17 +69,17 @@ exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
 [tool.deptry]
 pep621_dev_dependency_groups = ['test']
-exclude = ["src/test/**", "src/conftest.py"]
+exclude = ["test"]
 
 [tool.deptry.package_module_name_map]
 opentargets-otter = 'otter'
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ['openpyxl', 'coverage', 'setuptools']
+DEP002 = ['openpyxl', 'coverage', 'setuptools', 'gcsfs']
 DEP004 = ['pytest']
 
 [tool.pytest.ini_options]
-testpaths = ["src/test"]
+testpaths = ["test"]
 markers = ["slow: mark a test as slow (deselect with '-m \"not slow\"')"]
 
 [tool.ruff]
@@ -98,14 +129,15 @@ select = [
 ]
 
 ignore = [
-  'D1',      # allow lax documentation
+  'D105',    # we don't want to document every single magic method
+  'D107',    # we don't want to document every single init method
   'D213',    # we prefer D212
   'G004',    # we don't care about logging format
   'E226',    # allow omitting whitespace around arithmetic operators
   'E731',    # allow assigning lambdas (it's useful for single-line functions defined inside other functions)
   'RUF012',  # ultra-noisy and dicts in classvars are very common
   'RUF015',  # not always more readable
-  'UP038',   # it looks kind of weird and it slower than a tuple
+  'RUF067',  # we often put code inside init modules
   'S101',    # we use asserts outside tests, and do not run python with `-O` (also see B011)
   'S311',    # false positives, it does not care about the context
   'S324',    # all our md5/sha1 usages are for non-security purposes
@@ -132,6 +164,7 @@ ignore = [
   'PLC2701', # some private imports are needed
   'PLR09',   # too-many-<whatever> is just noisy
   'PLR0913', # very noisy
+  'PLR1702', # complexity might be warranted
   'PLR2004', # extremely noisy and generally annoying
   'PLR6201', # sets are faster (by a factor of 10!) but it's noisy and we're in nanoseconds territory
   'PLR6301', # extremely noisy and generally annoying
@@ -148,6 +181,7 @@ ignore = [
   'PERF203', # noisy, false positives, and not applicable for 3.11+
   'FURB113', # less readable
   'FURB140', # less readable and actually slower in 3.12+
+  'UP047',   # we need to support Python 3.11 for now
 ]
 
 extend-safe-fixes = [
@@ -177,13 +211,12 @@ parametrize-values-type = 'list'
 parametrize-values-row-type = 'tuple'
 
 [tool.ruff.lint.per-file-ignores]
-'**/*_test.py' = ['S108', 'S602', 'D']
+'test/*.py' = ['S108', 'S602', 'D']
 '**/__init__.py' = ['F401']
 '**/tasks/*.py' = ['D102']
+'**/transformers/*.py' = ['D100', 'D103']
+'**/pyspark/*.py' = ['RUF069', 'D100', 'D101', 'D102', 'D103']
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 ignore-decorators = ["pts.tasks.report", "pts.manifest.task_reporter.report"]
-
-[tool.uv.sources]
-cellex = { git = "https://github.com/Tobi1kenobi/CELLEX", rev = "aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }

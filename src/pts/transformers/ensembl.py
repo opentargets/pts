@@ -1,14 +1,23 @@
 import subprocess
-import tempfile
-from pathlib import Path
+from typing import Any
 
 import polars as pl
 from loguru import logger
+from otter.config.model import Config
+from otter.storage.synchronous.handle import StorageHandle
 
 from pts.schemas.ensembl import schema_ndjson
 
+# Only focusing on canonical chromosomes:
+INCLUDED_CHROMOSOMES = [str(i) for i in range(1, 23)] + ['X', 'Y', 'MT']
 
-def ensembl(source: Path, destination: Path) -> None:
+
+def ensembl(
+    source: str,
+    destination: str,
+    settings: dict[str, Any],
+    config: Config,
+) -> None:
     jq_query = """
         .genes[] | {
             id: .id,
@@ -51,23 +60,34 @@ def ensembl(source: Path, destination: Path) -> None:
             }],
         }
     """.replace('\n', ' ').replace(' ', '')
-    tempfile_path = Path(f'{tempfile.gettempdir()}/ensembl.jsonl')
-
-    logger.info('transforming ensembl data into a ndjson')
+    logger.info(f'transforming ensembl data from {source} and writing as parquet to {destination}')
+    # we get a local handle to the ensembl file
+    s = StorageHandle(source, config=config, force_local=True)
+    t = StorageHandle(f'{s.absolute}.transformed.ndjson', force_local=True)
 
     # we will have to do it like this for now, until polars fixes https://github.com/pola-rs/polars/issues/17677
+    logger.debug(f'Running jq on file: {s.absolute}')
     jq = subprocess.run(
-        ['jq', '-c', jq_query, str(source)],
+        ['jq', '-c', jq_query, s.absolute],
         capture_output=True,
         text=True,
+        close_fds=True,
     )
     if jq.returncode != 0:
         logger.error(f'jq error: {jq.stderr}')
         raise OSError(f'jq error: {jq.stderr}')
+    logger.debug('jq transformation complete')
 
-    tempfile_path.write_text(jq.stdout)
-    logger.info('transforming ndjson into parquet')
+    logger.debug(f'writing transformed data into temporary file: {t.absolute}')
+    with t.open('wt') as tmp_contents:
+        tmp_contents.write(jq.stdout)
+    logger.debug(f'transformed data written into {t.absolute}')
 
-    # write the result locally
-    pl.read_ndjson(tempfile_path, schema=schema_ndjson).write_parquet(destination)
+    logger.debug(f'transforming ndjson into parquet at {destination}')
+    (
+        pl
+        .read_ndjson(t.absolute, schema=schema_ndjson)
+        .filter(pl.col('chromosome').is_in(INCLUDED_CHROMOSOMES))
+        .write_parquet(destination)
+    )
     logger.info('transformation complete')

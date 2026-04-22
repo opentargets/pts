@@ -1,10 +1,16 @@
-from pathlib import Path
+from typing import Any
 
 import polars as pl
 from loguru import logger
+from otter.config.model import Config
 
 
-def disease_efo_webapp(source: Path, destination: Path) -> None:
+def disease_efo_webapp(
+    source: str,
+    destination: str,
+    settings: dict[str, Any],
+    config: Config,
+) -> None:
     # load the ontology
     logger.debug('loading efo')
     initial = pl.read_parquet(source)

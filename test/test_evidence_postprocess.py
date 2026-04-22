@@ -65,7 +65,8 @@ class TestEvidence:
     def id_evidence(self: TestEvidence) -> Evidence:
         """Generating identifier for evidence."""
         return (
-            self.evidence.validate_diseases(self.disease_lut)
+            self.evidence
+            .validate_diseases(self.disease_lut)
             .validate_target(self.target_lut)
             .assign_evidence_identifier([])
         )
@@ -119,7 +120,7 @@ class TestEvidence:
         df = scored_evidence.df
 
         flagged_count = df.filter(f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.NO_VALID_SCORE)).count()
-        bad_scores_count = df.filter(f.col('score').isNull() | (f.col('score') <= 0) | (f.col('score') > 1)).count()
+        bad_scores_count = df.filter(f.col('score').isNull() | (f.col('score') <= 0) | (f.col('score') > 1)).count()  # ty:ignore[missing-argument]
 
         assert flagged_count == bad_scores_count
 
@@ -145,8 +146,8 @@ class TestEvidence:
         """Testing if the validation flags evidence where no target is present."""
         problematic_rows = target_validated.df.withColumn(
             'problematic',
-            (f.col('targetId').isNull() & ~f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_TARGET))
-            | (f.col('targetId').isNotNull() & f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_TARGET)),
+            (f.col('targetId').isNull() & ~f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_TARGET))  # ty:ignore[missing-argument]
+            | (f.col('targetId').isNotNull() & f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_TARGET)),  # ty:ignore[missing-argument]
         ).filter(f.col('problematic'))
 
         assert problematic_rows.count() == 0
@@ -183,8 +184,8 @@ class TestEvidence:
         """Testing if disease validation flags correct evidence."""
         problematic_rows = disease_validated.df.withColumn(
             'problematic',
-            (f.col('diseaseId').isNull() & ~f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_DISEASE))
-            | (f.col('diseaseId').isNotNull() & f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_DISEASE)),
+            (f.col('diseaseId').isNull() & ~f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_DISEASE))  # ty:ignore[missing-argument]
+            | (f.col('diseaseId').isNotNull() & f.array_contains(Evidence.QC_COLUMN, EvidenceFlags.INVALID_DISEASE)),  # ty:ignore[missing-argument]
         ).filter(f.col('problematic'))
 
         assert problematic_rows.count() == 0
@@ -219,3 +220,78 @@ class TestEvidence:
         # Test columns:
         for column in new_columns:
             assert column in evidence.df.columns
+
+
+class TestResolveEvidenceDate:
+    """Tests for Evidence.resolve_evidence_date."""
+
+    # (publicationDate, curationDate, studyStartDate)
+    DATE_DATASET = [
+        ('2020-01-01', '2021-01-01', '2022-01-01'),  # all present, min = '2020-01-01'
+        (None, '2019-06-01', '2021-01-01'),  # publicationDate null, min = '2019-06-01'
+        ('2023-01-01', None, '2021-01-01'),  # curationDate null, min = '2021-01-01'
+        (None, None, None),  # all null → null
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _setup(self: TestResolveEvidenceDate, spark: SparkSession) -> None:
+        """Set up evidence with and without date columns."""
+        self.evidence_with_dates = Evidence(
+            spark.createDataFrame(
+                self.DATE_DATASET,
+                'publicationDate STRING, curationDate STRING, studyStartDate STRING',
+            )
+        )
+        self.evidence_without_dates = Evidence(
+            spark.createDataFrame([('t1',), ('t2',)], 'targetId STRING')
+        )
+
+    def test_return_type(self: TestResolveEvidenceDate) -> None:
+        """resolve_evidence_date returns an Evidence object."""
+        assert isinstance(self.evidence_with_dates.resolve_evidence_date(), Evidence)
+
+    def test_column_added(self: TestResolveEvidenceDate) -> None:
+        """evidenceDate column is added to the DataFrame."""
+        assert 'evidenceDate' in self.evidence_with_dates.resolve_evidence_date().df.columns
+
+    def test_all_dates_present_picks_minimum(self: TestResolveEvidenceDate) -> None:
+        """When all date columns are non-null, the earliest date is selected."""
+        result = self.evidence_with_dates.resolve_evidence_date().df
+        assert result.filter(
+            (f.col('publicationDate') == '2020-01-01') & (f.col('evidenceDate') != '2020-01-01')
+        ).count() == 0
+
+    def test_null_date_column_ignored(self: TestResolveEvidenceDate) -> None:
+        """Null date columns do not propagate null to evidenceDate when other dates are available."""
+        result = self.evidence_with_dates.resolve_evidence_date().df
+        has_any_date = (
+            f.col('publicationDate').isNotNull()
+            | f.col('curationDate').isNotNull()
+            | f.col('studyStartDate').isNotNull()
+        )
+        assert result.filter(has_any_date & f.col('evidenceDate').isNull()).count() == 0
+
+    def test_null_date_column_correct_minimum(self: TestResolveEvidenceDate) -> None:
+        """When a date column is null, the minimum of the remaining non-null columns is returned."""
+        result = self.evidence_with_dates.resolve_evidence_date().df
+        # Row with publicationDate=null: min of '2019-06-01' and '2021-01-01' is '2019-06-01'
+        assert result.filter(
+            f.col('publicationDate').isNull()
+            & f.col('curationDate').isNotNull()
+            & (f.col('evidenceDate') != '2019-06-01')
+        ).count() == 0
+
+    def test_all_null_returns_null(self: TestResolveEvidenceDate) -> None:
+        """When all date columns are null, evidenceDate is null."""
+        result = self.evidence_with_dates.resolve_evidence_date().df
+        assert result.filter(
+            f.col('publicationDate').isNull()
+            & f.col('curationDate').isNull()
+            & f.col('studyStartDate').isNull()
+            & f.col('evidenceDate').isNotNull()
+        ).count() == 0
+
+    def test_no_date_columns_returns_null(self: TestResolveEvidenceDate) -> None:
+        """When the DataFrame has no date columns, evidenceDate is null for all rows."""
+        result = self.evidence_without_dates.resolve_evidence_date().df
+        assert result.filter(f.col('evidenceDate').isNotNull()).count() == 0

@@ -1,15 +1,24 @@
-from pathlib import Path
+from typing import Any
 
 import polars as pl
 from loguru import logger
+from otter.config.model import Config
+from otter.storage.synchronous.handle import StorageHandle
 
 from pts.schemas.ontology import node
 
 
-def so(source: Path, destination: Path) -> None:
+def so(
+    source: str,
+    destination: str,
+    settings: dict[str, Any],
+    config: Config,
+) -> None:
     # load the ontology
     logger.debug('loading so')
-    initial = pl.read_json(source)
+    h = StorageHandle(source)
+    f = h.open()
+    initial = pl.read_json(f)
 
     # prepare node data
     node_list = pl.DataFrame(
