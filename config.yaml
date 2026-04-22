@@ -224,7 +224,6 @@ steps:
           - tabula_sapiens/tissue
           - tabula_sapiens/tissue_celltype
           - DICE/celltype
-        rows_per_file: 10000000
     - name: pyspark baseline expression merge aggregated
       pyspark: baseline_expression_merge
       source: intermediate/baseline_expression
@@ -238,7 +237,6 @@ steps:
           - tabula_sapiens/tissue
           - tabula_sapiens/tissue_celltype
           - DICE/celltype
-        rows_per_file: 10000000
 
   ##################################################################################################
 
