@@ -14,6 +14,7 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
+  "numpy>=2.2.6",
   "obonet>=0.3.1",
   "polars-hash>=0.5.6",
   "torch>=2.10.0",
@@ -35,12 +36,19 @@ explicit = true
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
 clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
+cellex = { git = "https://github.com/Tobi1kenobi/CELLEX", rev = "aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }
 
 
 [dependency-groups]
 dev = ["ruff==0.15.2", "ty==0.0.17", "deptry==0.24.0", "pre-commit>=4.3.0"]
 
 [project.optional-dependencies]
+cellex = [
+  "cellex",
+]
+scanpy = [
+  "scanpy>=1.10.0",
+]
 test = [
   "coverage==7.13.4",
   "freezegun==1.5.5",
@@ -211,3 +219,4 @@ parametrize-values-row-type = 'tuple'
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+ignore-decorators = ["pts.tasks.report", "pts.manifest.task_reporter.report"]
