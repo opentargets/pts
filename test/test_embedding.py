@@ -1,4 +1,4 @@
-"""Tests for embedding step."""
+"""Tests for literature_embedding step."""
 
 from pyspark.sql import Row
 
@@ -7,7 +7,7 @@ class TestFilterMatches:
     """Test _filter_matches filtering logic."""
 
     def test_filters_by_type_and_mapping(self, spark):
-        from pts.pyspark.embedding import _filter_matches
+        from pts.pyspark.literature_embedding import _filter_matches
 
         data = [
             Row(keywordId='ENSG001', type='GP', isMapped=True, section='title'),
@@ -23,7 +23,7 @@ class TestFilterMatches:
         assert ids == {'ENSG001', 'CHEMBL1', 'EFO001'}
 
     def test_empty_input(self, spark):
-        from pts.pyspark.embedding import _filter_matches
+        from pts.pyspark.literature_embedding import _filter_matches
 
         schema = 'keywordId STRING, type STRING, isMapped BOOLEAN, section STRING'
         df = spark.createDataFrame([], schema=schema)
@@ -35,7 +35,7 @@ class TestRegroupMatches:
     """Test _regroup_matches keyword collection and permutation logic."""
 
     def test_groups_by_pmid_and_section(self, spark):
-        from pts.pyspark.embedding import _regroup_matches
+        from pts.pyspark.literature_embedding import _regroup_matches
 
         data = [
             Row(pmid='1', keywordId='ENSG001', section='title', type='GP', isMapped=True),

@@ -88,14 +88,14 @@ def _train_word2vec(df: DataFrame) -> Any:
     return w2v.fit(df)
 
 
-def embedding(
+def literature_embedding(
     source: dict[str, str] | str,
     destination: dict[str, str] | str,
     settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
     """Train Word2Vec embedding model on literature entity co-occurrences."""
-    spark = Session(app_name='embedding', properties=properties).spark
+    spark = Session(app_name='literature_embedding', properties=properties).spark
 
     logger.info('Reading literature matches')
     matches = spark.read.parquet(source['matches'])

@@ -1760,8 +1760,8 @@ steps:
 
   #: LITERATURE STEP :#################################################################################
   literature:
-    - name: pyspark embedding
-      pyspark: embedding
+    - name: pyspark literature_embedding
+      pyspark: literature_embedding
       source:
         matches: intermediate/literature_match
       destination:
