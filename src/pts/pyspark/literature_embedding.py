@@ -100,14 +100,39 @@ def literature_embedding(
     logger.info('Reading literature matches')
     matches = spark.read.parquet(source['matches'])
 
+    import time
+
     logger.info('Filtering and regrouping matches')
+    t0 = time.time()
     filtered = _filter_matches(matches)
     training = _regroup_matches(filtered)
     training.persist()
 
+    # Force materialization and collect diagnostics
+    t1 = time.time()
+    row_count = training.count()
+    t2 = time.time()
+    logger.info(f'[DIAG] Regroup + persist: {t2 - t0:.1f}s')
+    logger.info(f'[DIAG] Training rows: {row_count:,}')
+    logger.info(f'[DIAG] Training partitions: {training.rdd.getNumPartitions()}')
+
+    term_stats = training.select(f.size('terms').alias('len')).summary('min', 'mean', 'max').collect()
+    for row in term_stats:
+        logger.info(f'[DIAG] terms length {row["summary"]}: {row["len"]}')
+
     logger.info('Training Word2Vec model')
+    t3 = time.time()
     model = _train_word2vec(training)
+    t4 = time.time()
+    logger.info(f'[DIAG] Word2Vec fit: {t4 - t3:.1f}s')
+
+    vocab_size = model.getVectors().count()
+    logger.info(f'[DIAG] Vocabulary size: {vocab_size:,}')
 
     dest = destination['model'] if isinstance(destination, dict) else destination
     logger.info(f'Saving Word2Vec model to {dest}')
+    t5 = time.time()
     model.save(dest)
+    t6 = time.time()
+    logger.info(f'[DIAG] Model save: {t6 - t5:.1f}s')
+    logger.info(f'[DIAG] Total: {t6 - t0:.1f}s')
