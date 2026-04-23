@@ -32,7 +32,7 @@ _SECTION_RANKS = [
 
 # Word2Vec defaults (overridable via settings)
 _W2V_WINDOW_SIZE = 10
-_W2V_NUM_PARTITIONS = 32
+_W2V_NUM_PARTITIONS = 800
 _W2V_MAX_ITER = 3
 _W2V_MIN_COUNT = 2
 _W2V_STEP_SIZE = 0.02
