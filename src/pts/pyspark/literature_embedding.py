@@ -106,13 +106,12 @@ def literature_embedding(
     max_sentence_length = settings.get('max_sentence_length', _MAX_SENTENCE_LENGTH)
 
     logger.info('Reading literature matches')
-    matches = spark.read.parquet(source['matches'])
+    matches = spark.read.parquet(source['matches']).repartition(num_partitions)
 
     logger.info('Filtering and regrouping matches')
     t0 = time.time()
     filtered = _filter_matches(matches)
     training = _regroup_matches(filtered, max_sentence_length)
-    training = training.repartition(num_partitions)
     training.persist()
 
     row_count = training.count()
