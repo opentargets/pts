@@ -1757,3 +1757,13 @@ steps:
         hf_repo_id: opentargets/ot-release-metrics
         hf_data_dir: metrics
   ##################################################################################################
+
+  #: LITERATURE STEP :#################################################################################
+  literature:
+    - name: pyspark embedding
+      pyspark: embedding
+      source:
+        matches: intermediate/literature_match
+      destination:
+        model: etc/model/w2v_model
+  ##################################################################################################
