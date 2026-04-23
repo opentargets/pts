@@ -8,6 +8,7 @@ to create training sentences.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from loguru import logger
@@ -29,12 +30,13 @@ _SECTION_RANKS = [
     {'section': 'other', 'rank': 4, 'weight': 0.1},
 ]
 
-# Word2Vec model configuration (from Scala reference.conf)
+# Word2Vec defaults (overridable via settings)
 _W2V_WINDOW_SIZE = 10
-_W2V_NUM_PARTITIONS = 16
+_W2V_NUM_PARTITIONS = 32
 _W2V_MAX_ITER = 3
-_W2V_MIN_COUNT = 1
+_W2V_MIN_COUNT = 2
 _W2V_STEP_SIZE = 0.02
+_MAX_SENTENCE_LENGTH = 100
 
 
 def _filter_matches(matches: DataFrame) -> DataFrame:
@@ -46,12 +48,13 @@ def _filter_matches(matches: DataFrame) -> DataFrame:
     )
 
 
-def _regroup_matches(matches: DataFrame) -> DataFrame:
+def _regroup_matches(matches: DataFrame, max_sentence_length: int) -> DataFrame:
     """Regroup matches by publication and ranked section for training.
 
     Groups matched entities by (pmid, section rank), collects keyword sets,
     then creates training permutations by combining per-section keyword lists
-    with an overall keyword list.
+    with an overall keyword list. Sentences exceeding max_sentence_length are
+    truncated to cap compute cost.
     """
     spark = matches.sparkSession
 
@@ -69,18 +72,19 @@ def _regroup_matches(matches: DataFrame) -> DataFrame:
         .withColumn('overall', f.flatten(f.col('keys')))
         .withColumn('all', f.concat(f.col('keys'), f.array(f.col('overall'))))
         .withColumn('terms', f.explode(f.col('all')))
+        .withColumn('terms', f.slice(f.col('terms'), 1, max_sentence_length))
         .select('pmid', 'terms')
     )
 
 
-def _train_word2vec(df: DataFrame) -> Any:
+def _train_word2vec(df: DataFrame, num_partitions: int, min_count: int) -> Any:
     """Train Word2Vec model on the training DataFrame."""
     w2v = (
         Word2Vec()
         .setWindowSize(_W2V_WINDOW_SIZE)
-        .setNumPartitions(_W2V_NUM_PARTITIONS)
+        .setNumPartitions(num_partitions)
         .setMaxIter(_W2V_MAX_ITER)
-        .setMinCount(_W2V_MIN_COUNT)
+        .setMinCount(min_count)
         .setStepSize(_W2V_STEP_SIZE)
         .setInputCol('terms')
         .setOutputCol('prediction')
@@ -97,22 +101,23 @@ def literature_embedding(
     """Train Word2Vec embedding model on literature entity co-occurrences."""
     spark = Session(app_name='literature_embedding', properties=properties).spark
 
+    num_partitions = settings.get('w2v_num_partitions', _W2V_NUM_PARTITIONS)
+    min_count = settings.get('w2v_min_count', _W2V_MIN_COUNT)
+    max_sentence_length = settings.get('max_sentence_length', _MAX_SENTENCE_LENGTH)
+
     logger.info('Reading literature matches')
     matches = spark.read.parquet(source['matches'])
-
-    import time
 
     logger.info('Filtering and regrouping matches')
     t0 = time.time()
     filtered = _filter_matches(matches)
-    training = _regroup_matches(filtered)
+    training = _regroup_matches(filtered, max_sentence_length)
+    training = training.repartition(num_partitions)
     training.persist()
 
-    # Force materialization and collect diagnostics
-    t1 = time.time()
     row_count = training.count()
-    t2 = time.time()
-    logger.info(f'[DIAG] Regroup + persist: {t2 - t0:.1f}s')
+    t1 = time.time()
+    logger.info(f'[DIAG] Regroup + persist: {t1 - t0:.1f}s')
     logger.info(f'[DIAG] Training rows: {row_count:,}')
     logger.info(f'[DIAG] Training partitions: {training.rdd.getNumPartitions()}')
 
@@ -120,19 +125,19 @@ def literature_embedding(
     for row in term_stats:
         logger.info(f'[DIAG] terms length {row["summary"]}: {row["len"]}')
 
-    logger.info('Training Word2Vec model')
+    logger.info(
+        f'Training Word2Vec (numPartitions={num_partitions}, minCount={min_count}, '
+        f'maxSentenceLength={max_sentence_length})'
+    )
+    t2 = time.time()
+    model = _train_word2vec(training, num_partitions, min_count)
     t3 = time.time()
-    model = _train_word2vec(training)
-    t4 = time.time()
-    logger.info(f'[DIAG] Word2Vec fit: {t4 - t3:.1f}s')
+    logger.info(f'[DIAG] Word2Vec fit: {t3 - t2:.1f}s')
 
     vocab_size = model.getVectors().count()
     logger.info(f'[DIAG] Vocabulary size: {vocab_size:,}')
 
     dest = destination['model'] if isinstance(destination, dict) else destination
     logger.info(f'Saving Word2Vec model to {dest}')
-    t5 = time.time()
     model.save(dest)
-    t6 = time.time()
-    logger.info(f'[DIAG] Model save: {t6 - t5:.1f}s')
-    logger.info(f'[DIAG] Total: {t6 - t0:.1f}s')
+    logger.info(f'[DIAG] Total: {time.time() - t0:.1f}s')
