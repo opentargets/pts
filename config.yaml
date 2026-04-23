@@ -1757,3 +1757,13 @@ steps:
         hf_repo_id: opentargets/ot-release-metrics
         hf_data_dir: metrics
   ##################################################################################################
+
+  #: LITERATURE STEP :#################################################################################
+  literature:
+    - name: pyspark evidence_epmc
+      pyspark: evidence_epmc
+      source:
+        cooccurrences: intermediate/literature_cooccurrence
+      destination:
+        evidence: intermediate/evidence/literature_epmc
+  ##################################################################################################
