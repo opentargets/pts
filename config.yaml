@@ -1760,8 +1760,8 @@ steps:
 
   #: LITERATURE STEP :#################################################################################
   literature:
-    - name: pyspark vectors
-      pyspark: vectors
+    - name: pyspark literature_vectors
+      pyspark: literature_vectors
       source:
         model: etc/model/w2v_model
       destination:
