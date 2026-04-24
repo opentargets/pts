@@ -1757,3 +1757,15 @@ steps:
         hf_repo_id: opentargets/ot-release-metrics
         hf_data_dir: metrics
   ##################################################################################################
+
+  #: LITERATURE STEP :#################################################################################
+  literature:
+    - name: pyspark literature_embedding
+      pyspark: literature_embedding
+      source:
+        matches: intermediate/literature_match
+      destination:
+        model: etc/model/w2v_model
+      properties:
+        spark.sql.shuffle.partitions: '800'
+  ##################################################################################################
