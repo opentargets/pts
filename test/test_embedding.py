@@ -43,7 +43,7 @@ class TestRegroupMatches:
             Row(pmid='1', keywordId='EFO001', section='abstract', type='DS', isMapped=True),
         ]
         df = spark.createDataFrame(data)
-        result = _regroup_matches(df)
+        result = _regroup_matches(df, max_sentence_length=100)
         assert result.count() > 0
         assert 'terms' in result.columns
         assert 'pmid' in result.columns
