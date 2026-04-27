@@ -1706,6 +1706,20 @@ steps:
         string_version: "12.0"
   ##################################################################################################
 
+  #: LITERATURE INGESTION STEP :####################################################################
+  literature_ingestion:
+    - name: pyspark literature_ingestion
+      pyspark: literature_ingestion
+      source: gs://otar025-epmc/ml02  # format: json
+      destination:
+        match: intermediate/literature/match
+        cooccurrence: intermediate/literature/cooccurrence
+        excluded: excluded/literature_match
+      settings:
+        target: output/target
+        disease: output/disease
+  ##################################################################################################
+
   #: RELEASE METRICS STEP :##########################################################################
   search:
     - name: pyspark search
