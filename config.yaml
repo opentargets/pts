@@ -377,6 +377,17 @@ steps:
       destination:
         disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
         disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
+    - name: pyspark ontoma generate lookup tables for literature
+      pyspark: literature_ontoma_lut_generation
+      source:
+        disease_index: output/disease/disease.parquet
+        ot_disease_curation: input/ontoma/ot_disease_curation.tsv
+        eva_clinvar: input/ontoma/eva_clinvar.txt
+        clinvar_xrefs: input/ontoma/clinvar_xrefs.txt
+        target_index: output/target
+        drug_index: output/drug_molecule
+      destination:
+        disease_target_drug_label_lut: intermediate/ontoma/disease_target_drug_label_lookup_table.parquet
   ##################################################################################################
 
   #: TIMESERIES STEP :##############################################################################
@@ -1306,4 +1317,37 @@ steps:
         vep_data_qtl: intermediate/vep_view_qtl
       properties:
         spark.driver.memory: 16g
+  ##################################################################################################
+
+  #: LITERATURE_PUBLICATION STEP :#########################################################
+  literature_publication:
+    - name: pyspark literature publication
+      pyspark: literature_publication
+      source:
+        pub_id_lut: input/literature/PMID_PMCID_DOI.csv.gz
+        epmc_publication: input/literature/example_both_abstract_and_fulltext
+      destination:
+        publication: intermediate/literature/publication
+  ##################################################################################################
+
+  #: LITERATURE_MATCH STEP :#########################################################
+  literature_match:
+    - name: pyspark literature match
+      pyspark: literature_match
+      source:
+        publication: intermediate/literature/publication
+        ontoma_disease_target_drug_label_lut: intermediate/ontoma/disease_target_drug_label_lookup_table.parquet
+      destination:
+        match_valid: intermediate/literature/match
+        match_failed: excluded/literature/match
+  ##################################################################################################
+
+    #: LITERATURE_COOCCURRENCE STEP :#########################################################
+  literature_cooccurrence:
+    - name: pyspark literature cooccurrence
+      pyspark: literature_cooccurrence
+      source:
+        match: intermediate/literature/match
+      destination:
+        cooccurrence: intermediate/literature/cooccurrence
   ##################################################################################################
