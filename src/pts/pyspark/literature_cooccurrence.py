@@ -16,10 +16,10 @@ def literature_cooccurrence(
 ) -> None:
     spark = Session(app_name='literature', properties=properties)
 
-    logger.info(f'load matches from: {source['match']}')
+    logger.info(f'load matches from: {source["match"]}')
     match = spark.load_data(path=source['match'])
 
-    logger.info(f'write cooccurrences to {destination['cooccurrence']}')
+    logger.info(f'write cooccurrences to {destination["cooccurrence"]}')
     (
         MatchMapped(match)
         .generate_target_disease_cooccurrences()
