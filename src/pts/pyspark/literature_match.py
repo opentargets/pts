@@ -53,18 +53,18 @@ def literature_match(
 
     match_valid = (
         match_disambiguated.df
-        .filter(f.col('isValid') == True)
+        .filter(f.col('isValid'))
     )
 
     # rows that fail mapping are already emitted via the isMapped==False branch,
     # so guard the disambiguation branch with isMapped==True to keep the union disjoint
     match_failed = (
         match_mapped.df
-        .filter(f.col('isMapped') == False)
+        .filter(~f.col('isMapped'))
         .unionByName(
             match_disambiguated.df
-            .filter(f.col('isMapped') == True)
-            .filter(f.col('isValid') == False),
+            .filter(f.col('isMapped'))
+            .filter(~f.col('isValid')),
             allowMissingColumns=True
         )
     )
