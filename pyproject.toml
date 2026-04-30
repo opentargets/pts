@@ -19,10 +19,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-# TODO: flip `branch` to "vh-restructure-datasets" once
-# https://github.com/opentargets/ot-literature/pull/7 is merged. The temporary
-# branch holds the same content plus a pyspark==3.5.7 bump so uv can resolve.
-ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "do/bump-pyspark-3.5.7" }
+ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "dev" }
 
 [dependency-groups]
 dev = ["deptry==0.23.0", "pre-commit>=4.3.0", "pytest>=8.4.1", "ruff==0.12.2"]
