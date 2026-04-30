@@ -17,13 +17,13 @@ def literature_publication(
 ) -> None:
     spark = Session(app_name='literature', properties=properties)
 
-    logger.info(f'load data from: {source['pub_id_lut']}')
+    logger.info(f'load data from: {source["pub_id_lut"]}')
     pub_id_lut = PublicationIdLUT.from_csv(spark, source['pub_id_lut']).persist()
 
-    logger.info(f'load data from: {source['epmc_publication']}')
+    logger.info(f'load data from: {source["epmc_publication"]}')
     publication = EPMCPublication.from_source(spark, source['epmc_publication'], pub_id_lut)
 
-    logger.info(f'write processed publications to {destination['publication']}')
+    logger.info(f'write processed publications to {destination["publication"]}')
     (
         publication.df
         .write.mode('overwrite')

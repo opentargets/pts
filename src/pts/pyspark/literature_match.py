@@ -17,7 +17,7 @@ def literature_match(
 ) -> None:
     spark = Session(app_name='literature', properties=properties)
 
-    logger.info(f'load publications from: {source['publication']}')
+    logger.info(f'load publications from: {source["publication"]}')
     publication = spark.load_data(path=source['publication'])
 
     logger.info('extract matches and map labels')
@@ -61,14 +61,14 @@ def literature_match(
         )
     )
 
-    logger.info(f'write valid matches to {destination['match_valid']}')
+    logger.info(f'write valid matches to {destination["match_valid"]}')
     (
         match_valid
         .write.mode('overwrite')
         .parquet(destination['match_valid'])
     )
 
-    logger.info(f'write failed matches to {destination['match_failed']}')
+    logger.info(f'write failed matches to {destination["match_failed"]}')
     (
         match_failed
         .write.mode('overwrite')
