@@ -15,7 +15,14 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
+  "ot-literature",
 ]
+
+[tool.uv.sources]
+# TODO: flip `branch` to "vh-restructure-datasets" once
+# https://github.com/opentargets/ot-literature/pull/7 is merged. The temporary
+# branch holds the same content plus a pyspark==3.5.7 bump so uv can resolve.
+ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "do/bump-pyspark-3.5.7" }
 
 [dependency-groups]
 dev = ["deptry==0.23.0", "pre-commit>=4.3.0", "pytest>=8.4.1", "ruff==0.12.2"]
@@ -39,6 +46,7 @@ exclude = ["src/test/**", "src/conftest.py"]
 
 [tool.deptry.package_module_name_map]
 opentargets-otter = 'otter'
+ot-literature = 'literature'
 
 [tool.deptry.per_rule_ignores]
 DEP002 = ['openpyxl', 'coverage', 'setuptools']
