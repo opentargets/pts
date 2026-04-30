@@ -871,6 +871,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ot-literature"
+version = "0.1.0"
+source = { git = "https://github.com/opentargets/ot-literature?branch=do%2Fbump-pyspark-3.5.7#ed714cad2b5e23e68b76c0bb65006a232ae09a6a" }
+dependencies = [
+    { name = "ipykernel" },
+    { name = "numpy" },
+    { name = "pyspark" },
+    { name = "pytest" },
+    { name = "spark-nlp" },
+]
+
+[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1050,7 +1062,7 @@ wheels = [
 
 [[package]]
 name = "pts"
-version = "25.3.1.dev19"
+version = "26.0.0.dev4"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
@@ -1059,6 +1071,7 @@ dependencies = [
     { name = "openai" },
     { name = "openpyxl" },
     { name = "opentargets-otter" },
+    { name = "ot-literature" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyspark" },
@@ -1088,6 +1101,7 @@ requires-dist = [
     { name = "openai", specifier = ">=2.7.2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "opentargets-otter", specifier = "==25.0.16" },
+    { name = "ot-literature", git = "https://github.com/opentargets/ot-literature?branch=do%2Fbump-pyspark-3.5.7" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "polars", specifier = "==1.31.0" },
     { name = "pyspark", specifier = "==3.5.7" },
