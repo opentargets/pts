@@ -31,6 +31,8 @@ def literature_match(
             type_col_name='type'
         )
     )
+    # consumed by both the disambiguated path and the isMapped==False filter
+    match_mapped.df.persist()
 
     logger.info('disambiguate')
     match_disambiguated = (
@@ -74,3 +76,5 @@ def literature_match(
         .write.mode('overwrite')
         .parquet(destination['match_failed'])
     )
+
+    match_mapped.df.unpersist()
