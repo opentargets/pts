@@ -41,6 +41,27 @@ def _strip_braces(text: str) -> str:
     return _BRACES_RE.sub('', text).strip()
 
 
+def _join_continuation_lines(parts: list[str]) -> str:
+    r"""Join continuation lines with a single space, dropping the space after `-`.
+
+    Swiss-Prot occasionally wraps mid-compound-word (e.g.
+    `T-cell-negative/B-\n    cell-positive`), so a naive `' '.join(...)` introduces
+    a phantom space (`B- cell`) that breaks downstream string comparisons.
+    """
+    if not parts:
+        return ''
+    out: list[str] = [parts[0]]
+    for part in parts[1:]:
+        if not part:
+            continue
+        if out[-1].endswith('-'):
+            out.append(part)
+        else:
+            out.append(' ')
+            out.append(part)
+    return ''.join(out)
+
+
 def _parse_disease_block(text: str) -> dict | None:
     """Parse a single concatenated CC DISEASE block text.
 
@@ -181,7 +202,7 @@ def _parse_record(lines: list[str]) -> dict:
     def _flush_disease() -> None:
         nonlocal in_disease, disease_lines
         if disease_lines:
-            text = ' '.join(disease_lines).strip()
+            text = _join_continuation_lines(disease_lines).strip()
             parsed = _parse_disease_block(text)
             if parsed is not None:
                 diseases.append(parsed)
@@ -233,7 +254,7 @@ def _parse_record(lines: list[str]) -> dict:
             # New feature line: starts at column 5 (no leading spaces in content)
             if ft_content and not ft_content.startswith(' '):
                 if ft_in_variant:
-                    parsed = _parse_variant_qualifiers(ft_position, ' '.join(ft_qualifier_lines))
+                    parsed = _parse_variant_qualifiers(ft_position, _join_continuation_lines(ft_qualifier_lines))
                     if parsed is not None:
                         variants.append(parsed)
                     ft_in_variant = False
@@ -250,7 +271,7 @@ def _parse_record(lines: list[str]) -> dict:
     _flush_disease()
 
     if ft_in_variant:
-        parsed = _parse_variant_qualifiers(ft_position, ' '.join(ft_qualifier_lines))
+        parsed = _parse_variant_qualifiers(ft_position, _join_continuation_lines(ft_qualifier_lines))
         if parsed is not None:
             variants.append(parsed)
 

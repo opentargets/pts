@@ -70,6 +70,25 @@ def test_parse_record_gene_name_from_gn_line():
     assert rec['geneNames'] == ['BRCA1']
 
 
+HYPHEN_WRAPPED_DISEASE_ENTRY = """\
+ID   IL2RG_HUMAN              Reviewed;         369 AA.
+AC   P31785;
+GN   Name=IL2RG;
+CC   -!- DISEASE: Severe combined immunodeficiency X-linked T-cell-negative/B-
+CC       cell-positive/NK-cell-negative (XSCID) [MIM:300400]:
+CC       A form of severe combined immunodeficiency. {ECO:0000269|PubMed:1}.
+"""
+
+
+def test_disease_name_with_hyphen_at_line_wrap():
+    """UniProt occasionally wraps mid-compound-word with a trailing `-`; the parser
+    must elide the line-join space so 'B-\\ncell' becomes 'B-cell', not 'B- cell'."""
+    rec = _parse_record(_lines(HYPHEN_WRAPPED_DISEASE_ENTRY))
+    assert rec['diseases'][0]['name'] == (
+        'Severe combined immunodeficiency X-linked T-cell-negative/B-cell-positive/NK-cell-negative'
+    )
+
+
 MULTI_DISEASE_ENTRY = """\
 ID   TP53_HUMAN               Reviewed;         393 AA.
 AC   P04637;
