@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pts.transformers.uniprot_evidence import _parse_record
+import io
+
+from pts.transformers.uniprot_evidence import _parse_record, _parse_uniprot
 
 
 def _lines(entry: str) -> list[str]:
@@ -226,3 +228,24 @@ def test_variant_unlinked_when_no_acronym_match():
     rec = _parse_record(_lines(LINKED_VARIANT_ENTRY))
     by_id = {v['ftId']: v for v in rec['variants']}
     assert by_id['VAR_007801']['linkedOmimIds'] == []
+
+
+def test_parse_uniprot_streams_multiple_records():
+    flat = """\
+ID   A_HUMAN                  Reviewed;         100 AA.
+AC   Q11111;
+GN   Name=A;
+CC   -!- DISEASE: A disease, familial (ADIS) [MIM:111111]: text.
+CC       {ECO:0000269|PubMed:1}.
+//
+ID   B_HUMAN                  Reviewed;         100 AA.
+AC   Q22222;
+GN   Name=B;
+CC   -!- DISEASE: B disease (BDIS) [MIM:222222]: text.
+CC       {ECO:0000269|PubMed:2}.
+//
+"""
+    records = _parse_uniprot(io.StringIO(flat))
+    assert [r['accession'] for r in records] == ['Q11111', 'Q22222']
+    assert records[0]['diseases'][0]['omimId'] == '111111'
+    assert records[1]['diseases'][0]['omimId'] == '222222'

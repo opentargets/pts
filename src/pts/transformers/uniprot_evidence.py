@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import re
 
+from loguru import logger
+
 _BRACES_RE = re.compile(r'\{[^}]*\}')
 _ECO_PUBMED_RE = re.compile(r'ECO:\d+\|PubMed:(\d+)')
 _DISEASE_HEADER_RE = re.compile(
@@ -262,3 +264,36 @@ def _parse_record(lines: list[str]) -> dict:
         'diseases': diseases,
         'variants': variants,
     }
+
+
+def _parse_uniprot(file_obj) -> list[dict]:
+    """Stream a Swiss-Prot flat file, delimited by lines starting with `//`.
+
+    Accepts either a binary file-like (yielding bytes) or a text file-like
+    (yielding str). Returns the list of parsed records.
+    """
+    records: list[dict] = []
+    current_lines: list[str] = []
+    count = 0
+
+    for raw_line in file_obj:
+        if isinstance(raw_line, bytes):
+            line = raw_line.decode('utf-8', errors='replace').rstrip('\n')
+        else:
+            line = raw_line.rstrip('\n')
+
+        if line.startswith('//'):
+            if current_lines:
+                records.append(_parse_record(current_lines))
+                count += 1
+                if count % 10000 == 0:
+                    logger.info(f'parsed {count} uniprot records')
+                current_lines = []
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        records.append(_parse_record(current_lines))
+
+    logger.info(f'parsed {len(records)} uniprot records total')
+    return records
