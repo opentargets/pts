@@ -5,9 +5,14 @@ Output is consumed by the `uniprot_variants` and `uniprot_literature` PySpark ta
 
 from __future__ import annotations
 
+import gzip
 import re
+from typing import Any
 
+import polars as pl
 from loguru import logger
+from otter.config.model import Config
+from otter.storage.synchronous.handle import StorageHandle
 
 _BRACES_RE = re.compile(r'\{[^}]*\}')
 _ECO_PUBMED_RE = re.compile(r'ECO:\d+\|PubMed:(\d+)')
@@ -297,3 +302,53 @@ def _parse_uniprot(file_obj) -> list[dict]:
 
     logger.info(f'parsed {len(records)} uniprot records total')
     return records
+
+
+_UNIPROT_EVIDENCE_SCHEMA = pl.Schema({
+    'id': pl.String,
+    'accession': pl.String,
+    'geneNames': pl.List(pl.String),
+    'diseases': pl.List(pl.Struct({
+        'omimId': pl.String,
+        'name': pl.String,
+        'acronym': pl.String,
+        'description': pl.String,
+        'evidencePmids': pl.List(pl.String),
+    })),
+    'variants': pl.List(pl.Struct({
+        'ftId': pl.String,
+        'description': pl.String,
+        'aminoacidChange': pl.String,
+        'dbSnpRsId': pl.String,
+        'linkedOmimIds': pl.List(pl.String),
+        'evidencePmids': pl.List(pl.String),
+    })),
+})
+
+
+def uniprot_evidence(
+    source: str,
+    destination: str,
+    settings: dict[str, Any],
+    config: Config,
+) -> None:
+    """Parse a Swiss-Prot flat file and write an evidence-oriented parquet.
+
+    Output is keyed by UniProt entry, with per-entry disease comments and
+    variant features extracted for downstream PySpark consumers.
+    """
+    logger.info(f'loading uniprot flat file from {source}')
+    h = StorageHandle(source)
+
+    with h.open('rb') as raw:
+        if source.endswith('.gz'):
+            with gzip.open(raw, 'rb') as gz:
+                rows = _parse_uniprot(gz)
+        else:
+            rows = _parse_uniprot(raw)
+
+    logger.info('creating evidence dataframe')
+    df = pl.DataFrame(rows, schema=_UNIPROT_EVIDENCE_SCHEMA)
+
+    logger.info(f'writing uniprot evidence parquet to {destination}')
+    df.write_parquet(destination)

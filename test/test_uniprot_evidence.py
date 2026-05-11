@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import gzip
 import io
 
-from pts.transformers.uniprot_evidence import _parse_record, _parse_uniprot
+import polars as pl
+
+from pts.transformers.uniprot_evidence import _parse_record, _parse_uniprot, uniprot_evidence
 
 
 def _lines(entry: str) -> list[str]:
@@ -249,3 +252,31 @@ CC       {ECO:0000269|PubMed:2}.
     assert [r['accession'] for r in records] == ['Q11111', 'Q22222']
     assert records[0]['diseases'][0]['omimId'] == '111111'
     assert records[1]['diseases'][0]['omimId'] == '222222'
+
+
+def test_uniprot_evidence_writes_parquet(tmp_path):
+    src_path = tmp_path / 'mini.txt.gz'
+    payload = b"""\
+ID   A_HUMAN                  Reviewed;         100 AA.
+AC   Q11111;
+GN   Name=A;
+CC   -!- DISEASE: A disease (ADIS) [MIM:111111]: text.
+CC       {ECO:0000269|PubMed:1}.
+FT   VARIANT         42
+FT                   /note="R -> Q (in ADIS)"
+FT                   /id="VAR_000001"
+FT                   /db_snp="rs1"
+//
+"""
+    with gzip.open(src_path, 'wb') as fh:
+        fh.write(payload)
+
+    dst_path = tmp_path / 'out.parquet'
+    uniprot_evidence(str(src_path), str(dst_path), {}, config=None)
+
+    df = pl.read_parquet(str(dst_path))
+    assert df.height == 1
+    row = df.row(0, named=True)
+    assert row['accession'] == 'Q11111'
+    assert row['diseases'][0]['omimId'] == '111111'
+    assert row['variants'][0]['linkedOmimIds'] == ['111111']
