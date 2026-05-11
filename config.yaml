@@ -233,6 +233,17 @@ steps:
       destination: intermediate/evidence/uniprot/uniprot_evidence.parquet
   ##################################################################################################
 
+  #: UNIPROT LITERATURE STEP :######################################################################
+  uniprot_literature:
+    - name: pyspark uniprot_literature
+      pyspark: uniprot_literature
+      source:
+        uniprot_evidence: intermediate/evidence/uniprot/uniprot_evidence.parquet
+        ontoma_disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
+        ontoma_disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
+      destination: intermediate/evidence/uniprot_literature.parquet
+  ##################################################################################################
+
   #: TARGET STEP (pyspark) :#######################################################################
   target:
     - name: pyspark target
@@ -1024,7 +1035,7 @@ steps:
     - name: pyspark evidence_postprocess
       pyspark: evidence_postprocess
       source:
-        evidence_path: input/evidence/uniprot_literature.json.gz
+        evidence_path: intermediate/evidence/uniprot_literature.parquet
         target_path: output/target
         disease_path: output/disease
         publication_date_lut: input/literature/literature_export
@@ -1032,7 +1043,7 @@ steps:
         failed_evidence: excluded/evidence/uniprot_literature
         evidence: output/evidence_uniprot_literature
       settings:
-        evidence_format: json
+        evidence_format: parquet
         datasource_id: uniprot_literature
         score_expression: |
           element_at(
