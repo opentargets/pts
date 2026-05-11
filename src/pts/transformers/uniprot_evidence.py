@@ -69,6 +69,32 @@ def _format_aa_change(position: str, change_text: str) -> str:
     return f'p.{one_from}{position}{one_to}'
 
 
+def _link_variants_to_diseases(diseases: list[dict], variants: list[dict]) -> None:
+    """Attach `linkedOmimIds` to each variant by matching disease acronyms in its description.
+
+    Mutates `variants` in place. Matching is whole-word and case-sensitive on the
+    acronym (UniProt acronyms are uppercase short identifiers like BROVCA1, LFS1).
+    """
+    if not diseases or not variants:
+        return
+    acronym_to_omim = {d['acronym']: d['omimId'] for d in diseases if d.get('acronym')}
+    if not acronym_to_omim:
+        return
+    pattern = re.compile(
+        r'\b(' + '|'.join(re.escape(a) for a in acronym_to_omim) + r')\b'
+    )
+    for variant in variants:
+        matches = pattern.findall(variant['description'])
+        seen: set[str] = set()
+        linked: list[str] = []
+        for acronym in matches:
+            omim = acronym_to_omim[acronym]
+            if omim not in seen:
+                seen.add(omim)
+                linked.append(omim)
+        variant['linkedOmimIds'] = linked
+
+
 def _parse_variant_qualifiers(position: str, qualifier_text: str) -> dict | None:
     """Parse the joined `/note=... /id=... /db_snp=...` block of one FT VARIANT.
 
@@ -226,6 +252,8 @@ def _parse_record(lines: list[str]) -> dict:
                     v = v.strip().rstrip(';')
                     if v:
                         gene_names.append(v)
+
+    _link_variants_to_diseases(diseases, variants)
 
     return {
         'id': entry_id,

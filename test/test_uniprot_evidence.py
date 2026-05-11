@@ -195,3 +195,34 @@ FT                   /id="VAR_bare"
     rec = _parse_record(_lines(entry))
     assert 'C -> R' not in rec['variants'][0]['description']
     assert rec['variants'][0]['description'] == ''
+
+
+LINKED_VARIANT_ENTRY = """\
+ID   BRCA1_HUMAN              Reviewed;        1863 AA.
+AC   P38398;
+GN   Name=BRCA1;
+CC   -!- DISEASE: Breast-ovarian cancer, familial, 1 (BROVCA1) [MIM:604370]:
+CC       A cancer. {ECO:0000269|PubMed:1111111}.
+CC   -!- DISEASE: Pancreatic cancer 4 (PNCA4) [MIM:614320]:
+CC       Another condition. {ECO:0000269|PubMed:2222222}.
+FT   VARIANT         1699
+FT                   /note="R -> Q (in BROVCA1; dbSNP:rs28897696)"
+FT                   /evidence="ECO:0000269|PubMed:9145676"
+FT                   /id="VAR_007800"
+FT                   /db_snp="rs28897696"
+FT   VARIANT         1738
+FT                   /note="C -> Y (unknown significance)"
+FT                   /id="VAR_007801"
+"""
+
+
+def test_variant_linked_to_disease_by_acronym():
+    rec = _parse_record(_lines(LINKED_VARIANT_ENTRY))
+    by_id = {v['ftId']: v for v in rec['variants']}
+    assert by_id['VAR_007800']['linkedOmimIds'] == ['604370']
+
+
+def test_variant_unlinked_when_no_acronym_match():
+    rec = _parse_record(_lines(LINKED_VARIANT_ENTRY))
+    by_id = {v['ftId']: v for v in rec['variants']}
+    assert by_id['VAR_007801']['linkedOmimIds'] == []
