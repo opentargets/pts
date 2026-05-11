@@ -225,6 +225,14 @@ steps:
       destination: intermediate/target/uniprot/uniprot.parquet
   ##################################################################################################
 
+  #: UNIPROT EVIDENCE PARSE STEP :##################################################################
+  uniprot_evidence_parse:
+    - name: transform uniprot evidence
+      transformer: uniprot_evidence
+      source: input/target/uniprot/uniprot.txt.gz
+      destination: intermediate/evidence/uniprot/uniprot_evidence.parquet
+  ##################################################################################################
+
   #: TARGET STEP (pyspark) :#######################################################################
   target:
     - name: pyspark target
