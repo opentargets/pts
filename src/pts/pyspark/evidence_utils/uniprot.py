@@ -16,12 +16,14 @@ TARGET_MODULATION = 'up_or_down'
 # Phrases that, when present in a CC DISEASE block's description, indicate
 # UniProt curators have flagged the gene-disease association as "indefinite"
 # (likely-not-causative). Ported from the legacy Java pipeline's
-# DefaultBaseFactory.INDEFINITE_DISEASE_NOTE_ASSOCIATIONS. Rows matching any
-# of these phrases get confidence='medium'; all others get 'high'.
+# DefaultBaseFactory.INDEFINITE_DISEASE_NOTE_ASSOCIATIONS, with `mutations` /
+# `variations` updated to `variants` to match modern UniProt phrasing —
+# the legacy strings produce a near-zero match rate against current data.
+# Rows matching any of these phrases get confidence='medium'; all others get 'high'.
 INDEFINITE_DISEASE_NOTES = (
-    'The disease may be caused by mutations affecting the gene represented in this entry',
-    'The disease may be caused by mutations affecting distinct genetic loci, including the gene represented in this entry',  # noqa: E501
-    'Disease susceptibility may be associated with variations affecting the gene represented in this entry',
+    'The disease may be caused by variants affecting the gene represented in this entry',
+    'The disease may be caused by variants affecting distinct genetic loci, including the gene represented in this entry',  # noqa: E501
+    'Disease susceptibility may be associated with variants affecting the gene represented in this entry',
     'The gene represented in this entry may act as a disease modifier',
     'The gene represented in this entry may be involved in disease pathogenesis',
     'The protein represented in this entry may be involved in disease pathogenesis',

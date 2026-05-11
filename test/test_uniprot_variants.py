@@ -160,7 +160,7 @@ def test_uniprot_variants_medium_confidence_for_indefinite_description(spark, tm
         _parsed_row(
             diseases=[
                 _disease(
-                    description='The disease may be caused by mutations affecting the gene represented in this entry.',
+                    description='The disease may be caused by variants affecting the gene represented in this entry.',
                 ),
             ],
             variants=[_variant()],

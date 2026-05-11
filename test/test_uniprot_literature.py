@@ -65,7 +65,7 @@ def test_uniprot_literature_projects_expected_columns(spark, tmp_path, monkeypat
                     omimId='888888',
                     name='Indefinite disease',
                     acronym='IND',
-                    description='The disease may be caused by mutations affecting the gene represented in this entry.',
+                    description='The disease may be caused by variants affecting the gene represented in this entry.',
                     evidencePmids=['12345'],
                 ),
             ],
