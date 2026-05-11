@@ -111,3 +111,59 @@ def test_parse_record_id_and_accession_and_gene():
     assert rec['id'] == 'TP53_HUMAN'
     assert rec['accession'] == 'P04637'
     assert rec['geneNames'] == ['TP53']
+
+
+SINGLE_VARIANT_ENTRY = """\
+ID   BRCA1_HUMAN              Reviewed;        1863 AA.
+AC   P38398;
+GN   Name=BRCA1;
+CC   -!- DISEASE: Breast-ovarian cancer, familial, 1 (BROVCA1) [MIM:604370]:
+CC       A cancer. {ECO:0000269|PubMed:1111111}.
+FT   VARIANT         1699
+FT                   /note="R -> Q (in BROVCA1; dbSNP:rs28897696)"
+FT                   /evidence="ECO:0000269|PubMed:9145676"
+FT                   /id="VAR_007800"
+FT                   /db_snp="rs28897696"
+"""
+
+
+def test_parse_record_variant_count():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert len(rec['variants']) == 1
+
+
+def test_parse_record_variant_ft_id():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert rec['variants'][0]['ftId'] == 'VAR_007800'
+
+
+def test_parse_record_variant_dbsnp():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert rec['variants'][0]['dbSnpRsId'] == 'rs28897696'
+
+
+def test_parse_record_variant_aa_change():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert rec['variants'][0]['aminoacidChange'] == 'p.Arg1699Gln'
+
+
+def test_parse_record_variant_evidence_pmids():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert rec['variants'][0]['evidencePmids'] == ['9145676']
+
+
+def test_parse_record_variant_description_in_phrase():
+    rec = _parse_record(_lines(SINGLE_VARIANT_ENTRY))
+    assert 'BROVCA1' in rec['variants'][0]['description']
+
+
+def test_parse_record_variant_no_dbsnp():
+    entry = """\
+ID   X_HUMAN                  Reviewed;         100 AA.
+AC   Q99999;
+FT   VARIANT         50
+FT                   /note="A -> V (in some disease)"
+FT                   /id="VAR_900000"
+"""
+    rec = _parse_record(_lines(entry))
+    assert rec['variants'][0]['dbSnpRsId'] is None
