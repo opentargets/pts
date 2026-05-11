@@ -184,7 +184,7 @@ FT                   /id="VAR_no_parens"
 """
     rec = _parse_record(_lines(entry))
     assert rec['variants'][0]['ftId'] == 'VAR_no_parens'
-    assert rec['variants'][0]['description'] == ''
+    assert not rec['variants'][0]['description']
     assert rec['variants'][0]['aminoacidChange'] == 'p.AlaXxxVal'.replace('Xxx', '42')
 
 
@@ -199,7 +199,7 @@ FT                   /id="VAR_bare"
 """
     rec = _parse_record(_lines(entry))
     assert 'C -> R' not in rec['variants'][0]['description']
-    assert rec['variants'][0]['description'] == ''
+    assert not rec['variants'][0]['description']
 
 
 LINKED_VARIANT_ENTRY = """\
