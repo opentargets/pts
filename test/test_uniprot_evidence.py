@@ -40,3 +40,26 @@ def test_parse_record_disease_acronym():
 def test_parse_record_disease_evidence_pmids():
     rec = _parse_record(_lines(SINGLE_DISEASE_ENTRY))
     assert rec['diseases'][0]['evidencePmids'] == ['7545954', '9145676']
+
+
+DISEASE_WITH_COPYRIGHT_SEPARATOR = """\
+ID   X_HUMAN                  Reviewed;         100 AA.
+AC   Q11111;
+CC   -!- DISEASE: A disease (XDIS) [MIM:111111]: text.
+CC       {ECO:0000269|PubMed:1}.
+CC   -----------------------------------------------------------------------
+CC   Copyrighted by the UniProt Consortium.
+"""
+
+
+def test_parse_record_disease_not_polluted_by_copyright_block():
+    rec = _parse_record(_lines(DISEASE_WITH_COPYRIGHT_SEPARATOR))
+    assert len(rec['diseases']) == 1
+    desc = rec['diseases'][0]['description']
+    assert '---' not in desc
+    assert 'Copyrighted' not in desc
+
+
+def test_parse_record_gene_name_from_gn_line():
+    rec = _parse_record(_lines(SINGLE_DISEASE_ENTRY))
+    assert rec['geneNames'] == ['BRCA1']

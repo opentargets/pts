@@ -43,11 +43,12 @@ def _parse_record(lines: list[str]) -> dict:
     accession = ''
     gene_names: list[str] = []
     diseases: list[dict] = []
-    variants: list[dict] = []
+    variants: list[dict] = []  # populated in a later task (FT VARIANT parsing)
 
     # CC DISEASE accumulator
     in_disease = False
     disease_lines: list[str] = []
+    gn_lines: list[str] = []
 
     def _flush_disease() -> None:
         nonlocal in_disease, disease_lines
@@ -80,20 +81,13 @@ def _parse_record(lines: list[str]) -> dict:
                         break
 
         elif code == 'GN':
-            cleaned = _strip_braces(content)
-            for segment in cleaned.split(';'):
-                segment = segment.strip()
-                if '=' in segment:
-                    key, _, value = segment.partition('=')
-                    if key.strip() == 'Name':
-                        for v in value.split(','):
-                            v = v.strip().rstrip(';')
-                            if v:
-                                gene_names.append(v)
+            gn_lines.append(content)
 
         elif code == 'CC':
             stripped_content = content.lstrip()
-            if stripped_content.startswith('-!- DISEASE:'):
+            if stripped_content.startswith('-----'):
+                _flush_disease()
+            elif stripped_content.startswith('-!- DISEASE:'):
                 _flush_disease()
                 in_disease = True
                 first = stripped_content[len('-!- DISEASE:'):].strip()
@@ -107,6 +101,17 @@ def _parse_record(lines: list[str]) -> dict:
                     disease_lines.append(cont)
 
     _flush_disease()
+
+    gn_text = _strip_braces(' '.join(gn_lines))
+    for segment in gn_text.split(';'):
+        segment = segment.strip()
+        if '=' in segment:
+            key, _, value = segment.partition('=')
+            if key.strip() == 'Name':
+                for v in value.split(','):
+                    v = v.strip().rstrip(';')
+                    if v:
+                        gene_names.append(v)
 
     return {
         'id': entry_id,
