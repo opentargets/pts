@@ -167,3 +167,31 @@ FT                   /id="VAR_900000"
 """
     rec = _parse_record(_lines(entry))
     assert rec['variants'][0]['dbSnpRsId'] is None
+
+
+def test_parse_record_variant_description_empty_when_note_has_no_parens():
+    entry = """\
+ID   Y_HUMAN                  Reviewed;         100 AA.
+AC   Q88888;
+FT   VARIANT         42
+FT                   /note="A -> V"
+FT                   /id="VAR_no_parens"
+"""
+    rec = _parse_record(_lines(entry))
+    assert rec['variants'][0]['ftId'] == 'VAR_no_parens'
+    assert rec['variants'][0]['description'] == ''
+    assert rec['variants'][0]['aminoacidChange'] == 'p.AlaXxxVal'.replace('Xxx', '42')
+
+
+def test_parse_record_variant_description_does_not_pollute_when_note_is_bare_change():
+    """The description field should not echo the AA change string."""
+    entry = """\
+ID   Z_HUMAN                  Reviewed;         100 AA.
+AC   Q77777;
+FT   VARIANT         99
+FT                   /note="C -> R"
+FT                   /id="VAR_bare"
+"""
+    rec = _parse_record(_lines(entry))
+    assert 'C -> R' not in rec['variants'][0]['description']
+    assert rec['variants'][0]['description'] == ''

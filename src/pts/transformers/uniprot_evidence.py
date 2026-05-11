@@ -14,6 +14,12 @@ _DISEASE_HEADER_RE = re.compile(
 )
 _VARIANT_POS_RE = re.compile(r'^VARIANT\s+(?P<pos>\d+)(?:\s*\.\.\s*\d+)?\s*$')
 _AA_CHANGE_RE = re.compile(r'^(?P<from>[A-Z])\s*->\s*(?P<to>[A-Z])$')
+# Splits a joined qualifier text at each `/key="` token. The lookbehind
+# `(?<![A-Za-z0-9_])` prevents splitting on `/key=` patterns that appear
+# inside a qualifier value (e.g. immediately after a digit in a dbSNP
+# identifier inside a /note value).
+_QUALIFIER_SPLIT_RE = re.compile(r'(?=(?<![A-Za-z0-9_])/[a-z_]+=")')
+_QUALIFIER_KV_RE = re.compile(r'^/([a-z_]+)="(.*)"\s*$', re.DOTALL)
 
 _AA_THREE_LETTER = {
     'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys',
@@ -74,13 +80,13 @@ def _parse_variant_qualifiers(position: str, qualifier_text: str) -> dict | None
     # Split on the start of each qualifier (a `/key="` token preceded by either
     # the start of the string or non-identifier whitespace). UniProt qualifier
     # blocks always begin a new qualifier with this pattern.
-    parts = re.split(r'(?=(?<![A-Za-z0-9_])/[a-z_]+=")', accumulated)
+    parts = _QUALIFIER_SPLIT_RE.split(accumulated)
     qualifiers: dict[str, str] = {}
     for part in parts:
         part = part.strip()
         if not part.startswith('/'):
             continue
-        key_match = re.match(r'^/([a-z_]+)="(.*)"\s*$', part, re.DOTALL)
+        key_match = _QUALIFIER_KV_RE.match(part)
         if key_match:
             qualifiers[key_match.group(1)] = key_match.group(2)
 
@@ -110,7 +116,7 @@ def _parse_variant_qualifiers(position: str, qualifier_text: str) -> dict | None
 
     return {
         'ftId': ft_id,
-        'description': description or note.strip(),
+        'description': description,
         'aminoacidChange': aa_change,
         'dbSnpRsId': db_snp,
         'linkedOmimIds': [],
