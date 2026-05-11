@@ -11,8 +11,8 @@ from pts.pyspark.common.session import Session
 from pts.pyspark.evidence_utils.uniprot import (
     DATASOURCE_LITERATURE,
     DATATYPE_GENETIC_LITERATURE,
-    confidence_from_literature,
-    uniprot_urls_struct_array,
+    TARGET_MODULATION,
+    confidence_from_description,
 )
 
 
@@ -37,8 +37,8 @@ def _compute_literature(
         f.col('disease.name').alias('diseaseFromSource'),
         f.concat(f.lit('OMIM:'), f.col('disease.omimId')).alias('diseaseFromSourceId'),
         f.col('disease.evidencePmids').alias('literature'),
-        confidence_from_literature(f.col('disease.evidencePmids')).alias('confidence'),
-        uniprot_urls_struct_array(f.col('accession')).alias('urls'),
+        confidence_from_description(f.col('disease.description')).alias('confidence'),
+        f.lit(TARGET_MODULATION).alias('targetModulation'),
     )
 
     logger.info('map uniprot literature diseases to EFO')

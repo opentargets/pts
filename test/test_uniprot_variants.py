@@ -59,33 +59,32 @@ def _variant(
     )
 
 
-def _disease(omim='604370', name='Breast-ovarian cancer 1', acronym='BROVCA1'):
+def _disease(
+    omim='604370',
+    name='Breast-ovarian cancer 1',
+    acronym='BROVCA1',
+    description='A cancer predisposition syndrome.',
+):
     return Row(
         omimId=omim,
         name=name,
         acronym=acronym,
-        description='Cancer.',
+        description=description,
         evidencePmids=['7545954'],
     )
 
 
-def test_uniprot_variants_projection_and_origin(spark, tmp_path, monkeypatch):
+def test_uniprot_variants_projection(spark, tmp_path, monkeypatch):
     from pts.pyspark import uniprot_variants as mod
 
     parsed = [
         _parsed_row(
             diseases=[_disease()],
-            variants=[
-                _variant(),  # germline (rsid not in census)
-                _variant(ft_id='VAR_999', rsid='rs99999', linked_omim=('604370',)),
-            ],
+            variants=[_variant()],
         ),
     ]
     parsed_path = tmp_path / 'parsed.parquet'
     spark.createDataFrame(parsed, schema=_PARSED_SCHEMA).write.parquet(str(parsed_path))
-
-    census_path = tmp_path / 'census.txt'
-    census_path.write_text('rs99999\n')
 
     def _fake_add_efo_mapping(spark, evidence_df, **kwargs):
         from pyspark.sql import functions as f
@@ -97,24 +96,29 @@ def test_uniprot_variants_projection_and_origin(spark, tmp_path, monkeypatch):
     mod._compute_variants(
         spark=spark,
         parsed_path=str(parsed_path),
-        somatic_census_path=str(census_path),
         disease_label_lut_path='unused',
         disease_id_lut_path='unused',
     ).write.parquet(str(out_path))
 
     df = spark.read.parquet(str(out_path))
     rows = df.collect()
-    by_rsid = {r['variantRsId']: r for r in rows}
 
-    assert by_rsid['rs28897696']['datatypeId'] == 'genetic_association'
-    assert by_rsid['rs28897696']['alleleOrigins'] == ['germline']
-    assert by_rsid['rs28897696']['datasourceId'] == 'uniprot_variants'
-    assert by_rsid['rs28897696']['variantAminoacidDescriptions'] == ['p.Arg1699Gln']
-    assert by_rsid['rs28897696']['diseaseFromSourceId'] == 'OMIM:604370'
-    assert by_rsid['rs28897696']['literature'] == ['9145676']
+    assert len(rows) == 1
+    r = rows[0]
+    assert r['datasourceId'] == 'uniprot_variants'
+    assert r['datatypeId'] == 'genetic_association'
+    assert r['targetFromSourceId'] == 'P38398'
+    assert r['diseaseFromSource'] == 'Breast-ovarian cancer 1'
+    assert r['diseaseFromSourceId'] == 'OMIM:604370'
+    assert r['variantRsId'] == 'rs28897696'
+    assert r['literature'] == ['9145676']
+    assert r['confidence'] == 'high'
+    assert r['targetModulation'] == 'up_or_down'
 
-    assert by_rsid['rs99999']['datatypeId'] == 'somatic_mutation'
-    assert by_rsid['rs99999']['alleleOrigins'] == ['somatic']
+    # Fields that previously existed but are NO LONGER part of the schema:
+    assert 'urls' not in df.columns
+    assert 'alleleOrigins' not in df.columns
+    assert 'variantAminoacidDescriptions' not in df.columns
 
 
 def test_uniprot_variants_drops_unlinked(spark, tmp_path, monkeypatch):
@@ -131,8 +135,39 @@ def test_uniprot_variants_drops_unlinked(spark, tmp_path, monkeypatch):
     parsed_path = tmp_path / 'parsed.parquet'
     spark.createDataFrame(parsed, schema=_PARSED_SCHEMA).write.parquet(str(parsed_path))
 
-    census_path = tmp_path / 'census.txt'
-    census_path.write_text('')
+    def _fake_add_efo_mapping(spark, evidence_df, **kwargs):
+        from pyspark.sql import functions as f
+        return evidence_df.withColumn('diseaseFromSourceMappedId', f.lit(None).cast('string'))
+
+    monkeypatch.setattr(mod, 'add_efo_mapping', _fake_add_efo_mapping)
+
+    out_path = tmp_path / 'variants.parquet'
+    mod._compute_variants(
+        spark=spark,
+        parsed_path=str(parsed_path),
+        disease_label_lut_path='unused',
+        disease_id_lut_path='unused',
+    ).write.parquet(str(out_path))
+
+    df = spark.read.parquet(str(out_path))
+    assert df.count() == 0
+
+
+def test_uniprot_variants_medium_confidence_for_indefinite_description(spark, tmp_path, monkeypatch):
+    from pts.pyspark import uniprot_variants as mod
+
+    parsed = [
+        _parsed_row(
+            diseases=[
+                _disease(
+                    description='The disease may be caused by mutations affecting the gene represented in this entry.',
+                ),
+            ],
+            variants=[_variant()],
+        ),
+    ]
+    parsed_path = tmp_path / 'parsed.parquet'
+    spark.createDataFrame(parsed, schema=_PARSED_SCHEMA).write.parquet(str(parsed_path))
 
     def _fake_add_efo_mapping(spark, evidence_df, **kwargs):
         from pyspark.sql import functions as f
@@ -144,10 +179,11 @@ def test_uniprot_variants_drops_unlinked(spark, tmp_path, monkeypatch):
     mod._compute_variants(
         spark=spark,
         parsed_path=str(parsed_path),
-        somatic_census_path=str(census_path),
         disease_label_lut_path='unused',
         disease_id_lut_path='unused',
     ).write.parquet(str(out_path))
 
     df = spark.read.parquet(str(out_path))
-    assert df.count() == 0
+    rows = df.collect()
+    assert len(rows) == 1
+    assert rows[0]['confidence'] == 'medium'

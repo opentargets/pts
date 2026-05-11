@@ -250,7 +250,6 @@ steps:
       pyspark: uniprot_variants
       source:
         uniprot_evidence: intermediate/evidence/uniprot/uniprot_evidence.parquet
-        somatic_census: input/evidence/uniprot/uniprot_somatic_census.txt
         ontoma_disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
         ontoma_disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
       destination: intermediate/evidence/uniprot_variants.parquet

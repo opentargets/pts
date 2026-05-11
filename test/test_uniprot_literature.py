@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 from pyspark.sql import Row
-from pyspark.sql.types import (
-    ArrayType,
-    StringType,
-    StructField,
-    StructType,
-)
+from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 _DISEASE_SCHEMA = StructType([
     StructField('omimId', StringType(), True),
@@ -20,11 +15,11 @@ _DISEASE_SCHEMA = StructType([
 
 _VARIANT_SCHEMA = StructType([
     StructField('ftId', StringType(), True),
-    StructField('dbSnpRsId', StringType(), True),
-    StructField('aminoacidChange', StringType(), True),
     StructField('description', StringType(), True),
-    StructField('evidencePmids', ArrayType(StringType()), True),
+    StructField('aminoacidChange', StringType(), True),
+    StructField('dbSnpRsId', StringType(), True),
     StructField('linkedOmimIds', ArrayType(StringType()), True),
+    StructField('evidencePmids', ArrayType(StringType()), True),
 ])
 
 _PARSED_SCHEMA = StructType([
@@ -36,11 +31,7 @@ _PARSED_SCHEMA = StructType([
 ])
 
 
-def _make_parsed_row(
-    accession='P38398',
-    diseases=None,
-    variants=None,
-):
+def _make_parsed_row(accession='P38398', diseases=None, variants=None):
     return Row(
         id='BRCA1_HUMAN',
         accession=accession,
@@ -60,7 +51,7 @@ def test_uniprot_literature_projects_expected_columns(spark, tmp_path, monkeypat
                     omimId='604370',
                     name='Breast-ovarian cancer 1',
                     acronym='BROVCA1',
-                    description='Cancer.',
+                    description='A cancer predisposition syndrome.',
                     evidencePmids=['7545954', '9145676'],
                 ),
                 Row(
@@ -70,13 +61,19 @@ def test_uniprot_literature_projects_expected_columns(spark, tmp_path, monkeypat
                     description='No PMIDs.',
                     evidencePmids=[],
                 ),
+                Row(
+                    omimId='888888',
+                    name='Indefinite disease',
+                    acronym='IND',
+                    description='The disease may be caused by mutations affecting the gene represented in this entry.',
+                    evidencePmids=['12345'],
+                ),
             ],
         ),
     ]
     parsed_path = tmp_path / 'parsed.parquet'
     spark.createDataFrame(parsed, schema=_PARSED_SCHEMA).write.parquet(str(parsed_path))
 
-    # Stub add_efo_mapping: behave as a no-op that adds a null column
     def _fake_add_efo_mapping(spark, evidence_df, **kwargs):
         from pyspark.sql import functions as f
         return evidence_df.withColumn('diseaseFromSourceMappedId', f.lit(None).cast('string'))
@@ -94,14 +91,23 @@ def test_uniprot_literature_projects_expected_columns(spark, tmp_path, monkeypat
     df = spark.read.parquet(str(out_path))
     rows = df.collect()
 
-    assert len(rows) == 1  # the empty-evidence disease is filtered out
-    r = rows[0]
-    assert r['datasourceId'] == 'uniprot_literature'
-    assert r['datatypeId'] == 'genetic_literature'
-    assert r['targetFromSourceId'] == 'P38398'
-    assert r['diseaseFromSource'] == 'Breast-ovarian cancer 1'
-    assert r['diseaseFromSourceId'] == 'OMIM:604370'
-    assert r['literature'] == ['7545954', '9145676']
-    assert r['confidence'] == 'high'
-    assert r['urls'][0]['niceName'] == 'UniProt'
-    assert r['urls'][0]['url'] == 'https://www.uniprot.org/uniprotkb/P38398'
+    # Empty-evidence disease is filtered; we keep the high-confidence one and the medium-confidence indefinite one.
+    assert len(rows) == 2
+
+    by_omim = {r['diseaseFromSourceId']: r for r in rows}
+
+    high = by_omim['OMIM:604370']
+    assert high['datasourceId'] == 'uniprot_literature'
+    assert high['datatypeId'] == 'genetic_literature'
+    assert high['targetFromSourceId'] == 'P38398'
+    assert high['diseaseFromSource'] == 'Breast-ovarian cancer 1'
+    assert high['literature'] == ['7545954', '9145676']
+    assert high['confidence'] == 'high'
+    assert high['targetModulation'] == 'up_or_down'
+
+    medium = by_omim['OMIM:888888']
+    assert medium['confidence'] == 'medium'
+    assert medium['targetModulation'] == 'up_or_down'
+
+    # urls field must not be present anywhere in the output
+    assert 'urls' not in df.columns

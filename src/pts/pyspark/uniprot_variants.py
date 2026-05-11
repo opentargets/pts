@@ -11,17 +11,14 @@ from pts.pyspark.common.session import Session
 from pts.pyspark.evidence_utils.uniprot import (
     DATASOURCE_VARIANTS,
     DATATYPE_GENETIC_ASSOCIATION,
-    DATATYPE_SOMATIC_MUTATION,
-    confidence_from_literature,
-    load_somatic_rsids,
-    uniprot_urls_struct_array,
+    TARGET_MODULATION,
+    confidence_from_description,
 )
 
 
 def _compute_variants(
     spark: SparkSession,
     parsed_path: str,
-    somatic_census_path: str,
     disease_label_lut_path: str,
     disease_id_lut_path: str,
 ) -> DataFrame:
@@ -40,7 +37,7 @@ def _compute_variants(
         f.explode(f.col('variant.linkedOmimIds')).alias('omimId'),
     )
 
-    # Resolve disease name from the entry's diseases array by matching omimId
+    # Resolve disease record from the entry's diseases array by matching omimId
     resolved = exploded_omim.withColumn(
         'disease',
         f.element_at(
@@ -49,32 +46,16 @@ def _compute_variants(
         ),
     ).filter(f.col('disease').isNotNull())
 
-    somatic = load_somatic_rsids(spark, somatic_census_path).withColumnRenamed(
-        'dbSnpRsId', 'somaticRsId'
-    ).withColumn('isSomatic', f.lit(True))
-
-    joined = resolved.join(
-        somatic,
-        resolved['variant.dbSnpRsId'] == somatic['somaticRsId'],
-        'left',
-    ).drop('somaticRsId')
-
-    projected = joined.select(
+    projected = resolved.select(
         f.lit(DATASOURCE_VARIANTS).alias('datasourceId'),
-        f.when(f.col('isSomatic').isNotNull(), f.lit(DATATYPE_SOMATIC_MUTATION))
-            .otherwise(f.lit(DATATYPE_GENETIC_ASSOCIATION))
-            .alias('datatypeId'),
+        f.lit(DATATYPE_GENETIC_ASSOCIATION).alias('datatypeId'),
         f.col('accession').alias('targetFromSourceId'),
         f.col('disease.name').alias('diseaseFromSource'),
         f.concat(f.lit('OMIM:'), f.col('omimId')).alias('diseaseFromSourceId'),
         f.col('variant.dbSnpRsId').alias('variantRsId'),
-        f.array(f.col('variant.aminoacidChange')).alias('variantAminoacidDescriptions'),
         f.col('variant.evidencePmids').alias('literature'),
-        confidence_from_literature(f.col('variant.evidencePmids')).alias('confidence'),
-        uniprot_urls_struct_array(f.col('accession')).alias('urls'),
-        f.when(f.col('isSomatic').isNotNull(), f.array(f.lit('somatic')))
-            .otherwise(f.array(f.lit('germline')))
-            .alias('alleleOrigins'),
+        confidence_from_description(f.col('disease.description')).alias('confidence'),
+        f.lit(TARGET_MODULATION).alias('targetModulation'),
     )
 
     logger.info('map uniprot variant diseases to EFO')
@@ -98,7 +79,6 @@ def uniprot_variants(
     result_df = _compute_variants(
         spark=spark.spark,
         parsed_path=source['uniprot_evidence'],
-        somatic_census_path=source['somatic_census'],
         disease_label_lut_path=source['ontoma_disease_label_lut'],
         disease_id_lut_path=source['ontoma_disease_id_lut'],
     )
