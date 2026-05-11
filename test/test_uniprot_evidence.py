@@ -280,3 +280,35 @@ FT                   /db_snp="rs1"
     assert row['accession'] == 'Q11111'
     assert row['diseases'][0]['omimId'] == '111111'
     assert row['variants'][0]['linkedOmimIds'] == ['111111']
+
+
+INLINE_DBSNP_VARIANT_ENTRY = """\
+ID   BRCA1_HUMAN              Reviewed;        1863 AA.
+AC   P38398;
+GN   Name=BRCA1;
+CC   -!- DISEASE: Breast cancer (BC) [MIM:114480]:
+CC       A cancer. {ECO:0000269|PubMed:1}.
+FT   VARIANT         4
+FT                   /note="S -> F (in BC; uncertain significance; dbSNP:rs786203152)"
+FT                   /evidence="ECO:0000269|PubMed:23867111"
+FT                   /id="VAR_070458"
+"""
+
+
+def test_parse_record_variant_dbsnp_extracted_from_note_when_qualifier_absent():
+    rec = _parse_record(_lines(INLINE_DBSNP_VARIANT_ENTRY))
+    assert rec['variants'][0]['dbSnpRsId'] == 'rs786203152'
+
+
+def test_parse_record_variant_qualifier_dbsnp_still_wins_when_present():
+    """If both /db_snp qualifier AND inline mention exist, the qualifier value wins."""
+    entry = """\
+ID   X_HUMAN                  Reviewed;         100 AA.
+AC   Q12345;
+FT   VARIANT         50
+FT                   /note="A -> V (in X; dbSNP:rs99999)"
+FT                   /id="VAR_legacy"
+FT                   /db_snp="rs11111"
+"""
+    rec = _parse_record(_lines(entry))
+    assert rec['variants'][0]['dbSnpRsId'] == 'rs11111'

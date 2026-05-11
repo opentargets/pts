@@ -27,6 +27,7 @@ _AA_CHANGE_RE = re.compile(r'^(?P<from>[A-Z])\s*->\s*(?P<to>[A-Z])$')
 # identifier inside a /note value).
 _QUALIFIER_SPLIT_RE = re.compile(r'(?=(?<![A-Za-z0-9_])/[a-z_]+=")')
 _QUALIFIER_KV_RE = re.compile(r'^/([a-z_]+)="(.*)"\s*$', re.DOTALL)
+_DBSNP_IN_NOTE_RE = re.compile(r'dbSNP:(rs\d+)')
 
 _AA_THREE_LETTER = {
     'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys',
@@ -129,6 +130,10 @@ def _parse_variant_qualifiers(position: str, qualifier_text: str) -> dict | None
 
     note = qualifiers.get('note', '')
     db_snp = qualifiers.get('db_snp')
+    if not db_snp:
+        m = _DBSNP_IN_NOTE_RE.search(note)
+        if m:
+            db_snp = m.group(1)
     evidence_text = qualifiers.get('evidence', '')
     evidence_pmids = _ECO_PUBMED_RE.findall(evidence_text)
 
