@@ -11,7 +11,7 @@ from pts.pyspark.common.session import Session
 from pts.pyspark.evidence_utils.uniprot import (
     DATASOURCE_VARIANTS,
     DATATYPE_GENETIC_ASSOCIATION,
-    DATATYPE_SOMATIC_MUTATIONS,
+    DATATYPE_SOMATIC_MUTATION,
     confidence_from_literature,
     load_somatic_rsids,
     uniprot_urls_struct_array,
@@ -61,7 +61,7 @@ def _compute_variants(
 
     projected = joined.select(
         f.lit(DATASOURCE_VARIANTS).alias('datasourceId'),
-        f.when(f.col('isSomatic').isNotNull(), f.lit(DATATYPE_SOMATIC_MUTATIONS))
+        f.when(f.col('isSomatic').isNotNull(), f.lit(DATATYPE_SOMATIC_MUTATION))
             .otherwise(f.lit(DATATYPE_GENETIC_ASSOCIATION))
             .alias('datatypeId'),
         f.col('accession').alias('targetFromSourceId'),

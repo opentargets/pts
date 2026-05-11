@@ -97,7 +97,7 @@ def test_uniprot_literature_projects_expected_columns(spark, tmp_path, monkeypat
     assert len(rows) == 1  # the empty-evidence disease is filtered out
     r = rows[0]
     assert r['datasourceId'] == 'uniprot_literature'
-    assert r['datatypeId'] == 'genetic_association'
+    assert r['datatypeId'] == 'genetic_literature'
     assert r['targetFromSourceId'] == 'P38398'
     assert r['diseaseFromSource'] == 'Breast-ovarian cancer 1'
     assert r['diseaseFromSourceId'] == 'OMIM:604370'

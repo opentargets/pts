@@ -11,7 +11,8 @@ DATASOURCE_VARIANTS = 'uniprot_variants'
 DATASOURCE_LITERATURE = 'uniprot_literature'
 
 DATATYPE_GENETIC_ASSOCIATION = 'genetic_association'
-DATATYPE_SOMATIC_MUTATIONS = 'somatic_mutations'
+DATATYPE_GENETIC_LITERATURE = 'genetic_literature'
+DATATYPE_SOMATIC_MUTATION = 'somatic_mutation'
 
 
 def uniprot_url(accession_col: Column) -> Column:

@@ -10,7 +10,7 @@ from pts.pyspark.common.ontology import add_efo_mapping
 from pts.pyspark.common.session import Session
 from pts.pyspark.evidence_utils.uniprot import (
     DATASOURCE_LITERATURE,
-    DATATYPE_GENETIC_ASSOCIATION,
+    DATATYPE_GENETIC_LITERATURE,
     confidence_from_literature,
     uniprot_urls_struct_array,
 )
@@ -32,7 +32,7 @@ def _compute_literature(
 
     projected = with_literature.select(
         f.lit(DATASOURCE_LITERATURE).alias('datasourceId'),
-        f.lit(DATATYPE_GENETIC_ASSOCIATION).alias('datatypeId'),
+        f.lit(DATATYPE_GENETIC_LITERATURE).alias('datatypeId'),
         f.col('accession').alias('targetFromSourceId'),
         f.col('disease.name').alias('diseaseFromSource'),
         f.concat(f.lit('OMIM:'), f.col('disease.omimId')).alias('diseaseFromSourceId'),

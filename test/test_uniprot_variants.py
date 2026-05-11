@@ -113,7 +113,7 @@ def test_uniprot_variants_projection_and_origin(spark, tmp_path, monkeypatch):
     assert by_rsid['rs28897696']['diseaseFromSourceId'] == 'OMIM:604370'
     assert by_rsid['rs28897696']['literature'] == ['9145676']
 
-    assert by_rsid['rs99999']['datatypeId'] == 'somatic_mutations'
+    assert by_rsid['rs99999']['datatypeId'] == 'somatic_mutation'
     assert by_rsid['rs99999']['alleleOrigins'] == ['somatic']
 
 
