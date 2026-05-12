@@ -31,7 +31,7 @@ def literature_match(
             type_col_name='type'
         )
     )
-    # consumed by both the disambiguated path and the isMapped==False filter
+    # consumed by match_disambiguated and the isMapped==False filter
     match_mapped.df.persist()
 
     logger.info('disambiguate')
@@ -48,6 +48,8 @@ def literature_match(
             ]
         )
     )
+    # consumed by the isValid==True and isValid==False filters
+    match_disambiguated.df.persist()
 
     match_valid = (
         match_disambiguated.df
@@ -77,4 +79,6 @@ def literature_match(
         .parquet(destination['match_failed'])
     )
 
+    # unpersist datasets
     match_mapped.df.unpersist()
+    match_disambiguated.df.unpersist()
