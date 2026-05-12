@@ -36,7 +36,7 @@ explicit = true
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
 clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
-cellex = { git = "https://github.com/Tobi1kenobi/CELLEX", rev = "aec954f3b7bc2235b0b38e8ffc1a59f011ad4459" }
+cellex = { git = "https://github.com/perslab/CELLEX"}
 
 
 [dependency-groups]

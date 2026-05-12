@@ -84,8 +84,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source:
         expression_data: intermediate/baseline_expression/unaggregated/DICE/celltype/parquet
-        biosample_index: output/biosample
-        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
         celltype_cellex: intermediate/baseline_expression/specificity/DICE/celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/DICE/celltype/
       requires:
@@ -146,8 +144,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/tabula_sapiens/celltype/parquet
-        biosample_index: output/biosample
-        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
         celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/celltype
       requires:
@@ -157,8 +153,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/tabula_sapiens/tissue/parquet
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
         tissue_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue
       requires:
@@ -168,9 +162,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/tabula_sapiens/tissue_celltype/parquet
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
         tissue_celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue_celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue_celltype
       requires:
@@ -183,7 +174,6 @@ steps:
       source:
         pride_directory: input/baseline_expression/MSproteomics/PRIDE
         tissue_ontology_mapping_path: input/baseline_expression/MSproteomics/PRIDE/tissue-complete_mapping.tsv
-        target_index_path: output/target
       destination:
         baseline_expression: intermediate/baseline_expression/unaggregated/PRIDE/tissue
       settings:
@@ -197,8 +187,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/PRIDE/tissue/parquet
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
       destination: intermediate/baseline_expression/aggregated/PRIDE/tissue
       requires:
         - pyspark baseline expression harmonise
@@ -231,8 +219,6 @@ steps:
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/GTEx/tissue/parquet
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
         tissue_cellex: intermediate/baseline_expression/specificity/GTEx/tissue/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/GTEx/tissue
       requires:
@@ -242,7 +228,12 @@ steps:
   baseline_expression_merge:
     - name: pyspark baseline expression merge unaggregated
       pyspark: baseline_expression_merge
-      source: intermediate/baseline_expression
+      source:
+        baseline_expression: intermediate/baseline_expression
+        target_index: output/target
+        biosample_index: output/biosample
+        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
+        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
       destination: output/baseline_expression/unaggregated/merged/parquet
       settings:
         aggregation: unaggregated
@@ -255,7 +246,12 @@ steps:
           - DICE/celltype
     - name: pyspark baseline expression merge aggregated
       pyspark: baseline_expression_merge
-      source: intermediate/baseline_expression
+      source:
+        baseline_expression: intermediate/baseline_expression
+        target_index: output/target
+        biosample_index: output/biosample
+        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
+        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
       destination: output/baseline_expression/aggregated/merged/parquet
       settings:
         aggregation: aggregated

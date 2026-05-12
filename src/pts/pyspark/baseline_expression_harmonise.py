@@ -100,7 +100,6 @@ def baseline_expression_harmonise(
         pride_source_data_dir = source['pride_directory']
         pride_codes = settings['pride_codes']
         tissue_ontology_mapping_path = source['tissue_ontology_mapping_path']
-        target_index_path = source['target_index_path']
         output_directory_path = destination['baseline_expression']
 
         PrideBaselineExpression(
@@ -109,7 +108,6 @@ def baseline_expression_harmonise(
             pride_codes=pride_codes,
             output_directory_path=output_directory_path,
             tissue_ontology_mapping_path=tissue_ontology_mapping_path,
-            target_index_path=target_index_path,
             json=False,
             local=False
         ).run()

@@ -6,7 +6,6 @@ Expected input formats:
 - PRIDE source data: TSV file containing sample-by-protein PPB counts.
 - Sample metadata: JSON file with experimental designs.
 - Tissue to ontology mapping: TSV file with columns PROPERTY VALUE, ONTOLOGY TERM(S)
-- Target index: Parquet file with target IDs and associated protein IDs.
 """
 
 
@@ -37,7 +36,6 @@ class PrideBaselineExpression:
         pride_codes: list,
         output_directory_path: str,
         tissue_ontology_mapping_path: str,
-        target_index_path: str,
         json: bool = False,
         local: bool = True
     ):
@@ -46,7 +44,6 @@ class PrideBaselineExpression:
         self.pride_codes = pride_codes
         self.output_directory_path = output_directory_path
         self.tissue_ontology_mapping_path = tissue_ontology_mapping_path
-        self.target_index_path = target_index_path
         self.json = json
         self.local = local
         self.df = None
@@ -65,17 +62,7 @@ class PrideBaselineExpression:
             .csv(pride_source_data_path)
         )
 
-        # Extract the uniprot IDs and bind in the target index for Ensembl IDs
-        target_index = self.spark.read.parquet(self.target_index_path)
-        target_mapping = target_index.select(
-            col('id'),
-            explode(col('proteinIds')).alias('proteinId')
-        ).select(
-            col('id'),
-            col('proteinId.id').alias('proteinId'),
-        )
-
-        # Extract the uniprot IDs and bind in the target index for Ensembl IDs
+        # Extract and normalize the UniProt IDs from PRIDE source data.
         orig_cols = pride_matrix.columns
 
         pride_matrix = (
@@ -87,13 +74,11 @@ class PrideBaselineExpression:
             .withColumn('proteinId', regexp_replace('proteinId', r'-\d+$', ''))  # optional, removes isoform suffix
             # if the proteinId column is NULL use the original Protein IDs
             .withColumn('proteinId', coalesce(col('proteinId'), col('Protein IDs')))
-            .join(target_mapping, on='proteinId', how='left')
             .select('proteinId', *orig_cols)
-            .drop('ENSG')
         )
 
         # Wide→long: explode an array of structs (one per sample column)
-        data_cols = [c for c in pride_matrix.columns if c not in ['id', 'proteinId', 'Gene Symbol', 'Protein IDs']]
+        data_cols = [c for c in pride_matrix.columns if c not in ['proteinId', 'Gene Symbol', 'Protein IDs']]
 
         # build an array<struct<Sample:string,PPB:double>>
         samp_structs = array(*[
@@ -103,9 +88,8 @@ class PrideBaselineExpression:
 
         pride_long = (
             pride_matrix
-            .select('id', 'proteinId', 'Gene Symbol', 'Protein IDs', explode(samp_structs).alias('x'))
+            .select('proteinId', 'Gene Symbol', 'Protein IDs', explode(samp_structs).alias('x'))
             .select(
-                col('id'),
                 col('proteinId'),
                 col('Gene Symbol'),
                 col('Protein IDs'),
@@ -169,7 +153,7 @@ class PrideBaselineExpression:
             .withColumn('donorId', concat(col('experimentId'), lit('-'), col('individual')))  # Add a column for donor
             .join(pride_ontology_mapping, on='tissue', how='left')
             .select(
-                'id', 'proteinId', 'donorId', 'PPB', 'BiosampleId',
+                'proteinId', 'donorId', 'PPB', 'BiosampleId',
                 'age', 'sex', 'tissue'
             )
         )
@@ -178,7 +162,8 @@ class PrideBaselineExpression:
         pride_long = pride_long.filter(col('BiosampleId').isNotNull())
 
         pride_long = (pride_long
-            .withColumnRenamed('id', 'targetId')
+            # Keep targetId populated for aggregation; resolve UniProt->Ensembl at merge step.
+            .withColumn('targetId', col('proteinId'))
             .withColumnRenamed('PPB', 'expression')
             .withColumnRenamed('tissue', 'tissueBiosampleFromSource')
             .withColumnRenamed('BiosampleId', 'tissueBiosampleId')
