@@ -6,13 +6,13 @@ from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, 
 
 def _import_scanpy():
     try:
-        import scanpy as scanpy
+        import scanpy as sc
     except ModuleNotFoundError as error:
         raise ModuleNotFoundError(
             'scanpy is an optional dependency for single-cell pseudobulk workflows. '
             'Install PTS with the scanpy extra to use this feature.'
         ) from error
-    return scanpy
+    return sc
 
 
 class PseudobulkExpression:
