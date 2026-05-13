@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from loguru import logger
+from pyspark.storagelevel import StorageLevel
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.common.utils import (
@@ -53,9 +54,12 @@ def evidence_postprocess(
 
     # Reading look up tables and make surer all looks good:
     lookup_tables = LookUpTables(session, source)
-    assert lookup_tables.disease_lut is not None, 'disease_lut not generated'
-    assert lookup_tables.target_lut is not None, 'target_lut not generated'
-    assert lookup_tables.publication_lut is not None, 'publication_lut not generated'
+    if lookup_tables.disease_lut is None:
+        raise ValueError('disease_lut not generated')
+    if lookup_tables.target_lut is None:
+        raise ValueError('target_lut not generated')
+    if lookup_tables.publication_lut is None:
+        raise ValueError('publication_lut not generated')
 
     # Processing evidence:
     processed_evidence = (
@@ -76,13 +80,17 @@ def evidence_postprocess(
         .assign_direction_on_trait(settings.get('direction_on_trait_expression'))
         .assign_direction_on_target(
             direction_on_target_expression=settings.get('direction_on_target_expression'),
-            mechanism_of_action_lut=lookup_tables.mechanism_of_action_lut,
             target_lut=lookup_tables.target_lut,
         )
         # Hash long variant identifiers:
         .hash_long_variant_identifiers()
     )
 
-    # Writing outputs:
-    processed_evidence.get_invalid_evidence().write.mode('overwrite').parquet(destination['failed_evidence'])
-    processed_evidence.get_valid_evidence().write.mode('overwrite').parquet(destination['evidence'])
+    # Writing outputs: persist before the valid/invalid split so the upstream chain
+    # (LUT joins, hashing, scoring, direction-of-effect) only runs once.
+    processed_evidence.df = processed_evidence.df.persist(StorageLevel.MEMORY_AND_DISK)
+    try:
+        processed_evidence.get_invalid_evidence().write.mode('overwrite').parquet(destination['failed_evidence'])
+        processed_evidence.get_valid_evidence().write.mode('overwrite').parquet(destination['evidence'])
+    finally:
+        processed_evidence.df.unpersist()

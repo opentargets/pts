@@ -38,7 +38,7 @@ class Evidence:
 
     # Columns we consider for dating evidence:
     EVIDENCE_DATE_COLUMNS: list[str] = field(
-        default_factory=lambda: ['publicationDate', 'curationDate', 'studyStartDate']
+        default_factory=lambda: ['publicationDate', 'curationDate', 'studyStartDate', 'releaseDate']
     )
 
     def __post_init__(self: Evidence) -> None:
@@ -76,7 +76,7 @@ class Evidence:
             # Flag evidence without mapped targets:
             .withColumn(
                 self.QC_COLUMN,
-                update_quality_flag(f.col(self.QC_COLUMN), f.col('targetId').isNull(), EvidenceFlags.INVALID_TARGET),
+                update_quality_flag(f.col(self.QC_COLUMN), f.col('targetId').isNull(), EvidenceFlags.INVALID_TARGET),  # ty:ignore[missing-argument]
             )
             # Flag evidence without target of invalid biotype:
             .withColumn(
@@ -105,7 +105,7 @@ class Evidence:
             # Flag evidence without mapped targets:
             .withColumn(
                 self.QC_COLUMN,
-                update_quality_flag(f.col(self.QC_COLUMN), f.col('diseaseId').isNull(), EvidenceFlags.INVALID_DISEASE),
+                update_quality_flag(f.col(self.QC_COLUMN), f.col('diseaseId').isNull(), EvidenceFlags.INVALID_DISEASE),  # ty:ignore[missing-argument]
             )
         )
 
@@ -119,8 +119,20 @@ class Evidence:
         Returns:
             Evidence: where non-unique evidence is flagged.
         """
+        # Order duplicates by a stable content-derived hash so the surviving row is reproducible
+        # across runs and across optimizer-induced re-shuffles within a single plan.
+        # The separator below is ASCII SOH (U+0001) — a control character that cannot occur
+        # in real text fields, so distinct field values can never produce the same hash input.
+        content_hash = f.sha2(
+            f.concat_ws(
+                '',
+                *[f.coalesce(f.col(c).cast(t.StringType()), f.lit('null')) for c in self.df.columns],
+            ),
+            256,
+        )
         return Evidence(
-            self.df.withColumn('evidence_unique_rank', f.rank().over(Window.partitionBy('id').orderBy(f.rand())))
+            self.df
+            .withColumn('evidence_unique_rank', f.row_number().over(Window.partitionBy('id').orderBy(content_hash)))
             .withColumn(
                 self.QC_COLUMN,
                 update_quality_flag(
@@ -161,7 +173,7 @@ class Evidence:
         ]
 
         # Generate a hash based on the concatenated fields:
-        hash_expression = f.sha1(f.concat(*valid_columns))
+        hash_expression = f.sha1(f.concat_ws('', *valid_columns))
 
         return Evidence(self.df.withColumn('id', hash_expression))
 
@@ -180,14 +192,12 @@ class Evidence:
     def assign_direction_on_target(
         self: Evidence,
         direction_on_target_expression: str | None,
-        mechanism_of_action_lut: DataFrame | None,
         target_lut: DataFrame | None,
     ) -> Evidence:
         """Assign direction of target for evidence.
 
         Args:
             direction_on_target_expression (str | None): spark sql expression to compute direction
-            mechanism_of_action_lut (DataFrame | None): drug mechanism of action look up table
             target_lut (DataFrame | None): target look up table
 
         Returns:
@@ -196,23 +206,13 @@ class Evidence:
         Raises:
             ValueError: if "drugId" column is missing if moa dataset is used.
         """
-        unused_columns = ['moaType', 'TSorOncogene']
+        unused_columns = ['actionType', 'TSorOncogene']
 
-        # If no expression is provided return evidence unchanged:
+        # If no expression is provided, return evidence unchanged:
         if direction_on_target_expression is None:
             return self
 
         evidence_df = self.df
-
-        # Mechanism of action requires the presence of drugId column:
-        if mechanism_of_action_lut:
-            if 'drugId' not in evidence_df.columns:
-                raise ValueError(
-                    'To use mechanism of action to annotate effect on target, "drugId" column must be in evidence.'
-                )
-
-            # Update evidence data frame, apply expression, and drop unused column:
-            evidence_df = evidence_df.join(mechanism_of_action_lut, on=['targetId', 'drugId'], how='left')
 
         if target_lut:
             evidence_df = evidence_df.join(
@@ -244,7 +244,8 @@ class Evidence:
                 update_quality_flag(
                     f.col(self.QC_COLUMN),
                     f.when(
-                        f.col('score').isNull() | (f.col('score') < 0) | (f.col('score') > 1), f.lit(True)
+                        f.col('score').isNull() | (f.col('score') < 0) | (f.col('score') > 1),  # ty:ignore[missing-argument]
+                        f.lit(True),
                     ).otherwise(f.lit(False)),
                     EvidenceFlags.NO_VALID_SCORE,
                 ),
@@ -270,23 +271,25 @@ class Evidence:
 
         #  Extract publication IDs/evidence ID:
         evidence_with_pub_ids = (
-            self.df.select(f.col('id'), f.explode(f.col('literature')).alias('publicationId'))
+            self.df
+            .select(f.col('id'), f.explode(f.col('literature')).alias('publicationId'))
             .withColumn('publicationId', f.upper(f.trim(f.col('publicationId'))))
             .distinct()
         )
 
         # Join evidence with publication mapping:
         dated_evidence = (
-            evidence_with_pub_ids.join(publication_date_lut, on='publicationId', how='inner')
+            evidence_with_pub_ids
+            .join(publication_date_lut, on='publicationId', how='inner')
             # For each evidence identifier find the earliest publication date:
-            .withColumn('rank', f.row_number().over(Window.partitionBy('id').orderBy(f.col('publicationDate').asc())))
+            .withColumn('rank', f.row_number().over(Window.partitionBy('id').orderBy(f.col('publicationDate').asc())))  # ty:ignore[missing-argument]
             .filter(f.col('rank') == 1)
             .select('id', 'publicationDate')
             .distinct()
         )
 
         # Broadcast for efficiency and join back to main evidence
-        dated_evidence_lut = f.broadcast(dated_evidence.orderBy(f.col('id').asc()))
+        dated_evidence_lut = f.broadcast(dated_evidence.orderBy(f.col('id').asc()))  # ty:ignore[missing-argument]
 
         return Evidence(self.df.join(dated_evidence_lut, on='id', how='left_outer'))
 
@@ -305,8 +308,10 @@ class Evidence:
         if len(dating_columns) == 0:
             dating_columns = [f.lit(None).cast(t.StringType())]
 
-        # Assign date:
-        return Evidence(self.df.withColumn('evidenceDate', f.array_min(f.array(dating_columns))))
+        # Assign date - filter nulls before taking min, as array_min returns null if any element is null:
+        return Evidence(
+            self.df.withColumn('evidenceDate', f.array_min(f.filter(f.array(dating_columns), lambda x: x.isNotNull())))
+        )
 
     def resolve_direction_of_effect(self: Evidence, mechanism_of_action: DataFrame) -> Evidence:
         raise NotImplementedError
@@ -328,7 +333,8 @@ class Evidence:
 
         # Apply transformation logic
         return (
-            f.when(chr_col.isNull() | pos_col.isNull(), f.concat(f.lit('OTVAR_'), f.md5(variant_id).cast('string')))
+            f
+            .when(chr_col.isNull() | pos_col.isNull(), f.concat(f.lit('OTVAR_'), f.md5(variant_id).cast('string')))  # ty:ignore[missing-argument]
             .when(
                 f.length(variant_id) > threshold,
                 f.concat_ws('_', f.lit('OTVAR'), chr_col, pos_col, f.md5(variant_id).cast('string')),
@@ -341,8 +347,8 @@ class Evidence:
         return self._df
 
     @df.setter
-    def df(self: Evidence, new_df: DataFrame) -> Evidence:
-        return Evidence(new_df)
+    def df(self: Evidence, new_df: DataFrame) -> None:
+        self._df = new_df
 
     def get_invalid_evidence(self: Evidence) -> DataFrame:
         """Return invalid evidence.

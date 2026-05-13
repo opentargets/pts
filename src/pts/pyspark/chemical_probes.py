@@ -45,13 +45,17 @@ def chemical_probes(
     # Extract input dataset locations from config
     probes_excel = source['probes_excel']
     drugs_csv = source['drugs_csv']
+    chembl_molecule_path = source['chembl_molecule']
+
+    # Load ChEMBL molecule data for drug ID validation
+    chembl_molecule_df = session.load_data(chembl_molecule_path)
 
     # Process chemical probes data from Excel and CSV files
     probes_data = process_probes_data(session.spark, probes_excel)
     probes_targets_data = process_probes_targets_data(session.spark, probes_excel)
     probes_sets_data = process_probes_sets_data(session.spark, probes_excel)
     targets_xref_data = process_targets_xrefs(session.spark, probes_excel)
-    drugs_xref_data = process_drugs_xrefs(session.spark, drugs_csv)
+    drugs_xref_data = process_drugs_xrefs(session.spark, drugs_csv, chembl_molecule_df)
 
     # Generate evidence from chemical probes
     evidence = generate_chemical_probes_evidence(
@@ -119,8 +123,10 @@ def process_scores(col_name: str) -> Column:
 def process_probes_data(spark: SparkSession, probes_excel: str) -> DataFrame:
     """Metadata about the compound and the scores given by the different sources."""
     return (
-        spark.createDataFrame(
-            pd.read_excel(
+        spark
+        .createDataFrame(
+            pd
+            .read_excel(
                 probes_excel,
                 sheet_name='PROBES',
                 header=0,
@@ -161,8 +167,10 @@ def process_probes_data(spark: SparkSession, probes_excel: str) -> DataFrame:
 def process_probes_targets_data(spark: SparkSession, probes_excel: str) -> DataFrame:
     """Collection of targets associated with the probes and their scores."""
     return (
-        spark.createDataFrame(
-            pd.read_excel(probes_excel, sheet_name='PROBES TARGETS', header=0, index_col=0)
+        spark
+        .createDataFrame(
+            pd
+            .read_excel(probes_excel, sheet_name='PROBES TARGETS', header=0, index_col=0)
             # Probes that do not have an associated target are marked with "-"
             .query("gene_name != '-'")
             .reset_index()
@@ -191,9 +199,10 @@ def process_probes_targets_data(spark: SparkSession, probes_excel: str) -> DataF
 def process_probes_sets_data(spark: SparkSession, probes_excel: str) -> DataFrame:
     """Metadata about the different sources of probes."""
     return (
-        spark.createDataFrame(pd.read_excel(probes_excel, sheet_name='COMPOUNDSETS', header=0, index_col=0))
+        spark
+        .createDataFrame(pd.read_excel(probes_excel, sheet_name='COMPOUNDSETS', header=0, index_col=0))
         .selectExpr('COMPOUNDSET as datasourceId', 'SOURCE_URL as url')
-        .filter(f.col('url').startswith('http'))
+        .filter(f.col('url').startswith('http'))  # ty:ignore[missing-argument, invalid-argument-type]
     )
 
 
@@ -204,12 +213,28 @@ def process_targets_xrefs(spark: SparkSession, probes_excel: str) -> DataFrame:
     ).selectExpr('target as targetFromSource', 'uniprot as targetFromSourceId')
 
 
-def process_drugs_xrefs(spark: SparkSession, drugs_csv: str) -> DataFrame:
-    """Look-up table between the probes IDs in P&Ds and ChEMBL."""
+def process_drugs_xrefs(spark: SparkSession, drugs_csv: str, chembl_molecule: DataFrame) -> DataFrame:
+    """Look-up table between the probes IDs in P&Ds and ChEMBL.
+
+    Only includes drugIds that exist in the ChEMBL molecule dataset.
+
+    Args:
+        spark: Spark session.
+        drugs_csv: Path to the drugs CSV file.
+        chembl_molecule: ChEMBL molecule DataFrame for validating drugIds.
+
+    Returns:
+        DataFrame with pdid and drugId columns, filtered to valid ChEMBL IDs.
+    """
+    # Get valid ChEMBL molecule IDs
+    valid_ids = chembl_molecule.select(f.col('id').alias('drugId'))
+
     return (
-        spark.read.csv(drugs_csv, header=True)
+        spark.read
+        .csv(drugs_csv, header=True)
         .selectExpr('pdid', 'ChEMBL as drugId')
-        .filter(f.col('drugId').isNotNull())
+        .filter(f.col('drugId').isNotNull())  # ty:ignore[missing-argument]
+        .join(valid_ids, on='drugId', how='inner')
     )
 
 
@@ -237,6 +262,7 @@ def generate_chemical_probes_evidence(
     grouping_cols = [
         'targetFromSourceId',
         'id',
+        'pdid',
         'drugId',
         'mechanismOfAction',
         'origin',
@@ -249,10 +275,12 @@ def generate_chemical_probes_evidence(
     ]
 
     return (
-        probes_targets_data.join(probes_data, on='pdid', how='left')
+        probes_targets_data
+        .join(probes_data, on='pdid', how='left')
         .join(targets_xref_data, on='targetFromSource', how='left')
         .join(probes_sets_data, on='datasourceId', how='left')
         .join(drugs_xref_data, on='pdid', how='left')
         .groupBy(grouping_cols)
         .agg(f.collect_set(f.struct(f.col('datasourceId').alias('niceName'), f.col('url').alias('url'))).alias('urls'))
+        .withColumnRenamed('pdid', 'drugFromSourceId')
     )

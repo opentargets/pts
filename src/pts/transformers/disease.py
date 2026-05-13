@@ -1,86 +1,184 @@
-from pathlib import Path
+from typing import Any
 
 import polars as pl
 from loguru import logger
+from otter.config.model import Config
+from otter.storage.synchronous.handle import StorageHandle
 
 from pts.schemas.ontology import node
 
+_IAO_REPLACED_BY = 'http://purl.obolibrary.org/obo/IAO_0100001'
+_BPV_DTYPE = pl.List(pl.Struct({'pred': pl.String(), 'val': pl.String()}))
+_ONTOLOGY_WEIGHTS = pl.DataFrame(
+    [('efo', 1), ('mondo', 2), ('oba', 3), ('orphanet', 4), ('hp', 100)],
+    schema=['prefix', 'prefix_rank'],
+    orient='row',
+)
 
-def deduplicate_disease(disease: pl.DataFrame) -> pl.DataFrame:
-    """De-duplicate disease table where rows contain the same label or differ only in casing.
+
+def annotate_name_duplicates(n: pl.DataFrame) -> pl.DataFrame:
+    """Annotate name-collision nodes in the raw ontology node table.
+
+    Finds non-deprecated CLASS nodes whose labels are identical when compared
+    case-insensitively (e.g. 'Acidosis' vs 'acidosis').  For each collision
+    group the node from the lower-priority ontology is marked as superseded:
+      - meta.deprecated is set to True
+      - An IAO_0100001 basicPropertyValues entry is added pointing to the
+        canonical (higher-priority) node's full URL.
+
+    Ontology priority (ascending, lower rank wins): efo < mondo < oba <
+    orphanet < hp < other.
+
+    This allows the standard n_clean filter (~deprecated) and the existing
+    obsolete_ids / replace_obsolete_terms pipeline to handle the resolution
+    transparently without any additional special-casing.
 
     Args:
-        disease: disease index DataFrame
+        n: Raw node DataFrame with the ``node`` schema (id, lbl, meta, type).
 
     Returns:
-        DataFrame with deduplicated diseases
+        DataFrame with the same shape and schema as ``n``, with meta updated
+        for superseded nodes.
     """
-    # column names to keep first:
-    keep_first_expression = [
-        pl.first(col_name).alias(col_name) for col_name in ['id', 'code', 'name', 'description', 'ontology']
-    ]
-
-    # array columns to be flattened and de-duplicated:
-    flatten_dedup_expression = [
-        pl.col(col_name).flatten().unique().drop_nulls().alias(col_name)
-        for col_name in [
-            'parents',
-            'children',
-            'ancestors',
-            'therapeuticAreas',
-            'descendants',
-            'obsoleteTerms',
-            'obsoleteXRefs',
-            'dbXRefs',
-            'exactSynonyms',
-            'relatedSynonyms',
-            'narrowSynonyms',
-            'broadSynonyms',
-        ]
-    ]
-
-    # To prioritise certain terms upon de-duplication, we consider their ontology pre-fix:
-    ontology_weights = pl.DataFrame(
-        [('efo', 1), ('mondo', 2), ('oba', 3), ('orphanet', 4), ('hp', 100)],
-        schema=['prefix', 'prefixRank'],
-        orient='row',
+    # --- Step 1: identify active nodes and detect name collisions -----------
+    active = n.filter(
+        pl.col('type') == 'CLASS',
+        ~pl.col('meta').struct['deprecated'] | pl.col('meta').struct['deprecated'].is_null(),
+    ).with_columns(
+        name_lower=pl.col('lbl').str.to_lowercase(),
+        prefix=pl.col('id').str.split('/').list.last().str.split('_').list.first().str.to_lowercase(),
     )
 
-    # Step 1: Add prefix and label columns
-    disease_prepared = (
-        disease.with_columns([
-            pl.col('id').str.to_lowercase().str.split('_').list.first().alias('prefix'),
-            pl.col('name').str.to_lowercase().alias('label'),
-        ])
-        .join(ontology_weights, on='prefix', how='left')
-        .with_columns(pl.col('prefixRank').fill_null(99))
+    collision_ids = (
+        active
+        .filter(pl.col('name_lower').is_duplicated())
+        .join(_ONTOLOGY_WEIGHTS, on='prefix', how='left')
+        .with_columns(pl.col('prefix_rank').fill_null(99))
+        .sort(['name_lower', 'prefix_rank'])
+        .with_columns(row_rank=pl.int_range(pl.len()).over('name_lower'))
     )
 
-    # Sort and then group by label and perform aggregation:
-    return (
-        disease_prepared.sort('label', 'prefixRank')  # Sort to ensure first row has best rank
-        .group_by('label', maintain_order=True)
-        .agg([
-            # Keep columns from the first row (best prefix rank):
-            *keep_first_expression,
-            # Merge array columns: flatten list of lists and deduplicate:
-            *flatten_dedup_expression,
-            # Collect all IDs to fill in obsoleted terms:
-            pl.col('id').alias('all_ids_in_group'),
-        ])
-        .with_columns(
-            # Existing obsoleted terms are merged with potentially de-duplicated terms:
-            obsoleteTerms=pl.col('obsoleteTerms').list.set_union(pl.col('all_ids_in_group').list.slice(1)),
+    canonical = collision_ids.filter(pl.col('row_rank') == 0).select(
+        pl.col('name_lower'), pl.col('id').alias('canonical_url')
+    )
+
+    superseded_map = (
+        collision_ids
+        .filter(pl.col('row_rank') > 0)
+        .join(canonical, on='name_lower')
+        .select(
+            pl.col('id').alias('superseded_url'),
+            pl.col('canonical_url'),
         )
-        # cleaning added data:
-        .drop('label', 'all_ids_in_group')
+    )
+
+    if superseded_map.is_empty():
+        return n
+
+    # --- Step 2: build the new IAO basicPropertyValues entries -------------
+    iao_additions = (
+        superseded_map
+        .select(
+            pl.col('superseded_url').alias('id'),
+            pl.struct(
+                pred=pl.lit(_IAO_REPLACED_BY),
+                val=pl.col('canonical_url'),
+            ).alias('iao_entry'),
+        )
+        .group_by('id')
+        .agg(pl.col('iao_entry').alias('iao_entries'))
+    )
+
+    # --- Step 3: unnest meta, apply updates, repack ------------------------
+    n_unnested = n.unnest('meta').join(iao_additions, on='id', how='left')
+
+    return (
+        n_unnested
+        .with_columns(
+            deprecated=pl.when(pl.col('iao_entries').is_not_null()).then(True).otherwise(pl.col('deprecated')),
+            basicPropertyValues=pl
+            .when(pl.col('iao_entries').is_not_null())
+            .then(
+                pl
+                .col('basicPropertyValues')
+                .fill_null(pl.Series([[]], dtype=_BPV_DTYPE))
+                .list.concat(pl.col('iao_entries'))
+            )
+            .otherwise(pl.col('basicPropertyValues')),
+        )
+        .drop('iao_entries')
+        .with_columns(
+            meta=pl.struct(
+                basicPropertyValues=pl.col('basicPropertyValues'),
+                comments=pl.col('comments'),
+                definition=pl.col('definition'),
+                deprecated=pl.col('deprecated'),
+                subsets=pl.col('subsets'),
+                synonyms=pl.col('synonyms'),
+                xrefs=pl.col('xrefs'),
+            )
+        )
+        .drop('basicPropertyValues', 'comments', 'definition', 'deprecated', 'subsets', 'synonyms', 'xrefs')
+        .select(n.columns)
     )
 
 
-def disease(source: Path, destination: Path) -> None:
+def remap_edges(e: pl.DataFrame, n: pl.DataFrame) -> pl.DataFrame:
+    """Replace deprecated node URLs in edges with their canonical replacements.
+
+    Extracts the deprecated→canonical mapping from IAO_0100001 basicPropertyValues
+    entries in ``n``, then rewrites any ``sub`` or ``obj`` in ``e`` that references
+    a deprecated node.  Self-loops and duplicate edges introduced by the remapping
+    are removed.
+
+    Args:
+        e: Edge DataFrame with columns ``sub``, ``pred``, ``obj`` (full URLs).
+        n: Node DataFrame (node schema), typically after ``annotate_name_duplicates``.
+
+    Returns:
+        Remapped edge DataFrame with the same columns as ``e``.
+    """
+    id_remap = (
+        n
+        .unnest('meta')
+        .explode('basicPropertyValues')
+        .unnest('basicPropertyValues')
+        .filter(
+            pl.col('deprecated'),
+            pl.col('pred') == _IAO_REPLACED_BY,
+        )
+        .select(
+            pl.col('id').alias('old_url'),
+            pl.col('val').alias('new_url'),
+        )
+    )
+
+    return (
+        e
+        .join(id_remap.rename({'old_url': 'sub', 'new_url': 'sub_new'}), on='sub', how='left')
+        .join(id_remap.rename({'old_url': 'obj', 'new_url': 'obj_new'}), on='obj', how='left')
+        .with_columns(
+            sub=pl.coalesce('sub_new', 'sub'),
+            obj=pl.coalesce('obj_new', 'obj'),
+        )
+        .drop('sub_new', 'obj_new')
+        .filter(pl.col('sub') != pl.col('obj'))
+        .unique()
+        .select(e.columns)
+    )
+
+
+def disease(
+    source: str,
+    destination: str,
+    settings: dict[str, Any],
+    config: Config,
+) -> None:
     # load the ontology
     logger.debug('loading efo')
-    initial = pl.read_json(source)
+    h = StorageHandle(source)
+    f = h.open()
+    initial = pl.read_json(f)
 
     logger.debug('starting transformation')
 
@@ -93,9 +191,15 @@ def disease(source: Path, destination: Path) -> None:
         initial['graphs'][0][0]['edges'],
     )
 
+    # annotate name-collision nodes as deprecated before any filtering,
+    # then rewrite edges so they reference only retained identifiers
+    n = annotate_name_duplicates(n)
+    e = remap_edges(e, n)
+
     # clean the nodes
     n_clean = (
-        n.filter(
+        n
+        .filter(
             pl.col('type') == 'CLASS',
             ~pl.col('meta').struct['deprecated'] | pl.col('meta').struct['deprecated'].is_null(),
         )
@@ -106,7 +210,8 @@ def disease(source: Path, destination: Path) -> None:
             name=pl.col('lbl'),
             isTherapeuticArea=pl.col('subsets').list.contains('"therapeutic_area"'),
             description=pl.col('definition').struct['val'],
-            dbXRefs=pl.col('xrefs')
+            dbXRefs=pl
+            .col('xrefs')
             .list.eval(pl.element().struct.field('val').unique())
             .fill_null(pl.Series([[]], dtype=pl.List(pl.String))),
         )
@@ -124,7 +229,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # get parents, by filtering edges with 'is_a' predicate
     parents = (
-        e.filter(pl.col('pred') == 'is_a')
+        e
+        .filter(pl.col('pred') == 'is_a')
         .with_columns(
             id=pl.col('sub').str.split('/').list.last(),
             parents=pl.col('obj').str.split('/').list.last(),
@@ -138,7 +244,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # get location_ids by filtering edges with 'located_in' predicate
     location_ids = (
-        e.filter(pl.col('pred') == 'http://purl.obolibrary.org/obo/BFO_0000050')
+        e
+        .filter(pl.col('pred') == 'http://purl.obolibrary.org/obo/BFO_0000050')
         .with_columns(
             id=pl.col('sub').str.split('/').list.last(),
             directLocationIds=pl.col('obj').str.split('/').list.last(),
@@ -188,9 +295,9 @@ def disease(source: Path, destination: Path) -> None:
         .pivot(
             values='val',
             index='id',
-            columns='pred',
+            columns='pred',  # ty:ignore[unknown-argument]
             aggregate_function='first',
-        )
+        )  # ty:ignore[missing-argument]
         .with_columns(
             **{k: pl.col(k).fill_null([]) for k in synonym_predicates},
         )
@@ -199,7 +306,8 @@ def disease(source: Path, destination: Path) -> None:
     )
 
     n_synonyms = (
-        n_location_ids.drop('synonyms')
+        n_location_ids
+        .drop('synonyms')
         .join(synonyms, on='id', how='left')
         .with_columns(
             **{col: pl.col(col).fill_null(pl.Series([[]], dtype=pl.List(pl.String))) for col in synonym_columns},
@@ -208,7 +316,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # get obsolete ids by getting deprecated nodes with a 'IAO_0100001' predicate
     obsolete_ids = (
-        n.unnest('meta')
+        n
+        .unnest('meta')
         .explode('basicPropertyValues')
         .unnest('basicPropertyValues')
         .filter(
@@ -223,7 +332,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # Get the obsolete terms
     obsolete_terms = (
-        obsolete_ids.with_columns(
+        obsolete_ids
+        .with_columns(
             code=pl.col('code'),
             obsoleteTerms=pl.col('id').str.split('/').list.last(),
         )
@@ -233,7 +343,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # Get the xrefs for all the obsolete terms
     obsolete_xrefs = (
-        n.unnest('meta')
+        n
+        .unnest('meta')
         .filter(pl.col('xrefs').is_not_null())
         .select(pl.col('id'), pl.col('xrefs'))
         .join(obsolete_ids, on='id')
@@ -247,7 +358,8 @@ def disease(source: Path, destination: Path) -> None:
     # join obsolete term list and obsolete xref list to the ids of the entities that
     # make them obsolete
     n_obsolete_terms = (
-        n_synonyms.join(
+        n_synonyms
+        .join(
             obsolete_terms,
             on='code',
             how='left',
@@ -266,7 +378,8 @@ def disease(source: Path, destination: Path) -> None:
     # get children by exploding the parents column, making it the new id and
     # then aggregating by the old id
     children = (
-        n_obsolete_terms.explode('parents')
+        n_obsolete_terms
+        .explode('parents')
         .filter(pl.col('parents').is_not_null())
         .group_by('parents')
         .agg(pl.col('id').alias('children'))
@@ -287,7 +400,8 @@ def disease(source: Path, destination: Path) -> None:
     # 7. group 5 and 6
     # 8. join both ancestors and therapeutic areas with the original dataframe
     direct_relationships = (
-        n_children.select(['id', 'parents'])
+        n_children
+        .select(['id', 'parents'])
         .filter(pl.col('parents').is_not_null())
         .explode('parents')
         .rename({'parents': 'ancestor'})
@@ -300,7 +414,8 @@ def disease(source: Path, destination: Path) -> None:
             break
 
         next_level = (
-            current_level.join(
+            current_level
+            .join(
                 n_children.select(['id', 'parents']),
                 left_on='ancestor',
                 right_on='id',
@@ -321,7 +436,8 @@ def disease(source: Path, destination: Path) -> None:
     )
 
     therapeutic_area_ancestors = (
-        all_ancestors.join(
+        all_ancestors
+        .join(
             n_children.select(['id', 'isTherapeuticArea']),
             left_on='ancestor',
             right_on='id',
@@ -332,7 +448,8 @@ def disease(source: Path, destination: Path) -> None:
     )
 
     therapeutic_area_selfreferences = (
-        n_children.filter(pl.col('isTherapeuticArea'))
+        n_children
+        .filter(pl.col('isTherapeuticArea'))
         .with_columns(ancestor=pl.col('id'))
         .select(
             pl.col('id'),
@@ -341,7 +458,8 @@ def disease(source: Path, destination: Path) -> None:
     )
 
     all_therapeutic_area_ancestors = (
-        pl.concat([
+        pl
+        .concat([
             therapeutic_area_ancestors,
             therapeutic_area_selfreferences,
         ])
@@ -350,7 +468,8 @@ def disease(source: Path, destination: Path) -> None:
     )
 
     n_ancestors = (
-        n_children.join(
+        n_children
+        .join(
             ancestors_grouped,
             on='id',
             how='left',
@@ -367,7 +486,8 @@ def disease(source: Path, destination: Path) -> None:
 
     # get descendants by exploding the ancestors column, making it the new id and then aggregating by the old id
     descendants_grouped = (
-        all_ancestors.select(
+        all_ancestors
+        .select(
             pl.col('ancestor').alias('id'),
             pl.col('id').alias('descendant'),
         )
@@ -394,8 +514,7 @@ def disease(source: Path, destination: Path) -> None:
         )
     ).drop('isTherapeuticArea')
 
-    # De-duplication of labels:
-    dedup_disease_index = deduplicate_disease(n_ontology).with_columns(
+    disease_index = n_ontology.with_columns(
         synonyms=pl.struct(
             hasExactSynonym=pl.col('exactSynonyms'),
             hasRelatedSynonym=pl.col('relatedSynonyms'),
@@ -404,6 +523,6 @@ def disease(source: Path, destination: Path) -> None:
         )
     )
 
-    # write the result locally
-    dedup_disease_index.write_parquet(destination, compression='gzip')
+    # write the result
+    disease_index.write_parquet(destination, compression='gzip')
     logger.info('transformation complete')
