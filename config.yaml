@@ -1798,7 +1798,7 @@ steps:
       pyspark: literature_publication
       source:
         pub_id_lut: input/literature/PMID_PMCID_DOI.csv.gz
-        epmc_publication: input/literature/example_both_abstract_and_fulltext
+        epmc_publication: gs://otar025-epmc/ml02
       destination:
         publication: intermediate/literature/publication
   ##################################################################################################
