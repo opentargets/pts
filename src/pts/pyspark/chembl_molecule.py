@@ -115,6 +115,7 @@ def _molecule_preprocess(
             f.col('molecule_chembl_id').alias('id'),
             f.col('molecule_structures.canonical_smiles').alias('canonicalSmiles'),
             f.col('molecule_structures.standard_inchi_key').alias('inchiKey'),
+            f.col('molecule_structures.molfile').alias('molfile'),
             f.coalesce(f.col('molecule_type'), f.lit('Unknown')).alias('drugType'),
             f.col('pref_name').alias('name'),
             f.col('cross_references'),
