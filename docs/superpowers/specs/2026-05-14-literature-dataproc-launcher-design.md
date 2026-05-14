@@ -108,14 +108,30 @@ publication+match collapse, the intermediate cooccurrence parquet **is** written
 
 ### `config.yaml`
 
-Add two step entries — `literature_publication_match` and
-`literature_cooccurrence_evidence` — as the canonical source/destination wiring, so the
-collapsed steps are also runnable locally via `uv run pts --step`. The launcher scripts
-generate their own per-stage configs inline (matching the association template) but with
-values kept consistent with these entries.
+Two changes:
+
+1. **Add two step entries** — `literature_publication_match` and
+   `literature_cooccurrence_evidence` — as the canonical source/destination wiring, so the
+   collapsed steps are also runnable locally via `uv run pts --step`. The launcher scripts
+   generate their own per-stage configs inline (matching the association template) but with
+   values kept consistent with these entries.
+
+2. **Fix the existing path inconsistency.** The `literature` step group refers to the
+   match and cooccurrence datasets with underscored paths that don't match what their
+   producers actually write:
+
+   | Reference | Currently | Producer writes | Fix to |
+   |-----------|-----------|-----------------|--------|
+   | `literature_entity_lut` source `matches` | `intermediate/literature_match` | `literature_match` → `intermediate/literature/match` | `intermediate/literature/match` |
+   | `literature_embedding` source `matches` | `intermediate/literature_match` | same | `intermediate/literature/match` |
+   | `evidence_epmc` source `cooccurrences` | `intermediate/literature_cooccurrence` | `literature_cooccurrence` → `intermediate/literature/cooccurrence` | `intermediate/literature/cooccurrence` |
+
+   Canonical form is the slashed path (`intermediate/literature/match`,
+   `intermediate/literature/cooccurrence`) — it matches the producing steps. Only the
+   three `literature` step-group references change.
 
 The existing single-step entries (`literature_publication`, `literature_match`,
-`literature_cooccurrence`, `literature`) are left untouched.
+`literature_cooccurrence`) are otherwise left untouched.
 
 ## Launcher scripts — `scripts/literature/`
 
@@ -123,7 +139,7 @@ The existing single-step entries (`literature_publication`, `literature_match`,
 |--------|--------|---------|
 | `_common.sh` | Shared helpers: `ensure_cluster` (create only if absent), runner-script + custom init-script generation, config upload, monitoring output. Sourced by every stage script. | — |
 | `01_launch_ontoma_lut.sh` | `literature_ontoma_lut_generation` | own `pts`-like cluster |
-| `02_launch_publication_match.sh` | `literature_publication_match` (`date_prefix: 2026_03`) | own `pts_openfda`-like cluster |
+| `02_launch_publication_match.sh` | `literature_publication_match` (`date_prefix: 2026_03`) | own `pts_openfda`-like cluster **+ spark-nlp** |
 | `03a_launch_entity_lut.sh` | `literature_entity_lut` | shared stage-3 cluster |
 | `03b_launch_embedding_vector.sh` | `literature_embedding` → `literature_vector` (sequential) | shared stage-3 cluster |
 | `03c_launch_cooccurrence_evidence.sh` | `literature_cooccurrence_evidence` | shared stage-3 cluster |
@@ -162,15 +178,23 @@ so topology can be tuned after observing the Spark UI.
 ### `pts`-like (stage 01)
 - Image 2.3, single-node (1 master, 0 workers), `n1-standard-32`, 128GB disk.
 - Full PTS YARN/Spark property block, **including** `spark.jars.packages:
-  com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3` (OnToma LUT generation may need it).
+  com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3` — OnToma LUT generation runs the spark-nlp
+  normalisation pipeline.
 
-### `pts_openfda`-like (stage 02, and the shared stage-3 cluster)
+### `pts_openfda`-like + spark-nlp (stage 02)
 - Image 2.2, 1 master + 2 workers, worker `n1-standard-8`, master 512GB / worker 128GB.
 - Autoscaling policy `otg-etl-25-secondary`.
-- No special Spark properties by default. These are the topologies to tune after
-  watching partitioning behaviour on the first run.
-- Stage 02 and the shared stage-3 cluster are separate clusters with the same starting
-  topology; they can be sized independently.
+- **Includes** `spark.jars.packages: com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3`.
+  Confirmed required: `literature_match`'s `map_labels` calls `OnToma.map_entities`,
+  which runs `_normalise_entities` → `NLPPipeline.apply_pipeline` (imports `sparknlp`).
+
+### `pts_openfda`-like (shared stage-3 cluster)
+- Same topology as stage 02 (image 2.2, 1 master + 2× `n1-standard-8`, autoscaling
+  `otg-etl-25-secondary`) but **no spark-nlp** — confirmed not needed: `literature_entity_lut`,
+  `literature_embedding`/`literature_vector`, and `literature_cooccurrence_evidence` are
+  pure Spark SQL / Spark ML with no OnToma usage.
+- Stage 02 and the shared stage-3 cluster are separate clusters; they can be sized
+  independently after watching the Spark UI.
 - The `literature_embedding` job (run by `03b`) carries through
   `spark.sql.shuffle.partitions: '800'` as a per-job Spark property at submit time
   (from the existing `literature_embedding` config entry) rather than as a
@@ -200,11 +224,6 @@ All under `gs://ot-team/dochoa/literature_runs/<RUN_ID>/`:
 
 ## Open notes / risks
 
-- **spark-nlp on stages 02/03:** assumed not required — the migrated logic
-  (`extract_matches`, `map_labels`, `disambiguate`, cooccurrence/evidence) is pure
-  Spark SQL; the library only pulls spark-nlp for the non-migrated grounding steps.
-  Fallback: add the `spark.jars.packages` property to the affected stage script (kept
-  one edit away).
 - **Cooccurrence re-read vs. cache:** stage 03c re-reads the cooccurrence parquet after
   writing it, for a clean lineage cut on a memory-constrained cluster. Can switch to
   `.cache()` if I/O turns out to dominate.
@@ -212,11 +231,6 @@ All under `gs://ot-team/dochoa/literature_runs/<RUN_ID>/`:
   refined after observing input partitioning on the first run.
 - **`pts_openfda` topology is a starting point**, not a validated size — the whole point
   of separate per-stage scripts is to resize between runs.
-- **Existing config path inconsistency:** the `literature` step group reads matches from
-  `intermediate/literature_match`, while `literature_match` writes to
-  `intermediate/literature/match`. The launcher sidesteps this entirely — it generates
-  per-stage configs with absolute GCS paths, pointing stages 03a/03b/03c at stage 02's
-  actual output. Reconciling the in-repo config is out of scope here.
 
 ## Files to create / modify
 
@@ -234,7 +248,9 @@ All under `gs://ot-team/dochoa/literature_runs/<RUN_ID>/`:
 
 **Modified:**
 - `config.yaml` — add `literature_publication_match` and
-  `literature_cooccurrence_evidence` step entries.
+  `literature_cooccurrence_evidence` step entries; fix the `literature` step group's
+  `intermediate/literature_match` / `intermediate/literature_cooccurrence` references to
+  the canonical slashed paths.
 
 ## Testing
 
