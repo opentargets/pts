@@ -64,7 +64,7 @@ def _compute_relevance(matches: DataFrame) -> DataFrame:
     """Compute harmonic relevance scores for entity-publication pairs.
 
     Args:
-        matches: DataFrame with literature match data (pmid, keywordId, section, type, etc.)
+        matches: DataFrame with literature match data (pmid, mappedId, section, type, etc.)
 
     Returns:
         DataFrame with columns: pmid, pmcid, date, year, month, day, keywordId, relevance, keywordType
@@ -78,8 +78,11 @@ def _compute_relevance(matches: DataFrame) -> DataFrame:
     # Step 1: join with section ranks and compute per-section weight vectors.
     # Title always gets a single fixed weight; other sections collect all
     # mention weights within that section.
+    # The match dataset names the entity id `mappedId`; rename it to `keywordId`
+    # (the name used throughout this step and in the output).
     with_section_weights = (
         matches
+        .withColumnRenamed('mappedId', 'keywordId')
         .withColumnRenamed('type', 'keywordType')
         .join(section_rank_table, on='section', how='left_outer')
         .na.fill(100, ['rank'])
