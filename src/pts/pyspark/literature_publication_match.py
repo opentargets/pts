@@ -24,9 +24,13 @@ if TYPE_CHECKING:
 def _epmc_read_path(epmc_path: str, kind: str, date_prefix: str | None) -> str:
     """Build the EPMC jsonl glob path for a publication kind.
 
-    Mirrors ``EPMCPublication._read_in_with_schema`` but allows an optional
-    day-folder prefix so a single month can be selected. The library hardcodes
-    its own glob, hence this reimplementation.
+    EPMC publications are laid out as ``{epmc_path}/{kind}/{day}/*.jsonl``, where
+    ``{day}`` is a ``YYYY_MM_DD`` folder and the jsonl files sit directly inside
+    it. An optional ``date_prefix`` selects a subset of day folders (e.g. a
+    single month); a falsy prefix selects every day folder.
+
+    Note: Hadoop/Spark globs are not recursive — ``*`` matches one path
+    component and does not cross ``/`` — so each level is matched explicitly.
 
     Args:
         epmc_path: Base EPMC path, e.g. ``gs://otar025-epmc/ml02``.
@@ -38,9 +42,8 @@ def _epmc_read_path(epmc_path: str, kind: str, date_prefix: str | None) -> str:
         A glob path string suitable for ``spark.read.json``.
     """
     base = epmc_path.rstrip('/')
-    if date_prefix:
-        return f'{base}/{kind}/{date_prefix}*/**/*.jsonl'
-    return f'{base}/{kind}/**/*.jsonl'
+    day_glob = f'{date_prefix}*' if date_prefix else '*'
+    return f'{base}/{kind}/{day_glob}/*.jsonl'
 
 
 def _maybe_repartition(df: DataFrame, repartition: int | None) -> DataFrame:
