@@ -55,13 +55,26 @@ RAW_DRUGBANK_SCHEMA = StructType([
     StructField("To src:'2'", StringType()),
 ])
 
-# A short but structurally valid MDL molfile (single carbon atom).
-SAMPLE_MOLFILE = (
+# A short but structurally valid MDL molblock (single carbon atom), terminated
+# by the `M  END` line. This is what PTS should emit.
+SAMPLE_MOLBLOCK = (
     '\n     RDKit          2D\n\n'
     '  1  0  0  0  0  0  0  0  0  0999 V2000\n'
     '    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n'
     'M  END\n'
 )
+
+# ChEMBL ships `molfile` as a full SD-file record: the molblock plus appended
+# SDF property tags. PTS truncates this back to the bare molblock.
+SAMPLE_MOLFILE = SAMPLE_MOLBLOCK + (
+    '> <chembl_id>\nCHEMBL1\n\n'
+    '> <chembl_pref_name>\nDRUG A\n\n'
+    '$$$$\n'
+)
+
+# A molfile-shaped string with no `M  END` terminator. PTS has nothing to
+# truncate here, so it must pass through unchanged.
+MOLFILE_NO_TERMINATOR = 'malformed molfile content\nwith no terminator line\n'
 
 
 # --- Fixtures ---
@@ -69,7 +82,7 @@ SAMPLE_MOLFILE = (
 
 @pytest.fixture(scope='module')
 def raw_molecule_df(spark):
-    """Raw ChEMBL molecule rows: one with a molfile, one without."""
+    """Raw ChEMBL molecule rows: an SD-file molfile, a missing one, a malformed one."""
     data = [
         Row(
             molecule_chembl_id='CHEMBL1',
@@ -97,6 +110,19 @@ def raw_molecule_df(spark):
             molecule_hierarchy=Row(parent_chembl_id='CHEMBL2'),
             molecule_synonyms=[],
         ),
+        Row(
+            molecule_chembl_id='CHEMBL3',
+            molecule_structures=Row(
+                canonical_smiles='CC',
+                standard_inchi_key='INCHI3',
+                molfile=MOLFILE_NO_TERMINATOR,
+            ),
+            molecule_type='Small molecule',
+            pref_name='Drug C',
+            cross_references=[],
+            molecule_hierarchy=Row(parent_chembl_id='CHEMBL3'),
+            molecule_synonyms=[],
+        ),
     ]
     return spark.createDataFrame(data, schema=RAW_MOLECULE_SCHEMA)
 
@@ -120,17 +146,31 @@ def raw_drugbank_df(spark):
 
 
 class TestMoleculePreprocess:
-    def test_molfile_extracted(self, raw_molecule_df, drugbank_df):
-        """molfile is pulled verbatim from molecule_structures.molfile."""
+    def test_molfile_truncated_to_molblock(self, raw_molecule_df, drugbank_df):
+        """molfile is truncated to the bare molblock, ending at `M  END`."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
         rows = {r['id']: r['molfile'] for r in result.collect()}
-        assert rows['CHEMBL1'] == SAMPLE_MOLFILE
+        assert rows['CHEMBL1'] == SAMPLE_MOLBLOCK
+
+    def test_molfile_sdf_tags_stripped(self, raw_molecule_df, drugbank_df):
+        """The SDF property tags appended after `M  END` are removed."""
+        result = _molecule_preprocess(raw_molecule_df, drugbank_df)
+        molfile = {r['id']: r['molfile'] for r in result.collect()}['CHEMBL1']
+        assert molfile.endswith('M  END\n')
+        assert '> <chembl_id>' not in molfile
+        assert '$$$$' not in molfile
 
     def test_molfile_null_when_absent(self, raw_molecule_df, drugbank_df):
         """molfile is null when the source molecule has no molfile."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
         rows = {r['id']: r['molfile'] for r in result.collect()}
         assert rows['CHEMBL2'] is None
+
+    def test_molfile_without_terminator_passed_through(self, raw_molecule_df, drugbank_df):
+        """A molfile with no `M  END` terminator is left unchanged."""
+        result = _molecule_preprocess(raw_molecule_df, drugbank_df)
+        rows = {r['id']: r['molfile'] for r in result.collect()}
+        assert rows['CHEMBL3'] == MOLFILE_NO_TERMINATOR
 
     def test_molfile_is_string_column(self, raw_molecule_df, drugbank_df):
         """molfile is exposed as a string column."""
@@ -143,10 +183,10 @@ class TestMoleculePreprocess:
 
 class TestProcessMolecules:
     def test_molfile_preserved(self, raw_molecule_df, raw_drugbank_df):
-        """molfile survives process_molecules into the output."""
+        """The truncated molfile survives process_molecules into the output."""
         result = process_molecules(raw_molecule_df, raw_drugbank_df)
         rows = {r['id']: r['molfile'] for r in result.collect()}
-        assert rows['CHEMBL1'] == SAMPLE_MOLFILE
+        assert rows['CHEMBL1'] == SAMPLE_MOLBLOCK
         assert rows['CHEMBL2'] is None
 
     def test_row_count_unchanged(self, raw_molecule_df, raw_drugbank_df):
