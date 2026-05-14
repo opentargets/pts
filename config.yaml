@@ -1767,13 +1767,13 @@ steps:
     - name: pyspark literature_entity_lut
       pyspark: literature_entity_lut
       source:
-        matches: intermediate/literature_match
+        matches: intermediate/literature/match
       destination:
         literature_entity_lut: output/literature_entity_lut
     - name: pyspark literature_embedding
       pyspark: literature_embedding
       source:
-        matches: intermediate/literature_match
+        matches: intermediate/literature/match
       destination:
         model: etc/model/w2v_model
       properties:
@@ -1787,7 +1787,7 @@ steps:
     - name: pyspark evidence_epmc
       pyspark: evidence_epmc
       source:
-        cooccurrences: intermediate/literature_cooccurrence
+        cooccurrences: intermediate/literature/cooccurrence
       destination:
         evidence: intermediate/evidence/literature_epmc
   ##################################################################################################
