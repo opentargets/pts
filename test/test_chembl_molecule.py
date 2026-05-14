@@ -101,6 +101,9 @@ def raw_molecule_df(spark):
     return spark.createDataFrame(data, schema=RAW_MOLECULE_SCHEMA)
 
 
+# Two drugbank fixtures because the two entry points expect different shapes:
+# _molecule_preprocess takes the already-renamed lookup (id, drugbank_id), while
+# process_molecules takes the raw lookup and renames the columns itself.
 @pytest.fixture(scope='module')
 def drugbank_df(spark):
     """Renamed drugbank lookup as consumed by _molecule_preprocess."""
