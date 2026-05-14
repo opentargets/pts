@@ -1,5 +1,6 @@
 """Tests for literature_cooccurrence_evidence step."""
 
+import pytest
 from pyspark.sql import Row
 
 
@@ -44,4 +45,4 @@ class TestAdaptCooccurrenceForEvidence:
         assert 'section' in result.columns
         row = result.collect()[0]
         assert row['keywordId1'] == 'ENSG001'
-        assert abs(row['evidence_score'] - 0.8) < 1e-6
+        assert row['evidence_score'] == pytest.approx(0.8)
