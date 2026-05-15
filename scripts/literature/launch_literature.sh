@@ -23,7 +23,7 @@ PROJECT="open-targets-eu-dev"
 REGION="europe-west1"
 ZONE="europe-west1-d"
 SERVICE_ACCOUNT="up-airflow-dev@open-targets-eu-dev.iam.gserviceaccount.com"
-AUTOSCALING_POLICY="otg-etl-25-secondary"
+AUTOSCALING_POLICY="pts-literature-25-secondary"
 
 # ── Shared inputs / outputs ─────────────────────────────────────────────────
 INPUT_BASE="gs://open-targets-pipeline-runs/ds/26.03-test5"
@@ -223,7 +223,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --zone="${ZONE}" \
   --image-version=2.2 \
   --num-masters=1 \
-  --num-workers=2 \
+  --num-workers=4 \
   --master-machine-type=n1-standard-8 \
   --master-boot-disk-size=512GB \
   --worker-machine-type=n1-highmem-16 \
