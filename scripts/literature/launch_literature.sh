@@ -31,11 +31,18 @@ OUTPUT_BASE="gs://ot-team/dochoa/literature_runs"
 EPMC_BASE="gs://otar025-epmc/ml02"
 SPARK_NLP_PACKAGE="com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3"
 
-# ── Stage-2 test-run tunables ───────────────────────────────────────────────
-# Set DATE_PREFIX='' to read all EPMC days; bump REPARTITION after watching the
-# stage-2 Spark UI.
+# ── Partitioning tunables ───────────────────────────────────────────────────
+# Set DATE_PREFIX='' to read all EPMC days. REPARTITION sizes the raw EPMC
+# read for stage 2; SHUFFLE_* size the post-shuffle partition counts for
+# each step's heavy joins/groupBys. Defaults assume an all-of-2025 run on
+# the autoscaled 2×n1-standard-16 + ≤25 secondary cluster (~432 vCPU peak);
+# dial down for smaller runs (AQE will coalesce, but write fan-out won't).
 DATE_PREFIX="2026_03"
-REPARTITION="1000"
+REPARTITION="3000"
+SHUFFLE_PUBMATCH="2000"
+SHUFFLE_EMBEDDING="2000"
+SHUFFLE_COOC="2000"
+SHUFFLE_ENTITY="1000"
 
 # ── Args ────────────────────────────────────────────────────────────────────
 RUN_ID="${1:-run-001}"
@@ -153,6 +160,8 @@ steps:
       settings:
         date_prefix: '${DATE_PREFIX}'
         repartition: ${REPARTITION}
+      properties:
+        spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
 
   literature_entity_lut:
     - name: pyspark literature entity lut
@@ -161,6 +170,8 @@ steps:
         matches: intermediate/literature/match
       destination:
         literature_entity_lut: output/literature_entity_lut
+      properties:
+        spark.sql.shuffle.partitions: '${SHUFFLE_ENTITY}'
 
   literature_embedding:
     - name: pyspark literature embedding
@@ -170,7 +181,7 @@ steps:
       destination:
         model: etc/model/w2v_model
       properties:
-        spark.sql.shuffle.partitions: '800'
+        spark.sql.shuffle.partitions: '${SHUFFLE_EMBEDDING}'
 
   literature_vector:
     - name: pyspark literature vector
@@ -188,6 +199,8 @@ steps:
       destination:
         cooccurrence: intermediate/literature/cooccurrence
         evidence: intermediate/evidence/literature_epmc
+      properties:
+        spark.sql.shuffle.partitions: '${SHUFFLE_COOC}'
 EOF
 
 # ── Upload runner + config + init script to GCS ─────────────────────────────
