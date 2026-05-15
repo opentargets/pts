@@ -265,33 +265,57 @@ submit_step() {
   echo "${job_id}"
 }
 
-# Wait for one job and check exit code explicitly. On failure, print a useful
-# message (console URL + re-inspect command + teardown command) and exit
-# non-zero, leaving the cluster up.
+# Wait for one job to reach a terminal state by polling the Dataproc REST API.
+# Faster than `gcloud dataproc jobs wait`, which streams the driver log and
+# can drain its buffers for minutes after the job actually entered DONE — that
+# drain stretched the wall-clock between stages by ~10 min on run-006.
+#
+# Terminal states: DONE → success; ERROR | CANCELLED → failure (print banner,
+# exit non-zero, leave the cluster up for inspection). Transient states keep
+# polling. Driver output is no longer streamed live; inspect it via Component
+# Gateway, the Cloud Console job page, or by reading the GCS URI from
+# `gcloud dataproc jobs describe ${job_id} --format='value(driverOutputResourceUri)'`.
 wait_job() {
   local step="$1"
   local job_id="$2"
   echo
   echo "Waiting for ${step} (job ${job_id})..."
-  if ! gcloud dataproc jobs wait "${job_id}" \
-       --project="${PROJECT}" --region="${REGION}"; then
-    cat >&2 <<FAILEOF
+  local state
+  local poll_count=0
+  local poll_interval=15
+  while true; do
+    state="$(gcloud dataproc jobs describe "${job_id}" \
+              --project="${PROJECT}" --region="${REGION}" \
+              --format='value(status.state)' 2>/dev/null || true)"
+    case "${state}" in
+      DONE)
+        echo "${step} DONE"
+        return 0
+        ;;
+      ERROR|CANCELLED)
+        cat >&2 <<FAILEOF
 
 ========================================================================
-FAILED: ${step}
+FAILED: ${step} (state=${state})
   Job ID  : ${job_id}
   Console : https://console.cloud.google.com/dataproc/jobs/${job_id}?project=${PROJECT}&region=${REGION}
   Re-inspect:
-    gcloud dataproc jobs wait ${job_id} --project=${PROJECT} --region=${REGION}
+    gcloud dataproc jobs describe ${job_id} --project=${PROJECT} --region=${REGION}
 
 Cluster ${CLUSTER_NAME} is left running for inspection.
 Tear it down when you're finished with:
   gcloud dataproc clusters delete ${CLUSTER_NAME} --project=${PROJECT} --region=${REGION} --quiet
 ========================================================================
 FAILEOF
-    exit 1
-  fi
-  echo "${step} DONE"
+        exit 1
+        ;;
+    esac
+    if (( poll_count % 4 == 0 )); then
+      echo "  ${step} state=${state:-?} (elapsed $((poll_count * poll_interval))s)"
+    fi
+    poll_count=$((poll_count + 1))
+    sleep "${poll_interval}"
+  done
 }
 
 # ── Orchestration sequence ──────────────────────────────────────────────────
