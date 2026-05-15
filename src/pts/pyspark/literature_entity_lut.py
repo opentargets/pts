@@ -139,9 +139,11 @@ def literature_entity_lut(
 
     logger.info('Reading literature matches')
     matches = spark.read.parquet(source['matches'])
+    logger.info(f'[DIAG] matches partitions: {matches.rdd.getNumPartitions()}')
 
     logger.info('Computing relevance scores')
     result = _compute_relevance(matches)
+    logger.info(f'[DIAG] result partitions: {result.rdd.getNumPartitions()}')
 
     dest = destination['literature_entity_lut'] if isinstance(destination, dict) else destination
     logger.info(f'Writing literature entity LUT to {dest}')
