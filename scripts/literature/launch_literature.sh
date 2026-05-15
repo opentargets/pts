@@ -23,7 +23,7 @@ PROJECT="open-targets-eu-dev"
 REGION="europe-west1"
 ZONE="europe-west1-d"
 SERVICE_ACCOUNT="up-airflow-dev@open-targets-eu-dev.iam.gserviceaccount.com"
-AUTOSCALING_POLICY="pts-literature-25-secondary"
+AUTOSCALING_POLICY="pts-literature-50-secondary"
 
 # ── Shared inputs / outputs ─────────────────────────────────────────────────
 INPUT_BASE="gs://open-targets-pipeline-runs/ds/26.03-test5"
@@ -34,15 +34,15 @@ SPARK_NLP_PACKAGE="com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3"
 # ── Partitioning tunables ───────────────────────────────────────────────────
 # Set DATE_PREFIX='' to read all EPMC days. REPARTITION sizes the raw EPMC
 # read for stage 2; SHUFFLE_* size the post-shuffle partition counts for
-# each step's heavy joins/groupBys. Defaults assume an all-of-2025 run on
-# the autoscaled 2×n1-standard-16 + ≤25 secondary cluster (~432 vCPU peak);
-# dial down for smaller runs (AQE will coalesce, but write fan-out won't).
-DATE_PREFIX="2025"
-REPARTITION="3000"
-SHUFFLE_PUBMATCH="2000"
-SHUFFLE_EMBEDDING="2000"
-SHUFFLE_COOC="2000"
-SHUFFLE_ENTITY="1000"
+# each step's heavy joins/groupBys. Defaults assume a full-EPMC run on the
+# autoscaled 4×n1-highmem-16 + ≤50 secondary cluster (~864 vCPU peak); dial
+# down for smaller runs (AQE will coalesce, but write fan-out won't).
+DATE_PREFIX=""
+REPARTITION="8000"
+SHUFFLE_PUBMATCH="5000"
+SHUFFLE_EMBEDDING="5000"
+SHUFFLE_COOC="5000"
+SHUFFLE_ENTITY="2500"
 
 # ── Args ────────────────────────────────────────────────────────────────────
 RUN_ID="${1:-run-001}"
@@ -231,7 +231,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --master-machine-type=n1-standard-8 \
   --master-boot-disk-size=512GB \
   --worker-machine-type=n1-highmem-16 \
-  --worker-boot-disk-size=128GB \
+  --worker-boot-disk-size=256GB \
   --secondary-worker-type=non-preemptible \
   --autoscaling-policy="${AUTOSCALING_POLICY}" \
   --service-account="${SERVICE_ACCOUNT}" \
