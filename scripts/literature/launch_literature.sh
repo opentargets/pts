@@ -165,6 +165,8 @@ steps:
       properties:
         spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
         spark.jars.packages: '${SPARK_NLP_PACKAGE}'
+        spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
+        spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
 
   literature_entity_lut:
     - name: pyspark literature entity lut
@@ -204,6 +206,8 @@ steps:
         evidence: intermediate/evidence/literature_epmc
       properties:
         spark.sql.shuffle.partitions: '${SHUFFLE_COOC}'
+        spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
+        spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
 EOF
 
 # ── Upload runner + config + init script to GCS ─────────────────────────────

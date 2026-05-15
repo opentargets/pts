@@ -204,3 +204,4 @@ def literature_publication_match(
 
     match_mapped.df.unpersist()
     match_disambiguated.df.unpersist()
+    pub_id_lut.unpersist()
