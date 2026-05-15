@@ -29,7 +29,9 @@ AUTOSCALING_POLICY="pts-literature-50-secondary"
 INPUT_BASE="gs://open-targets-pipeline-runs/ds/26.03-test5"
 OUTPUT_BASE="gs://ot-team/dochoa/literature_runs"
 EPMC_BASE="gs://otar025-epmc/ml02"
-SPARK_NLP_PACKAGE="com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3"
+SPARK_NLP_VERSION="6.1.3"
+SPARK_NLP_JARS_PREFIX="gs://opentargets-pipelines/up/pts/jars/spark-nlp-${SPARK_NLP_VERSION}/"
+SPARK_NLP_JARS_MANIFEST="${SPARK_NLP_JARS_PREFIX%/}.manifest.csv"
 
 # ── Partitioning tunables ───────────────────────────────────────────────────
 # Set DATE_PREFIX='' to read all EPMC days. REPARTITION sizes the raw EPMC
@@ -213,17 +215,31 @@ gcloud storage cp "${WORK_DIR}/dataproc_pts_run.py" "${RUNNER_GCS}" --quiet
 gcloud storage cp "${WORK_DIR}/config.yaml" "${CONFIG_GCS}" --quiet
 gcloud storage cp "${WORK_DIR}/install_dependencies_on_cluster.sh" "${INIT_SCRIPT_GCS}" --quiet
 
+# ── Load pre-staged spark-nlp JAR list from GCS manifest ────────────────────
+# spark-nlp's transitive dependency tree (~150 JARs) is pre-staged in GCS by
+# scripts/literature/stage_spark_jars.sh, which also writes a single
+# comma-separated manifest CSV alongside the JAR directory. We download the
+# manifest to local disk and read its contents — `gcloud storage cat` is
+# subject to stdout filtering by some harnesses, but `gcloud storage cp` to
+# a local file is not. Passing spark.jars=gs://...jar1,jar2,... at cluster
+# create lets Spark download the JARs from GCS in parallel and skips the
+# per-app Ivy resolution that spark.jars.packages would force on every Spark
+# driver startup. spark.jars must be set here (cluster level) because the
+# property is read by SparkSubmit before the JVM starts — setting it via
+# PTS YAML per-step properties is too late and fails with
+# "JavaPackage object is not callable".
+echo "Loading spark-nlp JAR manifest from ${SPARK_NLP_JARS_MANIFEST}..."
+gcloud storage cp "${SPARK_NLP_JARS_MANIFEST}" "${WORK_DIR}/spark-nlp.manifest" --quiet
+SPARK_NLP_JARS="$(< "${WORK_DIR}/spark-nlp.manifest")"
+NUM_JARS="$(($(echo -n "${SPARK_NLP_JARS}" | tr ',' '\n' | wc -l) + 1))"
+echo "  ${NUM_JARS} JARs"
+
 # ── Create the shared cluster ───────────────────────────────────────────────
-# pts_openfda-like topology + autoscaling + spark-nlp at cluster level
-# (needed by ontoma_lut and publication_match; harmless for the stage-3
-# jobs). spark.jars.packages must be set at cluster level — setting it via
-# the PTS per-step properties block fails at runtime with
-# "JavaPackage object is not callable" because SparkSubmit has already
-# locked the classpath before the YAML properties reach SparkConf.
-# Secondary workers are non-preemptible: preemptible secondaries lose
-# shuffle data mid-job, which forces stage recomputation and tanks
-# shuffle-heavy stages (publication_match, embedding, cooccurrence).
-# Component Gateway is enabled for Spark/YARN UI access via Cloud Console.
+# pts_openfda-like topology + autoscaling, with spark-nlp JARs pre-staged in
+# GCS (see above). Secondary workers are non-preemptible — preemptible
+# secondaries lose shuffle data mid-job and tank shuffle-heavy stages
+# (publication_match, embedding, cooccurrence). Component Gateway is enabled
+# for Spark/YARN UI access via Cloud Console.
 echo "Creating Dataproc cluster ${CLUSTER_NAME}..."
 gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --project="${PROJECT}" \
@@ -245,7 +261,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --public-ip-address \
   --enable-component-gateway \
   --labels="workload=literature,run-id=${RUN_ID}" \
-  --properties="spark:spark.jars.packages=${SPARK_NLP_PACKAGE}"
+  --properties="spark:spark.jars=${SPARK_NLP_JARS}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
