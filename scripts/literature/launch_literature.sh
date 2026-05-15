@@ -261,7 +261,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --public-ip-address \
   --enable-component-gateway \
   --labels="workload=literature,run-id=${RUN_ID}" \
-  --properties="spark:spark.jars=${SPARK_NLP_JARS}"
+  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
