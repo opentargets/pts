@@ -256,6 +256,7 @@ submit_step() {
     --cluster="${CLUSTER_NAME}" \
     --id="${job_id}" \
     --files="${CONFIG_GCS}" \
+    --labels="workload=literature,run-id=${RUN_ID},step=${step}" \
     --async \
     -- \
     -s "${step}" \
