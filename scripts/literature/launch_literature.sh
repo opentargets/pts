@@ -212,6 +212,10 @@ gcloud storage cp "${WORK_DIR}/install_dependencies_on_cluster.sh" "${INIT_SCRIP
 # ── Create the shared cluster ───────────────────────────────────────────────
 # pts_openfda-like topology + autoscaling + spark-nlp (needed by ontoma_lut
 # and publication_match; harmless for the stage-3 jobs).
+# Secondary workers are non-preemptible: preemptible secondaries lose
+# shuffle data mid-job, which forces stage recomputation and tanks
+# shuffle-heavy stages (publication_match, embedding, cooccurrence).
+# Component Gateway is enabled for Spark/YARN UI access via Cloud Console.
 echo "Creating Dataproc cluster ${CLUSTER_NAME}..."
 gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --project="${PROJECT}" \
@@ -224,12 +228,14 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --master-boot-disk-size=512GB \
   --worker-machine-type=n1-standard-16 \
   --worker-boot-disk-size=128GB \
+  --secondary-worker-type=non-preemptible \
   --autoscaling-policy="${AUTOSCALING_POLICY}" \
   --service-account="${SERVICE_ACCOUNT}" \
   --metadata="PTS_REF=${PTS_REF}" \
   --initialization-actions="${INIT_SCRIPT_GCS}" \
   --max-idle=3600s \
   --public-ip-address \
+  --enable-component-gateway \
   --properties="spark:spark.jars.packages=${SPARK_NLP_PACKAGE}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
