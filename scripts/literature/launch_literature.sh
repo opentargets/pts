@@ -209,7 +209,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --num-workers=2 \
   --master-machine-type=n1-standard-8 \
   --master-boot-disk-size=512GB \
-  --worker-machine-type=n1-standard-8 \
+  --worker-machine-type=n1-standard-16 \
   --worker-boot-disk-size=128GB \
   --autoscaling-policy="${AUTOSCALING_POLICY}" \
   --service-account="${SERVICE_ACCOUNT}" \
