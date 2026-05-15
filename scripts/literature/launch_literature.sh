@@ -239,7 +239,8 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --initialization-actions="${INIT_SCRIPT_GCS}" \
   --max-idle=3600s \
   --public-ip-address \
-  --enable-component-gateway
+  --enable-component-gateway \
+  --labels="workload=literature,run-id=${RUN_ID}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
