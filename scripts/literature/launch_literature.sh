@@ -37,7 +37,7 @@ SPARK_NLP_PACKAGE="com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3"
 # each step's heavy joins/groupBys. Defaults assume an all-of-2025 run on
 # the autoscaled 2×n1-standard-16 + ≤25 secondary cluster (~432 vCPU peak);
 # dial down for smaller runs (AQE will coalesce, but write fan-out won't).
-DATE_PREFIX="2026_03"
+DATE_PREFIX="2025"
 REPARTITION="3000"
 SHUFFLE_PUBMATCH="2000"
 SHUFFLE_EMBEDDING="2000"
