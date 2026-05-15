@@ -1,7 +1,7 @@
 ---
-work_path: ../pipeline_work
+work_path: ./pipeline_work
 log_level: DEBUG
-pool_size: 4
+pool_size: 2
 
 scratchpad: {}
 
@@ -226,42 +226,56 @@ steps:
         - pyspark baseline expression specificity
 
   baseline_expression_merge:
-    - name: pyspark baseline expression merge unaggregated
-      pyspark: baseline_expression_merge
+    - name: explode baseline expression merge and validate by aggregation
+      each_placeholder: aggregation
+      foreach:
+        - unaggregated
+        - aggregated
+      do:
+        - name: pyspark baseline expression merge ${aggregation}
+          pyspark: baseline_expression_merge
+          source:
+            baseline_expression: intermediate/baseline_expression
+            target_index: output/target
+            biosample_index: output/biosample
+            tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
+            celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
+          destination: output/baseline_expression/${aggregation}/merged/parquet
+          settings:
+            aggregation: ${aggregation}
+            datasets:
+              - GTEx/tissue
+              - PRIDE/tissue
+              - tabula_sapiens/celltype
+              - tabula_sapiens/tissue
+              - tabula_sapiens/tissue_celltype
+              - DICE/celltype
+        - name: pyspark baseline expression validate ${aggregation}
+          pyspark: baseline_expression_validate
+          source:
+            merged: output/baseline_expression/${aggregation}/merged/parquet
+            target_path: output/target
+            biosample_path: output/biosample
+          destination:
+            valid: output/baseline_expression/${aggregation}/merged/valid
+            failed: output/baseline_expression/${aggregation}/merged/failed
+          settings:
+            excluded_biotypes: []
+          requires:
+            - pyspark baseline expression merge ${aggregation}
+    - name: pyspark baseline expression target prioritisation
+      pyspark: baseline_expression_target_prioritisation
       source:
-        baseline_expression: intermediate/baseline_expression
-        target_index: output/target
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
-      destination: output/baseline_expression/unaggregated/merged/parquet
+        aggregated: output/baseline_expression/aggregated/merged/valid
+      destination:
+        parquet: output/baseline_expression/target_prioritisation_factors/parquet
+        tsv: output/baseline_expression/target_prioritisation_factors/target-prioritisation-factors.tsv
       settings:
-        aggregation: unaggregated
-        datasets: 
-          - GTEx/tissue
-          - PRIDE/tissue
-          - tabula_sapiens/celltype
-          - tabula_sapiens/tissue
-          - tabula_sapiens/tissue_celltype
-          - DICE/celltype
-    - name: pyspark baseline expression merge aggregated
-      pyspark: baseline_expression_merge
-      source:
-        baseline_expression: intermediate/baseline_expression
-        target_index: output/target
-        biosample_index: output/biosample
-        tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
-        celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
-      destination: output/baseline_expression/aggregated/merged/parquet
-      settings:
-        aggregation: aggregated
-        datasets: 
-          - GTEx/tissue
-          - PRIDE/tissue
-          - tabula_sapiens/celltype
-          - tabula_sapiens/tissue
-          - tabula_sapiens/tissue_celltype
-          - DICE/celltype
+        excluded_datasources:
+          - PRIDE
+          - DICE
+      requires:
+        - pyspark baseline expression validate aggregated
 
   ##################################################################################################
 

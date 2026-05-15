@@ -14,7 +14,7 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
-  "numpy>=2.2.6",
+  "numpy>=2.2.6,<2.4.0",
   "obonet>=0.3.1",
   "polars-hash>=0.5.6",
   "torch>=2.10.0",
@@ -43,11 +43,11 @@ cellex = { git = "https://github.com/perslab/CELLEX"}
 dev = ["ruff==0.15.2", "ty==0.0.17", "deptry==0.24.0", "pre-commit>=4.3.0"]
 
 [project.optional-dependencies]
-cellex = [
-  "cellex",
-]
-scanpy = [
+baseline_expression = [
+  "pandas<3",
+  "setuptools<81",
   "scanpy>=1.10.0",
+  "cellex",
 ]
 test = [
   "coverage==7.13.4",
