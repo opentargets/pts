@@ -146,6 +146,8 @@ steps:
         drug_index: ${INPUT_BASE}/output/drug_molecule
       destination:
         disease_target_drug_label_lut: intermediate/ontoma/disease_target_drug_label_lookup_table.parquet
+      properties:
+        spark.jars.packages: '${SPARK_NLP_PACKAGE}'
 
   literature_publication_match:
     - name: pyspark literature publication match
@@ -162,6 +164,7 @@ steps:
         repartition: ${REPARTITION}
       properties:
         spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
+        spark.jars.packages: '${SPARK_NLP_PACKAGE}'
 
   literature_entity_lut:
     - name: pyspark literature entity lut
@@ -210,8 +213,9 @@ gcloud storage cp "${WORK_DIR}/config.yaml" "${CONFIG_GCS}" --quiet
 gcloud storage cp "${WORK_DIR}/install_dependencies_on_cluster.sh" "${INIT_SCRIPT_GCS}" --quiet
 
 # ── Create the shared cluster ───────────────────────────────────────────────
-# pts_openfda-like topology + autoscaling + spark-nlp (needed by ontoma_lut
-# and publication_match; harmless for the stage-3 jobs).
+# pts_openfda-like topology + autoscaling. spark-nlp is now scoped per-step
+# (only ontoma_lut and publication_match request it via their per-step
+# properties) so the four stage-3 jobs skip the Ivy resolution cost.
 # Secondary workers are non-preemptible: preemptible secondaries lose
 # shuffle data mid-job, which forces stage recomputation and tanks
 # shuffle-heavy stages (publication_match, embedding, cooccurrence).
@@ -235,8 +239,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --initialization-actions="${INIT_SCRIPT_GCS}" \
   --max-idle=3600s \
   --public-ip-address \
-  --enable-component-gateway \
-  --properties="spark:spark.jars.packages=${SPARK_NLP_PACKAGE}"
+  --enable-component-gateway
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
