@@ -32,7 +32,7 @@ EPMC_BASE="gs://otar025-epmc/ml02"
 SPARK_NLP_PACKAGE="com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3"
 
 # ── Stage-2 test-run tunables ───────────────────────────────────────────────
-# Drop DATE_PREFIX to read all EPMC days; bump REPARTITION after watching the
+# Set DATE_PREFIX='' to read all EPMC days; bump REPARTITION after watching the
 # stage-2 Spark UI.
 DATE_PREFIX="2026_03"
 REPARTITION="1000"
@@ -250,7 +250,7 @@ wait_job() {
   echo
   echo "Waiting for ${step} (job ${job_id})..."
   if ! gcloud dataproc jobs wait "${job_id}" \
-       --project="${PROJECT}" --region="${REGION}" >/dev/null 2>&1; then
+       --project="${PROJECT}" --region="${REGION}"; then
     cat >&2 <<FAILEOF
 
 ========================================================================
