@@ -79,6 +79,12 @@ def _read_publications(
     blocks are reused intentionally — the only part that must be reimplemented
     is the read, because the library hardcodes its glob.
 
+    The final publication dataframe is persisted: the downstream pipeline
+    triggers several independent actions (write match_valid, write
+    match_failed) that all need this dataframe materialised, and without
+    persist Spark re-scans the EPMC source jsonl files for each lineage.
+    Caller is responsible for ``df.unpersist()``.
+
     Args:
         session: PTS Spark session wrapper.
         epmc_path: Base EPMC path, e.g. ``gs://otar025-epmc/ml02``.
@@ -109,7 +115,7 @@ def _read_publications(
 
     most_recent = EPMCPublication._get_most_recent_publications(all_publications)
     return Publication(
-        _df=most_recent.repartition(f.col('pmid')),
+        _df=most_recent.repartition(f.col('pmid')).persist(),
         _schema=Publication.get_schema(),
     )
 
@@ -204,4 +210,5 @@ def literature_publication_match(
 
     match_mapped.df.unpersist()
     match_disambiguated.df.unpersist()
+    publication.df.unpersist()
     pub_id_lut.unpersist()
