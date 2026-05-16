@@ -39,12 +39,12 @@ SPARK_NLP_JARS_MANIFEST="${SPARK_NLP_JARS_PREFIX%/}.manifest.csv"
 # each step's heavy joins/groupBys. Defaults assume a full-EPMC run on the
 # autoscaled 4×n1-highmem-16 + ≤50 secondary cluster (~864 vCPU peak); dial
 # down for smaller runs (AQE will coalesce, but write fan-out won't).
-DATE_PREFIX="2025"
-REPARTITION="8000"
-SHUFFLE_PUBMATCH="5000"
-SHUFFLE_EMBEDDING="5000"
-SHUFFLE_COOC="5000"
-SHUFFLE_ENTITY="2500"
+DATE_PREFIX=""
+REPARTITION="25000"
+SHUFFLE_PUBMATCH="15000"
+SHUFFLE_EMBEDDING="15000"
+SHUFFLE_COOC="15000"
+SHUFFLE_ENTITY="10000"
 
 # ── Args ────────────────────────────────────────────────────────────────────
 RUN_ID="${1:-run-001}"
