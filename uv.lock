@@ -1658,7 +1658,7 @@ wheels = [
 [[package]]
 name = "ontoma"
 version = "2.4.0"
-source = { git = "https://github.com/opentargets/OnToma?branch=perf%2Favoid-distinct-collect-in-mapping-compatibility#0671191917e3dd36266bf4f6ba6a966abef835d4" }
+source = { git = "https://github.com/opentargets/OnToma?branch=perf%2Favoid-distinct-collect-in-mapping-compatibility#4199b1c67bcbd5427b9d9bb59f306907b8990655" }
 dependencies = [
     { name = "loguru" },
     { name = "numpy" },
