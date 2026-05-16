@@ -350,11 +350,34 @@ FAILEOF
 }
 
 # ── Orchestration sequence ──────────────────────────────────────────────────
+# Set STOP_AFTER=<step-name> in the environment to stop the launcher after a
+# given step succeeds (the cluster is left running so the user can inspect
+# Spark/YARN UIs or rerun a downstream step manually). Useful for eval runs
+# that only need the first N steps.
+STOP_AFTER="${STOP_AFTER:-}"
+maybe_stop() {
+  local stage="$1"
+  if [[ "${STOP_AFTER}" == "${stage}" ]]; then
+    cat <<MSG
+
+========================================================================
+STOP_AFTER=${stage}: stopping launcher after this step succeeded.
+Cluster ${CLUSTER_NAME} is left running for inspection.
+Tear it down when finished with:
+  gcloud dataproc clusters delete ${CLUSTER_NAME} --project=${PROJECT} --region=${REGION} --quiet
+========================================================================
+MSG
+    exit 0
+  fi
+}
+
 JOB_ONTOMA="$(submit_step literature_ontoma_lut_generation)"
 wait_job literature_ontoma_lut_generation "${JOB_ONTOMA}"
+maybe_stop literature_ontoma_lut_generation
 
 JOB_PUBMATCH="$(submit_step literature_publication_match)"
 wait_job literature_publication_match "${JOB_PUBMATCH}"
+maybe_stop literature_publication_match
 
 # Fan out: three stage-3 jobs run in parallel on the cluster.
 JOB_ENTITY="$(submit_step literature_entity_lut)"
