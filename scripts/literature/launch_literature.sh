@@ -176,6 +176,12 @@ steps:
         # See literature_ontoma_lut_generation: Match.map_labels also instantiates
         # OnToma, which requires spark.jars.packages to contain 'spark-nlp'.
         spark.jars.packages: 'com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}'
+        # Force Spark to subdivide large EPMC jsonl files. The default 128MB
+        # allows multi-GB files to be processed by a single task, which on
+        # the full-EPMC corpus produced catastrophic per-file skew (p50 2s,
+        # p99 560s, max 17min). 32MB chunks bring per-task work back to a
+        # reasonable size and let the downstream repartition do the rest.
+        spark.sql.files.maxPartitionBytes: '33554432'
 
   literature_entity_lut:
     - name: pyspark literature entity lut
@@ -271,7 +277,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --public-ip-address \
   --enable-component-gateway \
   --labels="workload=literature,run-id=${RUN_ID}" \
-  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}#spark:spark.sql.autoBroadcastJoinThreshold=536870912"
+  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}#spark:spark.sql.autoBroadcastJoinThreshold=134217728"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
