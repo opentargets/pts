@@ -39,7 +39,7 @@ SPARK_NLP_JARS_MANIFEST="${SPARK_NLP_JARS_PREFIX%/}.manifest.csv"
 # each step's heavy joins/groupBys. Defaults assume a full-EPMC run on the
 # autoscaled 4×n1-highmem-16 + ≤50 secondary cluster (~864 vCPU peak); dial
 # down for smaller runs (AQE will coalesce, but write fan-out won't).
-DATE_PREFIX=""
+DATE_PREFIX="2025"
 REPARTITION="8000"
 SHUFFLE_PUBMATCH="5000"
 SHUFFLE_EMBEDDING="5000"
@@ -148,6 +148,13 @@ steps:
         drug_index: ${INPUT_BASE}/output/drug_molecule
       destination:
         disease_target_drug_label_lut: intermediate/ontoma/disease_target_drug_label_lookup_table.parquet
+      properties:
+        # OnToma checks spark.jars.packages contains 'spark-nlp' before running
+        # (ontoma/ontoma.py:55). Spark-NLP itself is loaded from pre-staged JARs
+        # via cluster-level spark.jars, so this value is informational only —
+        # it goes into SparkConf at session creation (post-SparkSubmit), which
+        # does NOT re-trigger Ivy resolution.
+        spark.jars.packages: 'com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}'
 
   literature_publication_match:
     - name: pyspark literature publication match
@@ -166,6 +173,9 @@ steps:
         spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
         spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
         spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
+        # See literature_ontoma_lut_generation: Match.map_labels also instantiates
+        # OnToma, which requires spark.jars.packages to contain 'spark-nlp'.
+        spark.jars.packages: 'com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}'
 
   literature_entity_lut:
     - name: pyspark literature entity lut
@@ -261,7 +271,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --public-ip-address \
   --enable-component-gateway \
   --labels="workload=literature,run-id=${RUN_ID}" \
-  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}"
+  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}#spark:spark.sql.autoBroadcastJoinThreshold=536870912"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
