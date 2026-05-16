@@ -13,7 +13,6 @@ from typing import Any
 from loguru import logger
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as f
-from pyspark.sql.window import Window
 
 from pts.pyspark.common.session import Session
 
@@ -71,15 +70,13 @@ def _compute_relevance(matches: DataFrame) -> DataFrame:
     """
     spark = matches.sparkSession
 
-    section_rank_table = f.broadcast(spark.createDataFrame(_SECTION_RANKS).orderBy(f.col('rank').asc()))
+    section_rank_table = f.broadcast(spark.createDataFrame(_SECTION_RANKS))
 
-    w_by_section_keyword = Window.partitionBy('pmid', 'section', 'keywordId')
-
-    # Step 1: join with section ranks and compute per-section weight vectors.
-    # Title always gets a single fixed weight; other sections collect all
-    # mention weights within that section.
-    # The match dataset names the entity id `mappedId`; rename it to `keywordId`
-    # (the name used throughout this step and in the output).
+    # Step 1: join with section ranks and collapse to one row per
+    # (pmid, section, keywordId). Title always gets a single fixed weight;
+    # other sections collect all mention weights within that section.
+    # The match dataset names the entity id `mappedId`; rename it to
+    # `keywordId` (the name used throughout this step and in the output).
     with_section_weights = (
         matches
         .withColumnRenamed('mappedId', 'keywordId')
@@ -87,14 +84,24 @@ def _compute_relevance(matches: DataFrame) -> DataFrame:
         .join(section_rank_table, on='section', how='left_outer')
         .na.fill(100, ['rank'])
         .na.fill(0.01, ['weight'])
+        .groupBy('pmid', 'section', 'keywordId')
+        .agg(
+            f.first('pmcid').alias('pmcid'),
+            f.first('date').alias('date'),
+            f.first('year').alias('year'),
+            f.first('month').alias('month'),
+            f.first('day').alias('day'),
+            f.first('keywordType').alias('keywordType'),
+            f.first('rank').alias('rank'),
+            f.first('weight').alias('weight'),
+            f.collect_list('weight').alias('all_weights'),
+        )
         .withColumn(
             'keywordSectionV',
-            f.when(
-                f.col('section') != 'title',
-                f.collect_list(f.col('weight')).over(w_by_section_keyword),
-            ).otherwise(f.array(f.lit(_TITLE_WEIGHT))),
+            f.when(f.col('section') == 'title', f.array(f.lit(_TITLE_WEIGHT)))
+             .otherwise(f.col('all_weights')),
         )
-        .dropDuplicates(['pmid', 'section', 'keywordId'])
+        .drop('all_weights')
     )
 
     # Step 2: aggregate across sections per (pmid, keywordId).
