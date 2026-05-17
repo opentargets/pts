@@ -37,7 +37,9 @@ explicit = true
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
 clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
-ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "dev" }
+# Temporary override: opentargets/ot-literature perf/salt-disambig-join (PR TBD).
+# Revert to dev once the PR is merged.
+ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "perf/salt-disambig-join" }
 # Temporary override: opentargets/OnToma PR #51 (perf fix for _check_mapping_compatibility).
 # Revert to PyPI once the PR is merged and released.
 ontoma = { git = "https://github.com/opentargets/OnToma", branch = "perf/avoid-distinct-collect-in-mapping-compatibility" }

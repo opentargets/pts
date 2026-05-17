@@ -1720,7 +1720,7 @@ wheels = [
 [[package]]
 name = "ot-literature"
 version = "0.1.0"
-source = { git = "https://github.com/opentargets/ot-literature?branch=dev#44594fdf2a652b5dcba7947f76a661f3b852cbef" }
+source = { git = "https://github.com/opentargets/ot-literature?branch=perf%2Fsalt-disambig-join#aa701c008ae87fc99cac4f2bc1e6cf55ca27a707" }
 dependencies = [
     { name = "loguru" },
     { name = "numpy" },
@@ -2173,7 +2173,7 @@ requires-dist = [
     { name = "openai", specifier = ">=2.7.2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "opentargets-otter", specifier = "==26.3.4" },
-    { name = "ot-literature", git = "https://github.com/opentargets/ot-literature?branch=dev" },
+    { name = "ot-literature", git = "https://github.com/opentargets/ot-literature?branch=perf%2Fsalt-disambig-join" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pdfplumber", specifier = ">=0.11.9" },
     { name = "polars", specifier = "==1.38.1" },

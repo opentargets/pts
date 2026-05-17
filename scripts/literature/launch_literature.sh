@@ -173,6 +173,15 @@ steps:
         spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
         spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
         spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
+        # Coalesce post-shuffle partitions toward 256MB to fix the small-file
+        # problem at match_valid.write (run-013 wrote ~15000 files at ~7MB).
+        # parallelismFirst=false lets AQE coalesce below cluster default
+        # parallelism for the write tail where extra parallelism isn't useful.
+        # Effective only once the disambig salt fix (ot-literature PR #10)
+        # flattens the join distribution -- AQE cannot coalesce around hot
+        # partitions, so this and the salt fix are complementary.
+        spark.sql.adaptive.advisoryPartitionSizeInBytes: '268435456'
+        spark.sql.adaptive.coalescePartitions.parallelismFirst: 'false'
         # See literature_ontoma_lut_generation: Match.map_labels also instantiates
         # OnToma, which requires spark.jars.packages to contain 'spark-nlp'.
         spark.jars.packages: 'com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}'
