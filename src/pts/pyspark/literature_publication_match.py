@@ -64,6 +64,28 @@ def _maybe_repartition(df: DataFrame, repartition: int | None) -> DataFrame:
     return df
 
 
+def _maybe_coalesce(df: DataFrame, n: int | None) -> DataFrame:
+    """Coalesce a DataFrame to a fixed partition count when configured.
+
+    Used at the write boundary to avoid emitting many small parquet files when
+    the upstream shuffle partition count is high. Coalesce is a narrow
+    transformation that merges partitions without a network shuffle, so it
+    only reduces file count -- it does not rebalance data. Use it when the
+    upstream partitioning is already balanced (e.g. after a salted shuffle)
+    and you only need to consolidate output files.
+
+    Args:
+        df: DataFrame to coalesce.
+        n: Target partition count. Falsy values leave ``df`` unchanged.
+
+    Returns:
+        The coalesced DataFrame, or ``df`` unchanged when ``n`` is falsy.
+    """
+    if n:
+        return df.coalesce(n)
+    return df
+
+
 def _read_publications(
     session: Session,
     epmc_path: str,
@@ -136,13 +158,17 @@ def literature_publication_match(
     Args:
         source: ``pub_id_lut``, ``epmc_publication``, ``ontoma_disease_target_drug_label_lut``.
         destination: ``match_valid``, ``match_failed``.
-        settings: optional ``date_prefix`` (str) and ``repartition`` (int).
+        settings: optional ``date_prefix`` (str), ``repartition`` (int) for the
+            EPMC read, and ``match_valid_coalesce`` / ``match_failed_coalesce``
+            (int) for the output partition count of each write.
         properties: Spark properties forwarded to the session.
     """
     spark = Session(app_name='literature', properties=properties)
 
     date_prefix = settings.get('date_prefix')
     repartition = settings.get('repartition')
+    match_valid_coalesce = settings.get('match_valid_coalesce')
+    match_failed_coalesce = settings.get('match_failed_coalesce')
 
     logger.info(f'load publication id lut from: {source["pub_id_lut"]}')
     pub_id_lut = PublicationIdLUT.from_csv(spark, source['pub_id_lut']).persist()
@@ -202,11 +228,21 @@ def literature_publication_match(
         )
     )
 
-    logger.info(f'write valid matches to {destination["match_valid"]}')
-    match_valid.write.mode('overwrite').parquet(destination['match_valid'])
+    logger.info(
+        f'write valid matches to {destination["match_valid"]} '
+        f'(coalesce={match_valid_coalesce})'
+    )
+    _maybe_coalesce(match_valid, match_valid_coalesce).write.mode('overwrite').parquet(
+        destination['match_valid']
+    )
 
-    logger.info(f'write failed matches to {destination["match_failed"]}')
-    match_failed.write.mode('overwrite').parquet(destination['match_failed'])
+    logger.info(
+        f'write failed matches to {destination["match_failed"]} '
+        f'(coalesce={match_failed_coalesce})'
+    )
+    _maybe_coalesce(match_failed, match_failed_coalesce).write.mode('overwrite').parquet(
+        destination['match_failed']
+    )
 
     match_mapped.df.unpersist()
     match_disambiguated.df.unpersist()

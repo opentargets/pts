@@ -46,6 +46,16 @@ SHUFFLE_EMBEDDING="15000"
 SHUFFLE_COOC="15000"
 SHUFFLE_ENTITY="10000"
 
+# Output partition counts for publication_match writes. AQE coalesce alone
+# does not consolidate the write here (likely because match_disambiguated.df
+# is .persist()ed before the filter+write, freezing the post-shuffle
+# partitioning), so we force the output shape explicitly. Targets ~256 MB
+# per parquet file at run-014 scale:
+#   148 GB match_valid  / 600 partitions ≈ 250 MB / file
+#   130 GB match_failed / 530 partitions ≈ 250 MB / file
+COALESCE_MATCH_VALID="600"
+COALESCE_MATCH_FAILED="530"
+
 # ── Args ────────────────────────────────────────────────────────────────────
 RUN_ID="${1:-run-001}"
 PTS_REF="${2:-vh-add-literature}"
@@ -169,17 +179,18 @@ steps:
       settings:
         date_prefix: '${DATE_PREFIX}'
         repartition: ${REPARTITION}
+        match_valid_coalesce: ${COALESCE_MATCH_VALID}
+        match_failed_coalesce: ${COALESCE_MATCH_FAILED}
       properties:
         spark.sql.shuffle.partitions: '${SHUFFLE_PUBMATCH}'
         spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
         spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
-        # Coalesce post-shuffle partitions toward 256MB to fix the small-file
-        # problem at match_valid.write (run-013 wrote ~15000 files at ~7MB).
-        # parallelismFirst=false lets AQE coalesce below cluster default
-        # parallelism for the write tail where extra parallelism isn't useful.
-        # Effective only once the disambig salt fix (ot-literature PR #10)
-        # flattens the join distribution -- AQE cannot coalesce around hot
-        # partitions, so this and the salt fix are complementary.
+        # AQE coalesce settings still help downstream intermediate stages
+        # (observed in run-014: 15000 -> 1496 and 15000 -> 124 task drops).
+        # They do NOT consolidate the final write because the dataframe is
+        # .persist()ed before the filter+write, freezing the post-shuffle
+        # partitioning. The match_valid_coalesce / match_failed_coalesce
+        # settings above are what shrink the output file count.
         spark.sql.adaptive.advisoryPartitionSizeInBytes: '268435456'
         spark.sql.adaptive.coalescePartitions.parallelismFirst: 'false'
         # See literature_ontoma_lut_generation: Match.map_labels also instantiates
