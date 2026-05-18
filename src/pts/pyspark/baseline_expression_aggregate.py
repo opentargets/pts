@@ -147,20 +147,6 @@ class AggregateExpression:
         )
         self.df = quartile_df
 
-    def apply_qc_threshold(self, expr_col: str = 'expression', threshold: float = 0.5):
-        """Quality control step: set expression values below `threshold` to 0."""
-        if expr_col not in self.df.columns:
-            # nothing to do
-            return
-
-        # Use when/otherwise to set values < threshold to 0
-        self.df = self.df.withColumn(
-            expr_col,
-            f.when(f.col(expr_col) < f.lit(threshold), f.lit(0)).otherwise(
-                f.col(expr_col)
-            )
-        )
-
     def calculate_expression_distribution(self, local=False, threshold: float = 0.5):
         """This function groups the dataframe by datasourceId, targetId and datatypeId.
 
