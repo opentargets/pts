@@ -799,7 +799,7 @@ def _baseline_query(
     """
     typed = (
         baseline_expression.filter(
-            f.col('datasourceId').isin(['GTEx', 'tabula_sapiens'])
+            f.lower(f.col('datasourceId')).isin(['gtex', 'tabula_sapiens'])
             & ~(f.col('tissueBiosampleId').isNotNull() & f.col('celltypeBiosampleId').isNotNull())
             & f.col('specificity_score').isNotNull()
         )
