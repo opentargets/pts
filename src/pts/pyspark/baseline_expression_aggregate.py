@@ -62,50 +62,6 @@ class AggregateExpression:
             )
         )
 
-    def within_donor_mean(self,
-                        tissue_col: str = 'tissueBiosampleId',
-                        celltype_col: str = 'celltypeBiosampleId',
-                        expr_col: str = 'expression',
-                        sep: str = ', '):
-        """Group by ALL columns except `expr_col`, `tissue_col`, and `celltype_col`."""
-        df = self.df
-
-        # Columns to group by
-        group_cols = [c for c in df.columns if c not in {expr_col, tissue_col, celltype_col}]
-
-        if group_cols:
-            agg_df = (
-                df.groupBy(group_cols)
-                .agg(
-                    f.avg(f.col(expr_col)).alias(expr_col),
-                    f.collect_set(f.col(tissue_col)).alias('_tissues'),
-                    f.collect_set(f.col(celltype_col)).alias('_celltypes'),
-                )
-            )
-        else:
-            # If nothing to group by, aggregate globally
-            agg_df = df.agg(
-                f.avg(f.col(expr_col)).alias(expr_col),
-                f.collect_set(f.col(tissue_col)).alias('_tissues'),
-                f.collect_set(f.col(celltype_col)).alias('_celltypes'),
-            )
-
-        # Helper: trim -> drop null/empty -> sort -> join
-        def join_sorted(arr_col, out_name):
-            arr_trim = f.transform(f.col(arr_col), lambda x: f.when(x.isNull(), None).otherwise(f.trim(x)))
-            arr_keep = f.filter(arr_trim, lambda x: x.isNotNull() & (x != ''))  # noqa: PLC1901
-            arr_sorted = f.array_sort(arr_keep)  # simple lexicographic sort; duplicates preserved
-            return f.when(f.size(arr_sorted) > 0, f.array_join(arr_sorted, sep)).otherwise(f.lit(None)).alias(out_name)
-
-        agg_df = (
-            agg_df
-            .withColumn(tissue_col, join_sorted('_tissues', tissue_col))
-            .withColumn(celltype_col, join_sorted('_celltypes', celltype_col))
-            .drop('_tissues', '_celltypes')
-        )
-
-        self.df = agg_df
-
     def calculate_quartiles(self, local=False):
         """This function calculates the expression quartiles of each gene across all donors."""
         # Define the grouping cols
