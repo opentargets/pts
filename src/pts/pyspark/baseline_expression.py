@@ -233,7 +233,7 @@ def _add_parental_biosample_id(
         )
     )
 
-    df_with_parent = df.join(biosample_to_parent, on=id_col, how='left')
+    df_with_parent = df.join(biosample_to_parent, on=id_col, how='left').cache()
 
     null_parent_df = df_with_parent.filter(f.col(parent_col_name).isNull())
     if null_parent_df.take(1):
