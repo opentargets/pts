@@ -62,7 +62,7 @@ def baseline_expression_harmonise(
             mapping_path=mapping_path,
             output_directory_path=output_directory_path,
             json=False,
-            local=False
+            local=False,
         ).run()
     elif harmoniser == 'cellxgene':
         # Extract arguments
@@ -78,7 +78,7 @@ def baseline_expression_harmonise(
             output_directory_path=output_directory_path,
             datasource_id=datasource_id,
             datatype_id=datatype_id,
-            json=False
+            json=False,
         )
 
         processor.run(
@@ -93,7 +93,7 @@ def baseline_expression_harmonise(
             age_colname=settings.get('age_colname', 'age'),
             sex_colname=settings.get('sex_colname', 'sex'),
             ethnicity_colname=settings.get('ethnicity_colname', 'ethnicity'),
-            donor_colname=settings.get('donor_colname', 'donor_id')
+            donor_colname=settings.get('donor_colname', 'donor_id'),
         )
 
     elif harmoniser == 'pride':
@@ -109,7 +109,7 @@ def baseline_expression_harmonise(
             output_directory_path=output_directory_path,
             tissue_ontology_mapping_path=tissue_ontology_mapping_path,
             json=False,
-            local=False
+            local=False,
         ).run()
 
     elif harmoniser == 'gtex':
@@ -126,7 +126,7 @@ def baseline_expression_harmonise(
             subject_metadata_path=subject_metadata_path,
             json=False,
             local=False,
-            matrix=settings.get('matrix', False)
+            matrix=settings.get('matrix', False),
         ).run()
 
     else:

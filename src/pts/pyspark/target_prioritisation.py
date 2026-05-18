@@ -800,16 +800,17 @@ def _baseline_query(
     mirrors the legacy HPA-based step but adds celltype equivalents.
     """
     typed = (
-        baseline_expression.filter(
+        baseline_expression
+        .filter(
             f.lower(f.col('datasourceId')).isin(['gtex', 'tabula_sapiens'])
             & ~(f.col('tissueBiosampleId').isNotNull() & f.col('celltypeBiosampleId').isNotNull())
             & f.col('specificity_score').isNotNull()
         )
         .withColumn(
             'biosample_type',
-            f
-            .when(f.col('tissueBiosampleId').isNotNull(), f.lit('tissue'))
-            .when(f.col('celltypeBiosampleId').isNotNull(), f.lit('celltype')),
+            f.when(f.col('tissueBiosampleId').isNotNull(), f.lit('tissue')).when(
+                f.col('celltypeBiosampleId').isNotNull(), f.lit('celltype')
+            ),
         )
         .filter(f.col('biosample_type').isNotNull())
     )
@@ -818,16 +819,13 @@ def _baseline_query(
     best = typed.withColumn('rank', f.row_number().over(rank_window)).filter(f.col('rank') == 1).drop('rank')
 
     def _project(kind: str, spec_alias: str, dist_alias: str) -> DataFrame:
-        return (
-            best.filter(f.col('biosample_type') == kind)
-            .select(
-                f.col('targetId').alias('targetid'),
-                (f.lit(2.0) * f.col('specificity_score') - f.lit(1.0)).alias(spec_alias),
-                f
-                .when(f.col('distribution_score') == 1, f.lit(-1.0))
-                .otherwise(1 - f.col('distribution_score'))
-                .alias(dist_alias),
-            )
+        return best.filter(f.col('biosample_type') == kind).select(
+            f.col('targetId').alias('targetid'),
+            (f.lit(2.0) * f.col('specificity_score') - f.lit(1.0)).alias(spec_alias),
+            f
+            .when(f.col('distribution_score') == 1, f.lit(-1.0))
+            .otherwise(1 - f.col('distribution_score'))
+            .alias(dist_alias),
         )
 
     tissue = _project('tissue', 'Nr_specificity', 'Nr_distribution')

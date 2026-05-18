@@ -36,18 +36,15 @@ def validate_target(
     df: DataFrame,
     target_lut: DataFrame,
 ) -> DataFrame:
-    """Resolve `targetId` aliases via the target LUT"""
+    """Resolve `targetId` aliases via the target LUT."""
     df = _ensure_qc(df)
     lut = f.broadcast(target_lut).select(
-        f.col('targetId').alias('_mappedTargetId'),
-        f.col('targetFromSourceId').alias('_lookupId')
+        f.col('targetId').alias('_mappedTargetId'), f.col('targetFromSourceId').alias('_lookupId')
     )
     joined = df.join(lut, df['targetId'] == f.col('_lookupId'), 'leftouter')
     flagged = _flag(joined, f.col('_mappedTargetId').isNull(), BaselineExpressionFlags.INVALID_TARGET)
-    return (
-        flagged
-        .withColumn('targetId', f.coalesce(f.col('_mappedTargetId'), f.col('targetId')))
-        .drop('_mappedTargetId', '_lookupId')
+    return flagged.withColumn('targetId', f.coalesce(f.col('_mappedTargetId'), f.col('targetId'))).drop(
+        '_mappedTargetId', '_lookupId'
     )
 
 
@@ -78,10 +75,8 @@ def validate_biosample(
     )
     joined = df.join(lut, df[id_col] == f.col('_lookupId'), 'leftouter')
     flagged = _flag(joined, requires & f.col('_mappedBiosampleId').isNull(), BaselineExpressionFlags.INVALID_BIOSAMPLE)
-    return (
-        flagged
-        .withColumn(id_col, f.coalesce(f.col('_mappedBiosampleId'), f.col(id_col)))
-        .drop('_mappedBiosampleId', '_lookupId')
+    return flagged.withColumn(id_col, f.coalesce(f.col('_mappedBiosampleId'), f.col(id_col))).drop(
+        '_mappedBiosampleId', '_lookupId'
     )
 
 

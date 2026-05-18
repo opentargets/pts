@@ -30,7 +30,8 @@ def prepare_target_lut(df: DataFrame) -> DataFrame:
         )
     )
     return (
-        df.select(
+        df
+        .select(
             f.col('id').alias('targetId'),
             f.col('biotype'),
             f.explode(aliases).alias('targetFromSourceId'),
@@ -47,7 +48,8 @@ def prepare_biosample_lut(df: DataFrame) -> DataFrame:
         arrays.append(f.coalesce(f.col('obsoleteTerms'), f.array().cast(_STRING_ARRAY)))
     aliases = f.concat(*arrays)
     return (
-        df.select(
+        df
+        .select(
             f.col('biosampleId'),
             f.explode(aliases).alias('biosampleFromSourceMappedId'),
         )

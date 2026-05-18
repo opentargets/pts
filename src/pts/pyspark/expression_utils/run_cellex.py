@@ -27,7 +27,7 @@ class CellexAnalysis:
         sample_id=None,
         log_transform=True,
         do_anova=True,
-        input_path=None
+        input_path=None,
     ):
         self.spark = spark
         self.mode = mode
@@ -45,11 +45,7 @@ class CellexAnalysis:
 
         # Create ESObject (Expression Specificity Object)
         eso = cellex.ESObject(
-            data=expression_matrix,
-            annotation=metadata,
-            verbose=True,
-            normalize=False,
-            anova=self.do_anova
+            data=expression_matrix, annotation=metadata, verbose=True, normalize=False, anova=self.do_anova
         )
 
         # Compute specificity using different metrics
@@ -93,15 +89,14 @@ class CellexAnalysis:
             # If sampleId not in metadata columns, create sampleId by
             # concatenating donorId, celltypeBiosampleId and tissueBiosampleId
             if self.sample_id not in metadata.columns:
-                metadata['sampleId'] = (metadata['donorId'] + '__' +
-                                        metadata['celltypeBiosampleId'] + '__' +
-                                        metadata['tissueBiosampleId'])
+                metadata['sampleId'] = (
+                    metadata['donorId'] + '__' + metadata['celltypeBiosampleId'] + '__' + metadata['tissueBiosampleId']
+                )
             else:
                 metadata['sampleId'] = metadata[self.sample_id]
             # Create combined biosample column
             metadata['celltypeBiosampleId__tissueBiosampleId'] = (
-                metadata['celltypeBiosampleId'] + '__' +
-                metadata['tissueBiosampleId']
+                metadata['celltypeBiosampleId'] + '__' + metadata['tissueBiosampleId']
             )
             # Keep only sampleId and the combined biosample column
             metadata = metadata[['sampleId', 'celltypeBiosampleId__tissueBiosampleId']].drop_duplicates()
@@ -135,21 +130,22 @@ class CellexAnalysis:
         if self.biosample not in ('both', 'tissuecelltype'):
             biosample_col = f'{self.biosample}BiosampleId'
             # Concatenate biosampleId and donorId to create a unique sample identifier
-            df = df.withColumn(
-                'sampleId',
-                concat_ws('__', col('donorId'), col(biosample_col))
-            )
+            df = df.withColumn('sampleId', concat_ws('__', col('donorId'), col(biosample_col)))
             # Create metadata in Spark
             metadata_spark = df.select('sampleId', biosample_col).distinct()
         else:
             df = df.withColumn(
-                'sampleId',
-                concat_ws('__', col('donorId'), col('celltypeBiosampleId'), col('tissueBiosampleId'))
+                'sampleId', concat_ws('__', col('donorId'), col('celltypeBiosampleId'), col('tissueBiosampleId'))
             )
-            metadata_spark = df.withColumn(
-                'celltypeBiosampleId__tissueBiosampleId',
-                concat_ws('__', col('celltypeBiosampleId'), col('tissueBiosampleId'))
-            ).select('sampleId', 'celltypeBiosampleId__tissueBiosampleId').distinct()
+            metadata_spark = (
+                df
+                .withColumn(
+                    'celltypeBiosampleId__tissueBiosampleId',
+                    concat_ws('__', col('celltypeBiosampleId'), col('tissueBiosampleId')),
+                )
+                .select('sampleId', 'celltypeBiosampleId__tissueBiosampleId')
+                .distinct()
+            )
 
         # Do the pivot in Spark (much faster for large datasets)
         expression_matrix_spark = df.groupBy('targetId').pivot('sampleId').agg({'expression': 'first'})
