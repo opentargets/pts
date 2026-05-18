@@ -62,7 +62,7 @@ steps:
   #: EXPRESSION STEP :##############################################################################
 
   baseline_expression_dice:
-    - name: pyspark baseline expression harmonise
+    - name: pyspark baseline expression harmonise dice
       pyspark: baseline_expression_harmonise
       source:
         dice_directory: input/baseline_expression/bulkRNAseq/DICE
@@ -71,7 +71,7 @@ steps:
         baseline_expression: intermediate/baseline_expression/unaggregated/DICE/celltype
       settings:
         harmoniser: dice
-    - name: pyspark baseline expression specificity
+    - name: pyspark baseline expression specificity dice
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/DICE/celltype
       destination: intermediate/baseline_expression/specificity/DICE/celltype
@@ -79,19 +79,19 @@ steps:
         specificity_method: cellex
         biosample: celltype
       requires:
-        - pyspark baseline expression harmonise
-    - name: pyspark baseline expression aggregate
+        - pyspark baseline expression harmonise dice
+    - name: pyspark baseline expression aggregate dice
       pyspark: baseline_expression_aggregate
       source:
         expression_data: intermediate/baseline_expression/unaggregated/DICE/celltype/parquet
         celltype_cellex: intermediate/baseline_expression/specificity/DICE/celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/DICE/celltype/
       requires:
-        - pyspark baseline expression harmonise
-        - pyspark baseline expression specificity
+        - pyspark baseline expression harmonise dice
+        - pyspark baseline expression specificity dice
     
   baseline_expression_cellxgene:
-    - name: pyspark baseline expression harmonise
+    - name: pyspark baseline expression harmonise cellxgene
       pyspark: baseline_expression_harmonise
       source:
         h5ad_path: input/baseline_expression/scRNAseq/CxG-tabula_sapiens.h5ad
@@ -121,7 +121,7 @@ steps:
         specificity_method: cellex
         biosample: celltype
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
     - name: pyspark baseline expression specificity tissue
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/tabula_sapiens/tissue
@@ -130,7 +130,7 @@ steps:
         specificity_method: cellex
         biosample: tissue
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
     - name: pyspark baseline expression specificity tissue celltype
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/tabula_sapiens/tissue_celltype
@@ -139,7 +139,7 @@ steps:
         specificity_method: cellex
         biosample: tissuecelltype
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
     - name: pyspark baseline expression aggregate celltype
       pyspark: baseline_expression_aggregate
       source: 
@@ -147,7 +147,7 @@ steps:
         celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/celltype
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
         - pyspark baseline expression specificity celltype
     - name: pyspark baseline expression aggregate tissue
       pyspark: baseline_expression_aggregate
@@ -156,7 +156,7 @@ steps:
         tissue_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
         - pyspark baseline expression specificity tissue
     - name: pyspark baseline expression aggregate tissue celltype
       pyspark: baseline_expression_aggregate
@@ -165,11 +165,11 @@ steps:
         tissue_celltype_cellex: intermediate/baseline_expression/specificity/tabula_sapiens/tissue_celltype/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/tabula_sapiens/tissue_celltype
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise cellxgene
         - pyspark baseline expression specificity tissue celltype
 
   baseline_expression_pride:
-    - name: pyspark baseline expression harmonise
+    - name: pyspark baseline expression harmonise pride
       pyspark: baseline_expression_harmonise
       source:
         pride_directory: input/baseline_expression/MSproteomics/PRIDE
@@ -183,16 +183,16 @@ steps:
           - PXD000865 
           - PXD000561
           - PXD016999
-    - name: pyspark baseline expression aggregate
+    - name: pyspark baseline expression aggregate pride
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/PRIDE/tissue/parquet
       destination: intermediate/baseline_expression/aggregated/PRIDE/tissue
       requires:
-        - pyspark baseline expression harmonise
+        - pyspark baseline expression harmonise pride
 
   baseline_expression_gtex:
-    - name: pyspark baseline expression harmonise
+    - name: pyspark baseline expression harmonise gtex
       pyspark: baseline_expression_harmonise
       source:
         gtex_source_data_path: input/baseline_expression/bulkRNAseq/GTEx/gene_tpm.gct.gz
@@ -203,7 +203,7 @@ steps:
       settings:
         harmoniser: gtex
         matrix: true # Generate a matrix as well as a parquet (true or false)
-    - name: pyspark baseline expression specificity
+    - name: pyspark baseline expression specificity gtex
       pyspark: baseline_expression_specificity
       source: intermediate/baseline_expression/unaggregated/GTEx/tissue
       destination: intermediate/baseline_expression/specificity/GTEx/tissue
@@ -214,16 +214,16 @@ steps:
         mode: matrix
         sample_id: OrigSample
       requires:
-        - pyspark baseline expression harmonise
-    - name: pyspark baseline expression aggregate
+        - pyspark baseline expression harmonise gtex
+    - name: pyspark baseline expression aggregate gtex
       pyspark: baseline_expression_aggregate
       source: 
         expression_data: intermediate/baseline_expression/unaggregated/GTEx/tissue/parquet
         tissue_cellex: intermediate/baseline_expression/specificity/GTEx/tissue/cellex/esmu.csv.gz
       destination: intermediate/baseline_expression/aggregated/GTEx/tissue
       requires:
-        - pyspark baseline expression harmonise
-        - pyspark baseline expression specificity
+        - pyspark baseline expression harmonise gtex
+        - pyspark baseline expression specificity gtex
 
   baseline_expression:
     - name: explode baseline expression merge and validate by aggregation
