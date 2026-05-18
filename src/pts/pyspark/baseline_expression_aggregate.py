@@ -49,7 +49,8 @@ class AggregateExpression:
             ((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull())) |
             ((self.df['tissueBiosampleParentId'].isNull()) & (self.df['celltypeBiosampleParentId'].isNull()))
         )
-        logger.info(f'The following biosample from source have null biosample IDs: {nulls}')
+        logger.info('The following biosample rows from source have null biosample IDs:')
+        nulls.show(truncate=False)
         # Then drop those rows from the dataframe
         self.df = self.df.filter(
             ~((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull()))
