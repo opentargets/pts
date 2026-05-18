@@ -106,8 +106,8 @@ class PrideBaselineExpression:
             .withColumn('ex', explode('experimentalDesigns'))
             .select('experimentId', col('ex.*'))
             # In the sex column, replace not available' with NULL
-            .withColumn('sex', when(col('sex') == 'not available', None).otherwise(col('sex')))
-            .withColumn('age', when(col('age') == 'not available', None).otherwise(col('age')))
+            .withColumn('sex', when(col('sex') == 'not available', lit(None)).otherwise(col('sex')))
+            .withColumn('age', when(col('age') == 'not available', lit(None)).otherwise(col('age')))
             # Deduplicate technical replicates: the expression matrix already has
             # them collapsed, so keep only one SDRF row per assayId.
             .dropDuplicates(['assayId'])
