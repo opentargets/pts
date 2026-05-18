@@ -332,10 +332,14 @@ def baseline_expression(
         validated = validate_biosample(validated, biosample_lut, 'celltypeBiosampleId', 'celltypeBiosampleFromSource')
         validated = validate_biosample(validated, biosample_lut, 'tissueBiosampleParentId', 'tissueBiosampleFromSource')
         validated = validate_biosample(validated, biosample_lut, 'celltypeBiosampleParentId', 'celltypeBiosampleFromSource')
+        validated = validated.persist()
 
-        valid, invalid = split_valid_invalid(validated)
-        valid.write.mode('overwrite').parquet(destination['valid'])
-        invalid.write.mode('overwrite').parquet(destination['failed'])
+        try:
+            valid, invalid = split_valid_invalid(validated)
+            valid.write.mode('overwrite').parquet(destination['valid'])
+            invalid.write.mode('overwrite').parquet(destination['failed'])
+        finally:
+            validated.unpersist()
     finally:
         session.stop()
 
