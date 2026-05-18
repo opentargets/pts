@@ -6,7 +6,6 @@ from typing import Any
 from loguru import logger
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as f
-from pyspark.sql.functions import coalesce, col, explode
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.expression_utils.expression import (
@@ -51,25 +50,25 @@ def _resolve_pride_target_ids(
     target_mapping = (
         spark.read.parquet(target_index_path)
         .select(
-            col('id').alias('resolvedTargetId'),
-            explode(col('proteinIds')).alias('proteinId'),
+            f.col('id').alias('resolvedTargetId'),
+            f.explode(f.col('proteinIds')).alias('proteinId'),
         )
         .select(
-            col('proteinId.id').alias('proteinId'),
-            col('resolvedTargetId'),
+            f.col('proteinId.id').alias('proteinId'),
+            f.col('resolvedTargetId'),
         )
-        .filter(col('proteinId').isNotNull())
+        .filter(f.col('proteinId').isNotNull())
     )
 
-    pride_rows = merged_df.filter(col('datasourceId') == 'PRIDE')
-    non_pride_rows = merged_df.filter(col('datasourceId') != 'PRIDE')
+    pride_rows = merged_df.filter(f.col('datasourceId') == 'PRIDE')
+    non_pride_rows = merged_df.filter(f.col('datasourceId') != 'PRIDE')
 
     pride_rows = (
         pride_rows
         .drop('targetId')
         .join(target_mapping, pride_rows['targetFromSourceId'] == target_mapping['proteinId'], how='left')
         .drop('proteinId')
-        .withColumn('targetId', coalesce(col('resolvedTargetId'), col('targetFromSourceId')))
+        .withColumn('targetId', f.coalesce(f.col('resolvedTargetId'), f.col('targetFromSourceId')))
         .drop('resolvedTargetId')
     )
 
