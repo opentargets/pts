@@ -8,7 +8,7 @@ from typing import Any
 
 import pyspark.sql.functions as f
 from loguru import logger
-from pyspark.sql import Column, DataFrame, Window
+from pyspark.sql import DataFrame, Window
 from pyspark.sql.types import DoubleType
 
 from pts.pyspark.common.session import Session
@@ -17,6 +17,7 @@ from pts.pyspark.common.session import Session
 def target_prioritisation(
     source: dict[str, str],
     destination: str,
+    _settings: dict[str, Any],
     properties: dict[str, str],
 ) -> None:
     """Compute target prioritisation features.
@@ -32,6 +33,7 @@ def target_prioritisation(
             - uniprot_slterms: UniProt subcellular location terms TSV
             - mouse_pheno_scores: Mouse phenotype scores parquet
         destination: Path to write the output parquet file.
+        _settings: Unused settings dictionary (reserved for future use).
         properties: Spark configuration options.
     """
     spark = Session(app_name='target_prioritisation', properties=properties)
