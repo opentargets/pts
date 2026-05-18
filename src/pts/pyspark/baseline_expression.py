@@ -23,8 +23,15 @@ from pts.pyspark.expression_utils.validation_lut import (
 def _resolve_pride_target_ids(
     spark: SparkSession,
     merged_df: DataFrame,
-    target_index_path: str,
+    target_index_path: str | None,
 ) -> DataFrame:
+    if target_index_path is None:
+        logger.warning(
+            'target_index not provided in source config. '
+            'Skipping PRIDE target ID resolution.'
+        )
+        return merged_df
+
     if 'datasourceId' not in merged_df.columns:
         logger.warning(
             'Missing datasourceId column in merged baseline expression. '
