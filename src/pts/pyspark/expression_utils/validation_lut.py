@@ -2,8 +2,8 @@
 
 The target/biosample indexes that feed validation always come from the
 canonical OT outputs (`output/target` and `output/biosample`) so we assume
-their schemas (`id`, `proteinIds`, `approvedSymbol`, `biotype`,
-`obsoleteTerms`).
+their schemas (`id`, `proteinIds`, `approvedSymbol`, `biotype`).
+The biosample index may optionally include `obsoleteTerms`.
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ def prepare_target_lut(df: DataFrame) -> DataFrame:
 
 def prepare_biosample_lut(df: DataFrame) -> DataFrame:
     """Explode biosample index rows into `(biosampleId, biosampleFromSourceMappedId)`."""
-    aliases = f.concat(
-        f.array(f.col('id')),
-        f.coalesce(f.col('obsoleteTerms'), f.array().cast(_STRING_ARRAY)),
-    )
+    arrays = [f.array(f.col('biosampleId'))]
+    if 'obsoleteTerms' in df.columns:
+        arrays.append(f.coalesce(f.col('obsoleteTerms'), f.array().cast(_STRING_ARRAY)))
+    aliases = f.concat(*arrays)
     return (
         df.select(
-            f.col('id').alias('biosampleId'),
+            f.col('biosampleId'),
             f.explode(aliases).alias('biosampleFromSourceMappedId'),
         )
         .filter(f.col('biosampleFromSourceMappedId').isNotNull())

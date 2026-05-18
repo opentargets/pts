@@ -20,7 +20,6 @@ QC_COLUMN = 'qualityControls'
 class BaselineExpressionFlags(StrEnum):
     INVALID_TARGET = 'No valid target'
     INVALID_BIOSAMPLE = 'No valid biosample'
-    INVALID_BIOTYPE = 'Invalid biotype'
 
 
 def _ensure_qc(df: DataFrame) -> DataFrame:
@@ -36,27 +35,19 @@ def _flag(df: DataFrame, condition, flag: BaselineExpressionFlags) -> DataFrame:
 def validate_target(
     df: DataFrame,
     target_lut: DataFrame,
-    invalid_biotypes: list[str] | None = None,
 ) -> DataFrame:
-    """Resolve `targetId` aliases via the target LUT and flag missing/invalid biotypes."""
+    """Resolve `targetId` aliases via the target LUT"""
     df = _ensure_qc(df)
     lut = f.broadcast(target_lut).select(
         f.col('targetId').alias('_mappedTargetId'),
-        f.col('targetFromSourceId').alias('_lookupId'),
-        f.col('biotype').alias('_biotype'),
+        f.col('targetFromSourceId').alias('_lookupId')
     )
     joined = df.join(lut, df['targetId'] == f.col('_lookupId'), 'leftouter')
     flagged = _flag(joined, f.col('_mappedTargetId').isNull(), BaselineExpressionFlags.INVALID_TARGET)
-    if invalid_biotypes:
-        flagged = _flag(
-            flagged,
-            f.col('_biotype').isin(list(invalid_biotypes)),
-            BaselineExpressionFlags.INVALID_BIOTYPE,
-        )
     return (
         flagged
         .withColumn('targetId', f.coalesce(f.col('_mappedTargetId'), f.col('targetId')))
-        .drop('_mappedTargetId', '_lookupId', '_biotype')
+        .drop('_mappedTargetId', '_lookupId')
     )
 
 

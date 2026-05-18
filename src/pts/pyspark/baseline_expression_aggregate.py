@@ -114,6 +114,8 @@ class AggregateExpression:
             'datatypeId',
             'unit'
         ]
+        if 'targetFromSourceId' in self.df.columns:
+            groupby_cols.append('targetFromSourceId')
         if 'tissueBiosampleId' in self.df.columns:
             groupby_cols.append('tissueBiosampleId')
             groupby_cols.append('tissueBiosampleFromSource')

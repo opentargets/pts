@@ -1,7 +1,7 @@
 ---
 work_path: ./pipeline_work
 log_level: DEBUG
-pool_size: 2
+pool_size: 4
 
 scratchpad: {}
 
@@ -225,22 +225,24 @@ steps:
         - pyspark baseline expression harmonise
         - pyspark baseline expression specificity
 
-  baseline_expression_merge:
+  baseline_expression:
     - name: explode baseline expression merge and validate by aggregation
       each_placeholder: aggregation
       foreach:
-        - unaggregated
+        # - unaggregated
         - aggregated
       do:
-        - name: pyspark baseline expression merge ${aggregation}
-          pyspark: baseline_expression_merge
+        - name: pyspark baseline expression ${aggregation}
+          pyspark: baseline_expression
           source:
             baseline_expression: intermediate/baseline_expression
             target_index: output/target
             biosample_index: output/biosample
             tissue_parents: input/baseline_expression/tissue-parent_mapping.tsv
             celltype_parents: input/baseline_expression/celltype-parent_mapping.tsv
-          destination: output/baseline_expression/${aggregation}/merged/parquet
+          destination:
+            valid: output/baseline_expression/${aggregation}/merged/valid
+            failed: excluded/baseline_expression/${aggregation}/merged/failed
           settings:
             aggregation: ${aggregation}
             datasets:
@@ -250,32 +252,6 @@ steps:
               - tabula_sapiens/tissue
               - tabula_sapiens/tissue_celltype
               - DICE/celltype
-        - name: pyspark baseline expression validate ${aggregation}
-          pyspark: baseline_expression_validate
-          source:
-            merged: output/baseline_expression/${aggregation}/merged/parquet
-            target_path: output/target
-            biosample_path: output/biosample
-          destination:
-            valid: output/baseline_expression/${aggregation}/merged/valid
-            failed: output/baseline_expression/${aggregation}/merged/failed
-          settings:
-            excluded_biotypes: []
-          requires:
-            - pyspark baseline expression merge ${aggregation}
-    - name: pyspark baseline expression target prioritisation
-      pyspark: baseline_expression_target_prioritisation
-      source:
-        aggregated: output/baseline_expression/aggregated/merged/valid
-      destination:
-        parquet: output/baseline_expression/target_prioritisation_factors/parquet
-        tsv: output/baseline_expression/target_prioritisation_factors/target-prioritisation-factors.tsv
-      settings:
-        excluded_datasources:
-          - PRIDE
-          - DICE
-      requires:
-        - pyspark baseline expression validate aggregated
 
   ##################################################################################################
 
@@ -800,7 +776,7 @@ steps:
         mouse_phenotypes: output/mouse_phenotype
         molecule: output/drug_molecule
         mechanism_of_action: output/drug_mechanism_of_action
-        hpa_data: input/target_prioritisation/proteinatlas.json.gz
+        baseline_expression: output/baseline_expression/aggregated/merged/valid
         uniprot_slterms: input/target_prioritisation/uniprot_locations.tsv.gz
         mouse_pheno_scores: input/target_prioritisation/mouse_pheno_scores.csv
       destination: output/target_prioritisation
