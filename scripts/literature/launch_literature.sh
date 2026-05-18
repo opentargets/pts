@@ -56,6 +56,14 @@ SHUFFLE_ENTITY="10000"
 COALESCE_MATCH_VALID="600"
 COALESCE_MATCH_FAILED="530"
 
+# Output partition counts for cooccurrence_evidence writes. Same small-file
+# pattern observed at run-016 scale (cooccurrence wrote 3752 files at ~2.7 MB
+# each); targets ~250 MB per parquet file:
+#   9.82 GB cooccurrence  / 40 partitions ≈ 245 MB / file
+#   7.84 GB evidence      / 32 partitions ≈ 245 MB / file
+COALESCE_COOCCURRENCE="40"
+COALESCE_EVIDENCE="32"
+
 # ── Args ────────────────────────────────────────────────────────────────────
 RUN_ID="${1:-run-001}"
 PTS_REF="${2:-vh-add-literature}"
@@ -252,6 +260,9 @@ steps:
       destination:
         cooccurrence: intermediate/literature/cooccurrence
         evidence: intermediate/evidence/literature_epmc
+      settings:
+        cooccurrence_coalesce: ${COALESCE_COOCCURRENCE}
+        evidence_coalesce: ${COALESCE_EVIDENCE}
       properties:
         spark.sql.shuffle.partitions: '${SHUFFLE_COOC}'
         spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'

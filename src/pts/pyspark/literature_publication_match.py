@@ -16,6 +16,7 @@ from loguru import logger
 from pyspark.sql import functions as f
 
 from pts.pyspark.common.session import Session
+from pts.pyspark.common.utils import maybe_coalesce
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -61,28 +62,6 @@ def _maybe_repartition(df: DataFrame, repartition: int | None) -> DataFrame:
     """
     if repartition:
         return df.repartition(repartition)
-    return df
-
-
-def _maybe_coalesce(df: DataFrame, n: int | None) -> DataFrame:
-    """Coalesce a DataFrame to a fixed partition count when configured.
-
-    Used at the write boundary to avoid emitting many small parquet files when
-    the upstream shuffle partition count is high. Coalesce is a narrow
-    transformation that merges partitions without a network shuffle, so it
-    only reduces file count -- it does not rebalance data. Use it when the
-    upstream partitioning is already balanced (e.g. after a salted shuffle)
-    and you only need to consolidate output files.
-
-    Args:
-        df: DataFrame to coalesce.
-        n: Target partition count. Falsy values leave ``df`` unchanged.
-
-    Returns:
-        The coalesced DataFrame, or ``df`` unchanged when ``n`` is falsy.
-    """
-    if n:
-        return df.coalesce(n)
     return df
 
 
@@ -232,7 +211,7 @@ def literature_publication_match(
         f'write valid matches to {destination["match_valid"]} '
         f'(coalesce={match_valid_coalesce})'
     )
-    _maybe_coalesce(match_valid, match_valid_coalesce).write.mode('overwrite').parquet(
+    maybe_coalesce(match_valid, match_valid_coalesce).write.mode('overwrite').parquet(
         destination['match_valid']
     )
 
@@ -240,7 +219,7 @@ def literature_publication_match(
         f'write failed matches to {destination["match_failed"]} '
         f'(coalesce={match_failed_coalesce})'
     )
-    _maybe_coalesce(match_failed, match_failed_coalesce).write.mode('overwrite').parquet(
+    maybe_coalesce(match_failed, match_failed_coalesce).write.mode('overwrite').parquet(
         destination['match_failed']
     )
 
