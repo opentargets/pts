@@ -300,6 +300,23 @@ echo "  ${NUM_JARS} JARs"
 # secondaries lose shuffle data mid-job and tank shuffle-heavy stages
 # (publication_match, embedding, cooccurrence). Component Gateway is enabled
 # for Spark/YARN UI access via Cloud Console.
+# Shuffle resilience knobs absorb the kind of transient External Shuffle
+# Service connection drops we saw in run-016 (438 FetchFailed events
+# stretched across 3 stage 244 retries; all "Connection from sw-XXXX:7337
+# closed" errors). With Spark defaults (maxRetries=3, retryWait=5s) a 30s
+# blip blew through retries and triggered stage recomputes. The bumped
+# values give Spark 10 x 15s = 150s to absorb a transient drop silently.
+# Capping in-flight blocks per source avoids overwhelming a wobbly ESS.
+CLUSTER_PROPERTIES=(
+  "spark:spark.jars=${SPARK_NLP_JARS}"
+  "spark:spark.sql.autoBroadcastJoinThreshold=134217728"
+  "spark:spark.shuffle.io.maxRetries=10"
+  "spark:spark.shuffle.io.retryWait=15s"
+  "spark:spark.network.timeout=300s"
+  "spark:spark.reducer.maxBlocksInFlightPerAddress=128"
+)
+CLUSTER_PROPERTIES_JOINED="$(IFS='#'; echo "${CLUSTER_PROPERTIES[*]}")"
+
 echo "Creating Dataproc cluster ${CLUSTER_NAME}..."
 gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --project="${PROJECT}" \
@@ -321,7 +338,7 @@ gcloud dataproc clusters create "${CLUSTER_NAME}" \
   --public-ip-address \
   --enable-component-gateway \
   --labels="workload=literature,run-id=${RUN_ID}" \
-  --properties="^#^spark:spark.jars=${SPARK_NLP_JARS}#spark:spark.sql.autoBroadcastJoinThreshold=134217728"
+  --properties="^#^${CLUSTER_PROPERTIES_JOINED}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 # Submit a single step against the shared cluster (async). Informational lines
