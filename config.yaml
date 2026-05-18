@@ -1792,39 +1792,6 @@ steps:
         evidence: intermediate/evidence/literature_epmc
   ##################################################################################################
 
-  #: LITERATURE_PUBLICATION STEP :#########################################################
-  literature_publication:
-    - name: pyspark literature publication
-      pyspark: literature_publication
-      source:
-        pub_id_lut: input/literature/PMID_PMCID_DOI.csv.gz
-        epmc_publication: gs://otar025-epmc/ml02
-      destination:
-        publication: intermediate/literature/publication
-  ##################################################################################################
-
-  #: LITERATURE_MATCH STEP :#########################################################
-  literature_match:
-    - name: pyspark literature match
-      pyspark: literature_match
-      source:
-        publication: intermediate/literature/publication
-        ontoma_disease_target_drug_label_lut: intermediate/ontoma/disease_target_drug_label_lookup_table.parquet
-      destination:
-        match_valid: intermediate/literature/match
-        match_failed: excluded/literature/match
-  ##################################################################################################
-
-    #: LITERATURE_COOCCURRENCE STEP :#########################################################
-  literature_cooccurrence:
-    - name: pyspark literature cooccurrence
-      pyspark: literature_cooccurrence
-      source:
-        match: intermediate/literature/match
-      destination:
-        cooccurrence: intermediate/literature/cooccurrence
-  ##################################################################################################
-
   #: LITERATURE_PUBLICATION_MATCH STEP (collapsed publication + match) :###########################
   literature_publication_match:
     - name: pyspark literature publication match
