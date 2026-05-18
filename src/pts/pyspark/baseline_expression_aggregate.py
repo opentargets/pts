@@ -46,74 +46,21 @@ class AggregateExpression:
         # Find the rows where both tissue and celltype biosample ID are null or
         # tissue and cell biosample parent ID are null
         nulls = self.df.filter(
-            ((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull())) |
-            ((self.df['tissueBiosampleParentId'].isNull()) & (self.df['celltypeBiosampleParentId'].isNull()))
+            ((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull()))
+            | ((self.df['tissueBiosampleParentId'].isNull()) & (self.df['celltypeBiosampleParentId'].isNull()))
         )
-        logger.info(f'The following biosample from source have null biosample IDs: {nulls}')
+        logger.info('The following biosample rows from source have null biosample IDs:')
+        nulls.show(truncate=False)
         # Then drop those rows from the dataframe
+        self.df = self.df.filter(~((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull())))
         self.df = self.df.filter(
-            ~((self.df['tissueBiosampleId'].isNull()) & (self.df['celltypeBiosampleId'].isNull()))
+            ~((self.df['tissueBiosampleParentId'].isNull()) & (self.df['celltypeBiosampleParentId'].isNull()))
         )
-        self.df = self.df.filter(
-            ~(
-                (self.df['tissueBiosampleParentId'].isNull())
-                & (self.df['celltypeBiosampleParentId'].isNull())
-            )
-        )
-
-    def within_donor_mean(self,
-                        tissue_col: str = 'tissueBiosampleId',
-                        celltype_col: str = 'celltypeBiosampleId',
-                        expr_col: str = 'expression',
-                        sep: str = ', '):
-        """Group by ALL columns except `expr_col`, `tissue_col`, and `celltype_col`."""
-        df = self.df
-
-        # Columns to group by
-        group_cols = [c for c in df.columns if c not in {expr_col, tissue_col, celltype_col}]
-
-        if group_cols:
-            agg_df = (
-                df.groupBy(group_cols)
-                .agg(
-                    f.avg(f.col(expr_col)).alias(expr_col),
-                    f.collect_set(f.col(tissue_col)).alias('_tissues'),
-                    f.collect_set(f.col(celltype_col)).alias('_celltypes'),
-                )
-            )
-        else:
-            # If nothing to group by, aggregate globally
-            agg_df = df.agg(
-                f.avg(f.col(expr_col)).alias(expr_col),
-                f.collect_set(f.col(tissue_col)).alias('_tissues'),
-                f.collect_set(f.col(celltype_col)).alias('_celltypes'),
-            )
-
-        # Helper: trim -> drop null/empty -> sort -> join
-        def join_sorted(arr_col, out_name):
-            arr_trim = f.transform(f.col(arr_col), lambda x: f.when(x.isNull(), None).otherwise(f.trim(x)))
-            arr_keep = f.filter(arr_trim, lambda x: x.isNotNull() & (x != ''))  # noqa: PLC1901
-            arr_sorted = f.array_sort(arr_keep)  # simple lexicographic sort; duplicates preserved
-            return f.when(f.size(arr_sorted) > 0, f.array_join(arr_sorted, sep)).otherwise(f.lit(None)).alias(out_name)
-
-        agg_df = (
-            agg_df
-            .withColumn(tissue_col, join_sorted('_tissues', tissue_col))
-            .withColumn(celltype_col, join_sorted('_celltypes', celltype_col))
-            .drop('_tissues', '_celltypes')
-        )
-
-        self.df = agg_df
 
     def calculate_quartiles(self, local=False):
         """This function calculates the expression quartiles of each gene across all donors."""
         # Define the grouping cols
-        groupby_cols = [
-            'targetId',
-            'datasourceId',
-            'datatypeId',
-            'unit'
-        ]
+        groupby_cols = ['targetId', 'datasourceId', 'datatypeId', 'unit']
         if 'targetFromSourceId' in self.df.columns:
             groupby_cols.append('targetFromSourceId')
         if 'tissueBiosampleId' in self.df.columns:
@@ -124,18 +71,15 @@ class AggregateExpression:
             groupby_cols.append('celltypeBiosampleFromSource')
 
         # Partition by grouping keys
-        quartile_df = self.df.repartition(
-            *groupby_cols
-        )
+        quartile_df = self.df.repartition(*groupby_cols)
 
         # Define the quantile probabilities
         quartile_probs = [0, 0.25, 0.50, 0.75, 1]
 
         # Group and compute approximate quantiles, default params
-        quartile_df = quartile_df.groupBy(
-            *groupby_cols
-        ).agg(
-            f.percentile_approx('expression', quartile_probs).alias('q_vals'))
+        quartile_df = quartile_df.groupBy(*groupby_cols).agg(
+            f.percentile_approx('expression', quartile_probs).alias('q_vals')
+        )
 
         quartile_df = quartile_df.select(
             *groupby_cols,
@@ -143,7 +87,7 @@ class AggregateExpression:
             f.col('q_vals')[1].alias('q1'),
             f.col('q_vals')[2].alias('median'),
             f.col('q_vals')[3].alias('q3'),
-            f.col('q_vals')[4].alias('max')
+            f.col('q_vals')[4].alias('max'),
         )
         self.df = quartile_df
 
@@ -153,12 +97,7 @@ class AggregateExpression:
         Then calculates the distribution of expression values for each gene.
         """
         # Group by the relevant columns and count the number of non-zero expressions
-        return self.df.groupBy(
-            'targetId',
-            'datasourceId',
-            'datatypeId',
-            'unit'
-        ).agg(
+        return self.df.groupBy('targetId', 'datasourceId', 'datatypeId', 'unit').agg(
             (f.sum(f.when(f.col('median') > threshold, 1).otherwise(0)) / f.count('*')).alias('distribution_score')
         )
 
@@ -166,11 +105,7 @@ class AggregateExpression:
         """Load cellex biosample scores and convert from wide to long format."""
         # Read the cellex data (CSV.gz format)
         cellex_df = (
-            self.spark.read
-            .option('header', True)
-            .option('inferSchema', True)
-            .option('sep', ',')
-            .csv(cellex_path)
+            self.spark.read.option('header', True).option('inferSchema', True).option('sep', ',').csv(cellex_path)
         )
 
         # Get the first column (gene IDs) and all other columns (biosample IDs)
@@ -179,8 +114,7 @@ class AggregateExpression:
 
         # Create array of structs for each biosample
         biosample_structs = f.array(*[
-            f.struct(f.lit(col_name).alias('biosampleId'),
-                    f.col(col_name).alias('specificity_score'))
+            f.struct(f.lit(col_name).alias('biosampleId'), f.col(col_name).alias('specificity_score'))
             for col_name in biosample_cols
         ]).alias('biosample_scores')
 
@@ -188,12 +122,11 @@ class AggregateExpression:
         # (inferSchema may infer STRING when CSV cells contain "NA" or similar)
         return (
             cellex_df
-            .select(f.col(gene_col).alias('targetId'),
-                   f.explode(biosample_structs).alias('x'))
+            .select(f.col(gene_col).alias('targetId'), f.explode(biosample_structs).alias('x'))
             .select(
                 'targetId',
                 f.col('x.biosampleId').alias('biosampleId'),
-                f.col('x.specificity_score').cast('double').alias('specificity_score')
+                f.col('x.specificity_score').cast('double').alias('specificity_score'),
             )
             .filter(f.col('specificity_score').isNotNull())  # Remove null scores
         )
@@ -212,8 +145,7 @@ class AggregateExpression:
             biosample_col = 'celltypeBiosampleId__tissueBiosampleId'
             # Create the combined column in the main dataframe
             self.df = self.df.withColumn(
-                biosample_col,
-                f.concat(f.col('celltypeBiosampleId'), f.lit('__'), f.col('tissueBiosampleId'))
+                biosample_col, f.concat(f.col('celltypeBiosampleId'), f.lit('__'), f.col('tissueBiosampleId'))
             )
         else:
             raise ValueError("biosample_type must be  'tissue', 'celltype' or 'both'")
@@ -222,12 +154,7 @@ class AggregateExpression:
         cellex_df = cellex_df.withColumnRenamed('biosampleId', biosample_col)
 
         # Join with the main dataframe
-        self.df = (
-            self.df
-            .join(cellex_df,
-                  on=['targetId', biosample_col],
-                  how='left')
-        )
+        self.df = self.df.join(cellex_df, on=['targetId', biosample_col], how='left')
         # Drop the celltypeBiosampleId__tissueBiosampleId column
         if biosample_type == 'both':
             self.df = self.df.drop('celltypeBiosampleId__tissueBiosampleId')
@@ -237,12 +164,10 @@ class AggregateExpression:
         # if not os.path.exists(output_directory):
         #     os.makedirs(output_directory)
         if json:
-            self.df.write.mode('overwrite') \
-                .json(f'{output_directory}/json/')
+            self.df.write.mode('overwrite').json(f'{output_directory}/json/')
         else:
             # If not JSON, write as parquet
-            self.df.write.mode('overwrite') \
-                .parquet(f'{output_directory}/parquet/')
+            self.df.write.mode('overwrite').parquet(f'{output_directory}/parquet/')
 
 
 # Default Spark properties for the aggregate step

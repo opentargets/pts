@@ -47,7 +47,7 @@ def baseline_expression_specificity(
             output_path=destination,
             biosample=biosample,
             sample_id=settings.get('sample_id'),
-            do_anova=settings.get('do_anova', True)
+            do_anova=settings.get('do_anova', True),
         )
         cellex_analysis.run()
     else:

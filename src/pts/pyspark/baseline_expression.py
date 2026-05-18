@@ -6,7 +6,6 @@ from typing import Any
 from loguru import logger
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as f
-from pyspark.sql.functions import coalesce, col, explode
 
 from pts.pyspark.common.session import Session
 from pts.pyspark.expression_utils.expression import (
@@ -23,46 +22,49 @@ from pts.pyspark.expression_utils.validation_lut import (
 def _resolve_pride_target_ids(
     spark: SparkSession,
     merged_df: DataFrame,
-    target_index_path: str,
+    target_index_path: str | None,
 ) -> DataFrame:
+    if target_index_path is None:
+        logger.warning('target_index not provided in source config. Skipping PRIDE target ID resolution.')
+        return merged_df
+
     if 'datasourceId' not in merged_df.columns:
         logger.warning(
-            'Missing datasourceId column in merged baseline expression. '
-            'Skipping PRIDE target ID resolution.'
+            'Missing datasourceId column in merged baseline expression. Skipping PRIDE target ID resolution.'
         )
         return merged_df
 
     if 'targetFromSourceId' not in merged_df.columns:
         logger.warning(
-            'Missing targetFromSourceId column in merged baseline expression. '
-            'Skipping PRIDE target ID resolution.'
+            'Missing targetFromSourceId column in merged baseline expression. Skipping PRIDE target ID resolution.'
         )
         return merged_df
 
     logger.info('Resolving PRIDE UniProt IDs to Ensembl target IDs during merge')
 
     target_mapping = (
-        spark.read.parquet(target_index_path)
+        spark.read
+        .parquet(target_index_path)
         .select(
-            col('id').alias('resolvedTargetId'),
-            explode(col('proteinIds')).alias('proteinId'),
+            f.col('id').alias('resolvedTargetId'),
+            f.explode(f.col('proteinIds')).alias('proteinId'),
         )
         .select(
-            col('proteinId.id').alias('proteinId'),
-            col('resolvedTargetId'),
+            f.col('proteinId.id').alias('proteinId'),
+            f.col('resolvedTargetId'),
         )
-        .filter(col('proteinId').isNotNull())
+        .filter(f.col('proteinId').isNotNull())
     )
 
-    pride_rows = merged_df.filter(col('datasourceId') == 'PRIDE')
-    non_pride_rows = merged_df.filter(col('datasourceId') != 'PRIDE')
+    pride_rows = merged_df.filter(f.col('datasourceId') == 'PRIDE')
+    non_pride_rows = merged_df.filter(f.col('datasourceId') != 'PRIDE')
 
     pride_rows = (
         pride_rows
         .drop('targetId')
         .join(target_mapping, pride_rows['targetFromSourceId'] == target_mapping['proteinId'], how='left')
         .drop('proteinId')
-        .withColumn('targetId', coalesce(col('resolvedTargetId'), col('targetFromSourceId')))
+        .withColumn('targetId', f.coalesce(f.col('resolvedTargetId'), f.col('targetFromSourceId')))
         .drop('resolvedTargetId')
     )
 
@@ -135,14 +137,16 @@ def _override_biosample_id(
     )
     min_key_by_norm = enriched.groupBy('norm').agg(f.min(f.col(key_col)).alias(key_col))
     mapping_norm = (
-        enriched.join(min_key_by_norm, on=['norm', key_col], how='inner')
+        enriched
+        .join(min_key_by_norm, on=['norm', key_col], how='inner')
         .select('norm', key_col, 'pretty')
         .dropDuplicates(['norm'])
     )
     enriched.unpersist()
 
     return (
-        df.withColumn('norm', norm(source_col))
+        df
+        .withColumn('norm', norm(source_col))
         .drop(id_col)
         .join(f.broadcast(mapping_norm), on='norm', how='left')
         .withColumn(id_col, f.col(key_col))
@@ -166,26 +170,18 @@ def _add_parental_biosample_id(
         source_col = 'celltypeBiosampleFromSource'
 
     if id_col not in df.columns:
-        logger.warning(
-            f'Missing {id_col} column in merged baseline expression. '
-            f'Skipping {parent_col_name} resolution.'
-        )
+        logger.warning(f'Missing {id_col} column in merged baseline expression. Skipping {parent_col_name} resolution.')
         return df
 
     if source_col not in df.columns:
         logger.warning(
-            f'Missing {source_col} column in merged baseline expression. '
-            f'Skipping {parent_col_name} resolution.'
+            f'Missing {source_col} column in merged baseline expression. Skipping {parent_col_name} resolution.'
         )
         return df
 
     biosample_index = spark.read.parquet(biosample_index_path)
     potential_parents_df = (
-        spark.read
-        .option('header', True)
-        .option('inferSchema', True)
-        .option('sep', '\t')
-        .csv(potential_parents_path)
+        spark.read.option('header', True).option('inferSchema', True).option('sep', '\t').csv(potential_parents_path)
     )
 
     parent_col = potential_parents_df.columns[0]
@@ -201,11 +197,11 @@ def _add_parental_biosample_id(
     # Higher ancestor_count => more specific => higher priority (lower priority value).
     potential_parents_list.sort(key=lambda value: count_map.get(value, -1), reverse=True)
 
-    # Build a small (parent_id, priority) lookup DataFrame 
+    # Build a small (parent_id, priority) lookup DataFrame
     priority_rows = [(pid, idx) for idx, pid in enumerate(potential_parents_list)]
     priority_df = spark.createDataFrame(priority_rows, ['__parent_candidate', '__parent_priority'])
 
-    # For each biosample in the index, expand to (biosampleId, candidate) over self ∪ ancestors,
+    # For each biosample in the index, expand to (biosampleId, candidate) over self plus ancestors,
     # join to the priority list, and keep the highest-priority match per biosample.
     biosample_to_parent = (
         biosample_index
@@ -226,7 +222,7 @@ def _add_parental_biosample_id(
         )
     )
 
-    df_with_parent = df.join(biosample_to_parent, on=id_col, how='left')
+    df_with_parent = df.join(biosample_to_parent, on=id_col, how='left').cache()
 
     null_parent_df = df_with_parent.filter(f.col(parent_col_name).isNull())
     if null_parent_df.take(1):
@@ -324,11 +320,17 @@ def baseline_expression(
         validated = validate_biosample(validated, biosample_lut, 'tissueBiosampleId', 'tissueBiosampleFromSource')
         validated = validate_biosample(validated, biosample_lut, 'celltypeBiosampleId', 'celltypeBiosampleFromSource')
         validated = validate_biosample(validated, biosample_lut, 'tissueBiosampleParentId', 'tissueBiosampleFromSource')
-        validated = validate_biosample(validated, biosample_lut, 'celltypeBiosampleParentId', 'celltypeBiosampleFromSource')
+        validated = validate_biosample(
+            validated, biosample_lut, 'celltypeBiosampleParentId', 'celltypeBiosampleFromSource'
+        )
+        validated = validated.persist()
 
-        valid, invalid = split_valid_invalid(validated)
-        valid.write.mode('overwrite').parquet(destination['valid'])
-        invalid.write.mode('overwrite').parquet(destination['failed'])
+        try:
+            valid, invalid = split_valid_invalid(validated)
+            valid.write.mode('overwrite').parquet(destination['valid'])
+            invalid.write.mode('overwrite').parquet(destination['failed'])
+        finally:
+            validated.unpersist()
     finally:
         session.stop()
 

@@ -100,18 +100,11 @@ class DiceBaselineExpression:
         if not data_cols:
             raise ValueError('No sample columns found after binding.')
         samp_structs = array(*[
-            struct(lit(c).alias('donorId'), col(c).cast('double').alias('expression'))
-            for c in data_cols
+            struct(lit(c).alias('donorId'), col(c).cast('double').alias('expression')) for c in data_cols
         ]).alias('samp_tpm')
 
-        return (
-            wide_df
-            .select('Feature_name', explode(samp_structs).alias('x'))
-            .select(
-                col('Feature_name'),
-                col('x.donorId').alias('donorId'),
-                col('x.expression').alias('expression')
-            )
+        return wide_df.select('Feature_name', explode(samp_structs).alias('x')).select(
+            col('Feature_name'), col('x.donorId').alias('donorId'), col('x.expression').alias('expression')
         )
 
     def _join_celltype_mapping(self, df_long: DataFrame, mapping_path: str) -> DataFrame:
@@ -120,12 +113,7 @@ class DiceBaselineExpression:
         df_long = df_long.withColumn('celltype', split(col('donorId'), '-').getItem(0))
 
         # Read mapping
-        mapping = (
-            self.spark.read
-            .option('header', True)
-            .option('sep', '\t')
-            .csv(mapping_path)
-        )
+        mapping = self.spark.read.option('header', True).option('sep', '\t').csv(mapping_path)
         required = {'celltype', 'full_name', 'ontology_id'}
         missing = required - set(mapping.columns)
         if missing:
@@ -151,6 +139,7 @@ class DiceBaselineExpression:
             logger.info(f'Data written to {out_path}')
 
         # ---------- Public API ----------
+
     def run(self):
         logger.info('Reading and unifying DICE matrices...')
         wide_df = self._read_and_bind_dice_csvs(self.dice_directory)

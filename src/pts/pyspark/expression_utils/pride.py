@@ -8,7 +8,6 @@ Expected input formats:
 - Tissue to ontology mapping: TSV file with columns PROPERTY VALUE, ONTOLOGY TERM(S)
 """
 
-
 from loguru import logger
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
@@ -37,7 +36,7 @@ class PrideBaselineExpression:
         output_directory_path: str,
         tissue_ontology_mapping_path: str,
         json: bool = False,
-        local: bool = True
+        local: bool = True,
     ):
         self.spark = spark
         self.pride_source_data_dir = pride_source_data_dir
@@ -48,29 +47,18 @@ class PrideBaselineExpression:
         self.local = local
         self.df = None
 
-    def read_pride_data(
-        self,
-        pride_code: str
-    ):
+    def read_pride_data(self, pride_code: str):
         pride_source_data_path = f'{self.pride_source_data_dir}/{pride_code}/{pride_code}_OpenTargets_ppb.txt'
         pride_sdrf_path = f'{self.pride_source_data_dir}/{pride_code}/{pride_code}_OpenTargets_sdrf.json'
         # Read the PRIDE matrix file
-        pride_matrix = (
-            self.spark.read
-            .option('sep', '\t')
-            .option('header', 'true')
-            .csv(pride_source_data_path)
-        )
+        pride_matrix = self.spark.read.option('sep', '\t').option('header', 'true').csv(pride_source_data_path)
 
         # Extract and normalize the UniProt IDs from PRIDE source data.
         orig_cols = pride_matrix.columns
 
         pride_matrix = (
             pride_matrix
-            .withColumn(
-                'proteinId',
-                element_at(split(col('Protein IDs'), r'\|'), 2)
-            )
+            .withColumn('proteinId', element_at(split(col('Protein IDs'), r'\|'), 2))
             .withColumn('proteinId', regexp_replace('proteinId', r'-\d+$', ''))  # optional, removes isoform suffix
             # if the proteinId column is NULL use the original Protein IDs
             .withColumn('proteinId', coalesce(col('proteinId'), col('Protein IDs')))
@@ -82,32 +70,25 @@ class PrideBaselineExpression:
 
         # build an array<struct<Sample:string,PPB:double>>
         samp_structs = array(*[
-            struct(lit(c).alias('Sample'), col(c).cast('double').alias('PPB'))
-            for c in data_cols
+            struct(lit(c).alias('Sample'), col(c).cast('double').alias('PPB')) for c in data_cols
         ]).alias('samp_ppb')
 
-        pride_long = (
-            pride_matrix
-            .select('proteinId', 'Gene Symbol', 'Protein IDs', explode(samp_structs).alias('x'))
-            .select(
-                col('proteinId'),
-                col('Gene Symbol'),
-                col('Protein IDs'),
-                col('x.Sample').alias('assayId'),
-                col('x.PPB')
-            )
+        pride_long = pride_matrix.select(
+            'proteinId', 'Gene Symbol', 'Protein IDs', explode(samp_structs).alias('x')
+        ).select(
+            col('proteinId'), col('Gene Symbol'), col('Protein IDs'), col('x.Sample').alias('assayId'), col('x.PPB')
         )
 
         # Read the PRIDE SDRF file
         pride_sdrf = (
             self.spark.read
-            .option('multiline', True)   # important for JSON
+            .option('multiline', True)  # important for JSON
             .json(pride_sdrf_path)
             .withColumn('ex', explode('experimentalDesigns'))
             .select('experimentId', col('ex.*'))
             # In the sex column, replace not available' with NULL
-            .withColumn('sex', when(col('sex') == 'not available', None).otherwise(col('sex')))
-            .withColumn('age', when(col('age') == 'not available', None).otherwise(col('age')))
+            .withColumn('sex', when(col('sex') == 'not available', lit(None)).otherwise(col('sex')))
+            .withColumn('age', when(col('age') == 'not available', lit(None)).otherwise(col('age')))
             # Deduplicate technical replicates: the expression matrix already has
             # them collapsed, so keep only one SDRF row per assayId.
             .dropDuplicates(['assayId'])
@@ -115,10 +96,7 @@ class PrideBaselineExpression:
 
         # Read the PRIDE ontology mapping
         pride_ontology_mapping = (
-            self.spark.read
-            .option('header', 'true')
-            .option('sep', '\t')
-            .csv(self.tissue_ontology_mapping_path)
+            self.spark.read.option('header', 'true').option('sep', '\t').csv(self.tissue_ontology_mapping_path)
         )
 
         # Drop the Count column
@@ -128,19 +106,13 @@ class PrideBaselineExpression:
         tissue_columns = [c for c in pride_ontology_mapping.columns if c != 'BiosampleId']
 
         # Create an array of structs for unpivoting (wide to long transformation)
-        tissue_structs = array(*[
-            struct(lit(c).alias('source'), col(c).alias('tissue'))
-            for c in tissue_columns
-        ])
+        tissue_structs = array(*[struct(lit(c).alias('source'), col(c).alias('tissue')) for c in tissue_columns])
 
         # Unpivot: explode the array and filter out null tissue values
         pride_ontology_mapping = (
             pride_ontology_mapping
             .select('BiosampleId', explode(tissue_structs).alias('tissue_struct'))
-            .select(
-                col('BiosampleId'),
-                col('tissue_struct.tissue').alias('tissue')
-            )
+            .select(col('BiosampleId'), col('tissue_struct.tissue').alias('tissue'))
             .filter(col('tissue').isNotNull())
             .filter(col('tissue') != lit(''))
             .distinct()  # Remove any duplicates that may arise
@@ -152,16 +124,14 @@ class PrideBaselineExpression:
             .join(pride_sdrf, on='assayId', how='left')
             .withColumn('donorId', concat(col('experimentId'), lit('-'), col('individual')))  # Add a column for donor
             .join(pride_ontology_mapping, on='tissue', how='left')
-            .select(
-                'proteinId', 'donorId', 'PPB', 'BiosampleId',
-                'age', 'sex', 'tissue'
-            )
+            .select('proteinId', 'donorId', 'PPB', 'BiosampleId', 'age', 'sex', 'tissue')
         )
 
         # Drop rows where tissueOntologyTerm is null
         pride_long = pride_long.filter(col('BiosampleId').isNotNull())
 
-        pride_long = (pride_long
+        pride_long = (
+            pride_long
             # Keep targetId populated for aggregation; resolve UniProt->Ensembl at merge step.
             .withColumn('targetId', col('proteinId'))
             .withColumnRenamed('PPB', 'expression')
@@ -180,13 +150,13 @@ class PrideBaselineExpression:
         else:
             self.df = pride_long
 
-    def pack_data_for_output(self, local: bool = False, json: bool = False):
+    def pack_data_for_output(self):
         """Use spark to write the DataFrame to parquet format."""
-        if local:
+        if self.local:
             output_path = f'file://{self.output_directory_path}'
         else:
             output_path = f'{self.output_directory_path}'
-        if json:
+        if self.json:
             output_path = f'{output_path}/json/'
             # If JSON output is requested, convert DataFrame to JSON format
             self.df.write.mode('overwrite').json(output_path)
@@ -203,4 +173,4 @@ class PrideBaselineExpression:
             logger.info(f'Processing PRIDE code: {pride_code}')
             self.read_pride_data(pride_code)
         logger.info('Packing data for output...')
-        self.pack_data_for_output(local=self.local, json=self.json)
+        self.pack_data_for_output()

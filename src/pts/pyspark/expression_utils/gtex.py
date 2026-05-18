@@ -8,7 +8,6 @@ Expected input formats:
 - Subject metadata: TSV file with columns SUBJID, AGE, SEX.
 """
 
-
 from loguru import logger
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, concat_ws, expr, lit, regexp_replace, split, when
@@ -27,7 +26,7 @@ class GtexBaselineExpression:
         json: bool = False,
         local: bool = True,
         matrix: bool = False,
-        no_efo: bool = False
+        no_efo: bool = False,
     ):
         self.spark = spark
         self.gtex_source_data_path = gtex_source_data_path
@@ -57,12 +56,7 @@ class GtexBaselineExpression:
         data_rdd = rdd.mapPartitionsWithIndex(_skip_first_n)
 
         # Now the first line is the real header (Name\tDescription\tGTEX-...)
-        df = (
-            self.spark.read
-            .option('sep', '\t')
-            .option('header', 'true')
-            .csv(data_rdd)
-        )
+        df = self.spark.read.option('sep', '\t').option('header', 'true').csv(data_rdd)
 
         # Clean up columns
         return (
@@ -91,19 +85,15 @@ class GtexBaselineExpression:
         # Build a stack() expression:  stack(N, 'col1', `col1`, 'col2', `col2`, ...)
         # This is the Spark-native unpivot and is orders of magnitude faster than
         # constructing a Python-side array of N structs.
-        stack_args = ', '.join(
-            f"'{c}', CAST(`{c}` AS DOUBLE)" for c in data_cols
-        )
+        stack_args = ', '.join(f"'{c}', CAST(`{c}` AS DOUBLE)" for c in data_cols)
         stack_expr = f'stack({n}, {stack_args}) AS (OrigSample, TPM)'
 
         df_long = df.select('Name', expr(stack_expr))
 
         # split OrigSample into donorId + sampleId (split on second “-”)
         parts = split(col('OrigSample'), '-', 3)
-        df_long = (
-            df_long
-            .withColumn('donorId', concat_ws('-', parts.getItem(0), parts.getItem(1)))
-            .withColumn('sampleId', parts.getItem(2))
+        df_long = df_long.withColumn('donorId', concat_ws('-', parts.getItem(0), parts.getItem(1))).withColumn(
+            'sampleId', parts.getItem(2)
         )
 
         # Read sample metadata and rename columns
@@ -124,35 +114,24 @@ class GtexBaselineExpression:
             .option('sep', '\t')
             .option('header', 'true')
             .csv(self.subject_metadata_path)
-            .select(
-                col('SUBJID').alias('donorId'),
-                col('AGE').alias('Age'),
-                col('SEX').alias('Sex')
-            )
-            .withColumn(
-                'Sex',
-                when(col('Sex') == '1', lit('M'))
-                .when(col('Sex') == '2', lit('F'))
-                .otherwise(lit('U'))
-            )
+            .select(col('SUBJID').alias('donorId'), col('AGE').alias('Age'), col('SEX').alias('Sex'))
+            .withColumn('Sex', when(col('Sex') == '1', lit('M')).when(col('Sex') == '2', lit('F')).otherwise(lit('U')))
         )
 
         # Broadcast the small metadata tables for efficient map-side joins
         from pyspark.sql.functions import broadcast
+
         df_long = (
             df_long
             .join(broadcast(meta_sample), on='OrigSample', how='left')
             .join(broadcast(meta_subject), on='donorId', how='left')
-            .select(
-                'Name', 'donorId', 'sampleId', 'TPM',
-                'Tissue', 'TissueOntologyID', 'Age', 'Sex'
-            )
+            .select('Name', 'donorId', 'sampleId', 'TPM', 'Tissue', 'TissueOntologyID', 'Age', 'Sex')
             # Replace : with _ in TissueOntologyID
             .withColumn(
                 'TissueOntologyID',
-                when(col('TissueOntologyID').isNotNull(),
-                     regexp_replace(col('TissueOntologyID'), ':', '_'))
-                .otherwise(lit(None))
+                when(col('TissueOntologyID').isNotNull(), regexp_replace(col('TissueOntologyID'), ':', '_')).otherwise(
+                    lit(None)
+                ),
             )
         )
 
@@ -222,12 +201,7 @@ class GtexBaselineExpression:
             temp_path = output_path + '_temp_write'
 
             # Write data to temp directory
-            (df.coalesce(1)
-            .write
-            .mode('overwrite')
-            .option('header', 'true')
-            .option('sep', '\t')
-            .csv(temp_path))
+            (df.coalesce(1).write.mode('overwrite').option('header', 'true').option('sep', '\t').csv(temp_path))
 
             # Rename the file
             spark = SparkSession.getActiveSession()
@@ -261,12 +235,7 @@ class GtexBaselineExpression:
 
         if self.no_efo:
             # Identify samples to drop (those starting with EFO)
-            efo_rows = (
-                meta_sample
-                .filter(col('TissueOntologyID').startswith('EFO'))
-                .select('OrigSample')
-                .collect()
-            )
+            efo_rows = meta_sample.filter(col('TissueOntologyID').startswith('EFO')).select('OrigSample').collect()
             efo_samples = [row.OrigSample for row in efo_rows]
             # Filter sample_ids
             self.sample_ids = [s for s in self.sample_ids if s not in efo_samples]
@@ -282,17 +251,8 @@ class GtexBaselineExpression:
             .option('sep', '\t')
             .option('header', 'true')
             .csv(self.subject_metadata_path)
-            .select(
-                col('SUBJID').alias('donorId'),
-                col('AGE').alias('age'),
-                col('SEX').alias('sex')
-            )
-            .withColumn(
-                'sex',
-                when(col('sex') == '1', lit('M'))
-                .when(col('sex') == '2', lit('F'))
-                .otherwise(lit('U'))
-            )
+            .select(col('SUBJID').alias('donorId'), col('AGE').alias('age'), col('SEX').alias('sex'))
+            .withColumn('sex', when(col('sex') == '1', lit('M')).when(col('sex') == '2', lit('F')).otherwise(lit('U')))
         )
 
         # Create metadata for each sample column
@@ -313,15 +273,24 @@ class GtexBaselineExpression:
             .join(meta_subject, on='donorId', how='left')
             .withColumn(
                 'tissueBiosampleId',
-                when(col('TissueOntologyID').isNotNull(),
-                     concat_ws('_', split(col('TissueOntologyID'), ':')))
-                .otherwise(lit(None))
+                when(
+                    col('TissueOntologyID').isNotNull(), concat_ws('_', split(col('TissueOntologyID'), ':'))
+                ).otherwise(lit(None)),
             )
             .withColumn('unit', lit('TPM'))
             .withColumn('datasourceId', lit('gtex'))
             .withColumn('datatypeId', lit('bulk rna-seq'))
-            .select('OrigSample', 'donorId', 'tissueBiosampleFromSource', 'tissueBiosampleId',
-                   'age', 'sex', 'unit', 'datasourceId', 'datatypeId')
+            .select(
+                'OrigSample',
+                'donorId',
+                'tissueBiosampleFromSource',
+                'tissueBiosampleId',
+                'age',
+                'sex',
+                'unit',
+                'datasourceId',
+                'datatypeId',
+            )
         )
 
         logger.info('Saving matrix and metadata as TSV files using Spark...')
