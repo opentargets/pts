@@ -1,6 +1,6 @@
 [project]
 name = "PTS"
-version = "26.03.12"
+version = "26.06.16"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -14,7 +14,6 @@ dependencies = [
   "defusedxml>=0.7.1",
   "openpyxl>=3.1.5",
   "setuptools>=80.9.0",
-  "numpy>=2.2.6,<2.4.0",
   "obonet>=0.3.1",
   "polars-hash>=0.5.6",
   "torch>=2.10.0",
@@ -25,6 +24,7 @@ dependencies = [
   "clinical-mining",
   "huggingface-hub>=0.32.4",
   "networkx>=3.6.1",
+  "numpy>=2.4.4",
 ]
 
 [[tool.uv.index]]
@@ -35,8 +35,8 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
-clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
-cellex = { git = "https://github.com/perslab/CELLEX"}
+cellex = { git = "https://github.com/perslab/CELLEX", rev = "119c7ca" }
+clinical-mining = { git = "https://github.com/opentargets/clinical_mining", tag = "0.4.0" }
 
 
 [dependency-groups]
@@ -47,7 +47,7 @@ baseline_expression = [
   "pandas<3",
   "setuptools<81",
   "scanpy>=1.10.0",
-  "cellex",
+  "cellex"
 ]
 test = [
   "coverage==7.13.4",
@@ -138,7 +138,6 @@ ignore = [
   'RUF012',  # ultra-noisy and dicts in classvars are very common
   'RUF015',  # not always more readable
   'RUF067',  # we often put code inside init modules
-  'S101',    # we use asserts outside tests, and do not run python with `-O` (also see B011)
   'S311',    # false positives, it does not care about the context
   'S324',    # all our md5/sha1 usages are for non-security purposes
   'S404',    # useless, triggers on *all* subprocess imports
@@ -146,7 +145,6 @@ ignore = [
   'S405',    # we don't use lxml in unsafe ways
   'S603',    # useless, triggers on *all* subprocess calls: https://github.com/astral-sh/ruff/issues/4045
   'S607',    # we trust the PATH to be sane
-  'B011',    # we don't run python with `-O` (also see S101)
   'B904',    # possibly useful but too noisy
   'COM812',  # trailing commas on multiline lists are nice, but we have 2.5k violations
   'PIE807',  # `lambda: []` is much clearer for `load_default` in schemas
@@ -211,7 +209,7 @@ parametrize-values-type = 'list'
 parametrize-values-row-type = 'tuple'
 
 [tool.ruff.lint.per-file-ignores]
-'test/*.py' = ['S108', 'S602', 'D']
+'test/*.py' = ['S101', 'S108', 'S602', 'D']
 '**/__init__.py' = ['F401']
 '**/tasks/*.py' = ['D102']
 '**/transformers/*.py' = ['D100', 'D103']
