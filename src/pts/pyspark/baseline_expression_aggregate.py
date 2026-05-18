@@ -256,6 +256,9 @@ def baseline_expression_aggregate(
     eq = AggregateExpression(spark)
     eq.load_data(directory, local=local)
 
+    logger.info('Applying QC threshold to expression values...')
+    eq.apply_qc_threshold()
+
     logger.info('Calculating quartiles...')
     eq.calculate_quartiles(local=local)
 
