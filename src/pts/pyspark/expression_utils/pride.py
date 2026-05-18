@@ -180,13 +180,13 @@ class PrideBaselineExpression:
         else:
             self.df = pride_long
 
-    def pack_data_for_output(self, local: bool = False, json: bool = False):
+    def pack_data_for_output(self):
         """Use spark to write the DataFrame to parquet format."""
-        if local:
+        if self.local:
             output_path = f'file://{self.output_directory_path}'
         else:
             output_path = f'{self.output_directory_path}'
-        if json:
+        if self.json:
             output_path = f'{output_path}/json/'
             # If JSON output is requested, convert DataFrame to JSON format
             self.df.write.mode('overwrite').json(output_path)
@@ -203,4 +203,4 @@ class PrideBaselineExpression:
             logger.info(f'Processing PRIDE code: {pride_code}')
             self.read_pride_data(pride_code)
         logger.info('Packing data for output...')
-        self.pack_data_for_output(local=self.local, json=self.json)
+        self.pack_data_for_output()
