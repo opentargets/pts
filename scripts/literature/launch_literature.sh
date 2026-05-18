@@ -193,6 +193,19 @@ steps:
         # settings above are what shrink the output file count.
         spark.sql.adaptive.advisoryPartitionSizeInBytes: '268435456'
         spark.sql.adaptive.coalescePartitions.parallelismFirst: 'false'
+        # Hold all executors for the duration of this step. Without these
+        # settings the Dataproc autoscaler can decommission idle-looking
+        # executors mid-job (run-015 lost ~40 executors at 10:08:08 between
+        # stage boundaries). Block migration during decommission covers
+        # shuffle blocks but NOT broadcast pieces, so the next stage's
+        # broadcast fetches fail with BlockNotFoundException and abort the
+        # job. By keeping Spark from releasing executors, YARN sees vCores
+        # as allocated and the autoscaler does not trigger scale-down
+        # within this step. Lighter downstream steps keep the defaults so
+        # the cluster can shrink between them.
+        spark.dynamicAllocation.executorIdleTimeout: '7200s'
+        spark.dynamicAllocation.shuffleTracking.enabled: 'true'
+        spark.dynamicAllocation.shuffleTracking.timeout: '7200s'
         # See literature_ontoma_lut_generation: Match.map_labels also instantiates
         # OnToma, which requires spark.jars.packages to contain 'spark-nlp'.
         spark.jars.packages: 'com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}'
