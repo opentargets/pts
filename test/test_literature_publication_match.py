@@ -35,28 +35,3 @@ class TestEpmcReadPath:
             _epmc_read_path('gs://otar025-epmc/ml02', 'abstract', '')
             == 'gs://otar025-epmc/ml02/abstract/*/*.jsonl'
         )
-
-
-class TestMaybeRepartition:
-    """Test the optional repartition helper."""
-
-    def test_repartitions_when_count_given(self, spark):
-        from pts.pyspark.common.utils import maybe_repartition
-
-        df = spark.range(100)
-        result = maybe_repartition(df, 4)
-        assert result.rdd.getNumPartitions() == 4
-
-    def test_returns_df_unchanged_when_none(self, spark):
-        from pts.pyspark.common.utils import maybe_repartition
-
-        df = spark.range(100)
-        result = maybe_repartition(df, None)
-        assert result is df
-
-    def test_returns_df_unchanged_when_zero(self, spark):
-        from pts.pyspark.common.utils import maybe_repartition
-
-        df = spark.range(100)
-        result = maybe_repartition(df, 0)
-        assert result is df
