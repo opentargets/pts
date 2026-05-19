@@ -41,22 +41,22 @@ class TestMaybeRepartition:
     """Test the optional repartition helper."""
 
     def test_repartitions_when_count_given(self, spark):
-        from pts.pyspark.literature_publication_match import _maybe_repartition
+        from pts.pyspark.common.utils import maybe_repartition
 
         df = spark.range(100)
-        result = _maybe_repartition(df, 4)
+        result = maybe_repartition(df, 4)
         assert result.rdd.getNumPartitions() == 4
 
     def test_returns_df_unchanged_when_none(self, spark):
-        from pts.pyspark.literature_publication_match import _maybe_repartition
+        from pts.pyspark.common.utils import maybe_repartition
 
         df = spark.range(100)
-        result = _maybe_repartition(df, None)
+        result = maybe_repartition(df, None)
         assert result is df
 
     def test_returns_df_unchanged_when_zero(self, spark):
-        from pts.pyspark.literature_publication_match import _maybe_repartition
+        from pts.pyspark.common.utils import maybe_repartition
 
         df = spark.range(100)
-        result = _maybe_repartition(df, 0)
+        result = maybe_repartition(df, 0)
         assert result is df

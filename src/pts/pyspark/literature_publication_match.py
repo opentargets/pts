@@ -16,7 +16,7 @@ from loguru import logger
 from pyspark.sql import functions as f
 
 from pts.pyspark.common.session import Session
-from pts.pyspark.common.utils import maybe_coalesce
+from pts.pyspark.common.utils import maybe_coalesce, maybe_repartition
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -45,24 +45,6 @@ def _epmc_read_path(epmc_path: str, kind: str, date_prefix: str | None) -> str:
     base = epmc_path.rstrip('/')
     day_glob = f'{date_prefix}*' if date_prefix else '*'
     return f'{base}/{kind}/{day_glob}/*.jsonl'
-
-
-def _maybe_repartition(df: DataFrame, repartition: int | None) -> DataFrame:
-    """Repartition a DataFrame to a fixed partition count when configured.
-
-    The raw EPMC input is scattered across many small day-folder files; an
-    explicit repartition right after the read keeps Spark task counts sane.
-
-    Args:
-        df: DataFrame to repartition.
-        repartition: Target partition count. Falsy values leave ``df`` unchanged.
-
-    Returns:
-        The repartitioned DataFrame, or ``df`` unchanged when ``repartition`` is falsy.
-    """
-    if repartition:
-        return df.repartition(repartition)
-    return df
 
 
 def _read_publications(
@@ -106,7 +88,7 @@ def _read_publications(
             .withColumn('kind', f.lit(kind))
             .withColumn('traceSource', f.input_file_name())
         )
-        return _maybe_repartition(df, repartition)
+        return maybe_repartition(df, repartition)
 
     fulltexts = _read_kind('fulltext')
     processed_fulltexts = EPMCPublication._annotate_fulltexts_with_pmid(fulltexts, pub_id_lut)
