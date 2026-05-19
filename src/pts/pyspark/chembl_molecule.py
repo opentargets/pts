@@ -123,7 +123,7 @@ def _molecule_preprocess(
                 f.col('molecule_structures.molfile'),
                 r'(?s)(\nM  END\n).*',
                 '$1',
-            ).alias('molfile'),
+            ).alias('molblock'),
             f.coalesce(f.col('molecule_type'), f.lit('Unknown')).alias('drugType'),
             f.col('pref_name').alias('name'),
             f.col('cross_references'),

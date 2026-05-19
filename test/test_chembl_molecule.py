@@ -146,50 +146,50 @@ def raw_drugbank_df(spark):
 
 
 class TestMoleculePreprocess:
-    def test_molfile_truncated_to_molblock(self, raw_molecule_df, drugbank_df):
-        """molfile is truncated to the bare molblock, ending at `M  END`."""
+    def test_molblock_truncated_at_m_end(self, raw_molecule_df, drugbank_df):
+        """molblock is the source molfile truncated at `M  END`."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
-        rows = {r['id']: r['molfile'] for r in result.collect()}
+        rows = {r['id']: r['molblock'] for r in result.collect()}
         assert rows['CHEMBL1'] == SAMPLE_MOLBLOCK
 
-    def test_molfile_sdf_tags_stripped(self, raw_molecule_df, drugbank_df):
+    def test_molblock_sdf_tags_stripped(self, raw_molecule_df, drugbank_df):
         """The SDF property tags appended after `M  END` are removed."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
-        molfile = {r['id']: r['molfile'] for r in result.collect()}['CHEMBL1']
-        assert molfile.endswith('M  END\n')
-        assert '> <chembl_id>' not in molfile
-        assert '$$$$' not in molfile
+        molblock = {r['id']: r['molblock'] for r in result.collect()}['CHEMBL1']
+        assert molblock.endswith('M  END\n')
+        assert '> <chembl_id>' not in molblock
+        assert '$$$$' not in molblock
 
-    def test_molfile_null_when_absent(self, raw_molecule_df, drugbank_df):
-        """molfile is null when the source molecule has no molfile."""
+    def test_molblock_null_when_molfile_absent(self, raw_molecule_df, drugbank_df):
+        """molblock is null when the source molecule has no molfile."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
-        rows = {r['id']: r['molfile'] for r in result.collect()}
+        rows = {r['id']: r['molblock'] for r in result.collect()}
         assert rows['CHEMBL2'] is None
 
     def test_molfile_without_terminator_passed_through(self, raw_molecule_df, drugbank_df):
-        """A molfile with no `M  END` terminator is left unchanged."""
+        """A source molfile with no `M  END` terminator is left unchanged."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
-        rows = {r['id']: r['molfile'] for r in result.collect()}
+        rows = {r['id']: r['molblock'] for r in result.collect()}
         assert rows['CHEMBL3'] == MOLFILE_NO_TERMINATOR
 
-    def test_molfile_is_string_column(self, raw_molecule_df, drugbank_df):
-        """molfile is exposed as a string column."""
+    def test_molblock_is_string_column(self, raw_molecule_df, drugbank_df):
+        """molblock is exposed as a string column."""
         result = _molecule_preprocess(raw_molecule_df, drugbank_df)
-        assert result.schema['molfile'].dataType == StringType()
+        assert result.schema['molblock'].dataType == StringType()
 
 
 # --- Tests for process_molecules ---
 
 
 class TestProcessMolecules:
-    def test_molfile_preserved(self, raw_molecule_df, raw_drugbank_df):
-        """The truncated molfile survives process_molecules into the output."""
+    def test_molblock_preserved(self, raw_molecule_df, raw_drugbank_df):
+        """The truncated molblock survives process_molecules into the output."""
         result = process_molecules(raw_molecule_df, raw_drugbank_df)
-        rows = {r['id']: r['molfile'] for r in result.collect()}
+        rows = {r['id']: r['molblock'] for r in result.collect()}
         assert rows['CHEMBL1'] == SAMPLE_MOLBLOCK
         assert rows['CHEMBL2'] is None
 
     def test_row_count_unchanged(self, raw_molecule_df, raw_drugbank_df):
-        """Adding molfile does not change the row count."""
+        """Adding molblock does not change the row count."""
         result = process_molecules(raw_molecule_df, raw_drugbank_df)
         assert result.count() == raw_molecule_df.count()
