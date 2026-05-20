@@ -56,9 +56,6 @@ class MetricRunner:
             destination: Absolute path of the output file, recorded in each record.
         """
         out_path = str(out_file)
-        if not out_path.startswith(('gs://', 's3://', 'az://')):
-            Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-
         records = []
         for metric in metrics:
             try:
@@ -76,4 +73,4 @@ class MetricRunner:
                 logger.error('metric {} failed on dataset {}', metric.name, dataset_path.name)
                 raise
 
-        pl.DataFrame(records).write_parquet(out_path)
+        pl.DataFrame(records).write_parquet(out_path, mkdir=True)
