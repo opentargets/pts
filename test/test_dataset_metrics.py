@@ -48,13 +48,14 @@ def test_dataset_file_stats(tmp_path: Path) -> None:
     dataset_dir = tmp_path / 'study'
     dataset_dir.mkdir()
     df = pl.DataFrame({'studyType': ['gwas', 'eqtl']})
-    df.write_parquet(dataset_dir / 'part-0.parquet')
-    df.write_parquet(dataset_dir / 'part-1.parquet')
-    (dataset_dir / '_SUCCESS').write_text('')  # must be ignored
+    df.write_parquet(dataset_dir / 'part-0.parquet')  # Spark-style name
+    df.write_parquet(dataset_dir / 'data-abc.parquet')  # single-file Polars-style name
+    (dataset_dir / '_SUCCESS').write_text('')  # marker must be ignored
+    (dataset_dir / '.part-0.parquet.crc').write_text('')  # checksum must be ignored
 
     file_size, n_partitions = _dataset_file_stats(str(dataset_dir))
 
-    assert n_partitions == 2
+    assert n_partitions == 2  # both .parquet files counted, regardless of prefix
     assert file_size > 0
 
 

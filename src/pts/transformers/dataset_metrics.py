@@ -117,25 +117,27 @@ def compute_filter_count(
 
 
 def _dataset_file_stats(dataset_path: str) -> tuple[int, int]:
-    """Return ``(total bytes, number of part files)`` for a dataset directory.
+    """Return ``(total bytes, number of parquet files)`` for a dataset directory.
 
     Storage-agnostic via fsspec (local ``LocalFileSystem`` or ``gs://`` via
-    gcsfs). Only top-level entries whose basename starts with ``part-`` are
-    counted, so ``_SUCCESS`` / checksum files are ignored. Assumes a flat
-    dataset directory; Hive-partitioned layouts (``key=value/part-*.parquet``)
-    have no top-level ``part-*`` files and would report zero partitions.
+    gcsfs). Counts top-level ``*.parquet`` files, covering both Spark
+    ``part-*.parquet`` outputs and single-file Polars outputs (e.g. transformer
+    datasets such as ``disease``/``clinical_report``); ``_SUCCESS`` and ``.crc``
+    markers are ignored. Assumes a flat dataset directory; Hive-partitioned
+    layouts (``key=value/part-*.parquet``) have no top-level parquet files and
+    would report zero partitions.
 
     Args:
         dataset_path (str): absolute path to the dataset directory.
 
     Returns:
-        tuple[int, int]: total bytes and number of part files.
+        tuple[int, int]: total bytes and number of parquet files.
     """
     fs, root = fsspec.core.url_to_fs(dataset_path)
     parts = [
         entry
         for entry in fs.ls(root, detail=True)
-        if entry['name'].rstrip('/').rsplit('/', 1)[-1].startswith('part-')
+        if entry.get('type') != 'directory' and entry['name'].rstrip('/').endswith('.parquet')
     ]
     file_size = sum(int(entry.get('size') or 0) for entry in parts)
     return file_size, len(parts)
