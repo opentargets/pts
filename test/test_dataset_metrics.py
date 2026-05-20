@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from pts.transformers.dataset_metrics import compute_breakdown
+from pts.transformers.dataset_metrics import compute_breakdown, compute_filter_count
 
 
 def test_compute_breakdown_plain_column_with_null() -> None:
@@ -18,3 +18,13 @@ def test_compute_breakdown_derived_expression() -> None:
 def test_compute_breakdown_explodes_list_column() -> None:
     df = pl.DataFrame({'tas': [['a', 'b'], ['a']]})
     assert compute_breakdown(df, 'tas') == {'a': 2, 'b': 1}
+
+
+def test_compute_filter_count_rows() -> None:
+    df = pl.DataFrame({'score': [0.9, 0.2, 0.7], 'geneId': ['g1', 'g2', 'g1']})
+    assert compute_filter_count(df, 'score > 0.5') == 2
+
+
+def test_compute_filter_count_distinct() -> None:
+    df = pl.DataFrame({'score': [0.9, 0.2, 0.7], 'geneId': ['g1', 'g2', 'g1']})
+    assert compute_filter_count(df, 'score > 0.5', distinct='geneId') == 1
