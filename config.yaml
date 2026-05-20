@@ -14,12 +14,6 @@ steps:
       source: input/disease/efo_otar_slim.json
       destination: output/disease/disease.parquet
       transformer: disease
-      metrics:
-        - type: count
-          name: total_count
-        - type: custom
-          class: pts.metrics.custom.disease.DiseaseByTherapeuticAreaMetric
-          name: count_by_therapeutic_area
 
     - name: transform disease_hpo
       source: input/disease/hp-full.json

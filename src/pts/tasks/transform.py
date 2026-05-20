@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from importlib import import_module
-from pathlib import Path
 from typing import Any, Self
 
 from loguru import logger
@@ -11,11 +10,6 @@ from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
 from otter.task.task_reporter import report
 from otter.util.fs import check_destination
-from pydantic import field_validator
-
-from pts.metrics.base import Metric
-from pts.metrics.loader import load_metric, metric_to_dict
-from pts.metrics.runner import MetricRunner
 
 TRANSFORMER_PACKAGE = 'pts.transformers'
 
@@ -46,18 +40,6 @@ class TransformSpec(Spec):
     """A string or a dictionary with the destination paths."""
     settings: dict[str, Any] | None = None
     """A dictionary with settings to pass to the transformer."""
-    metrics: list[Metric] = []
-    """Metric definitions to compute after the transform step completes."""
-
-    @field_validator('metrics', mode='before')
-    @classmethod
-    def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
-        return [cfg if isinstance(cfg, Metric) else load_metric(cfg) for cfg in v]
-
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        d = super().model_dump(**kwargs)
-        d['metrics'] = [metric_to_dict(m) for m in self.metrics]
-        return d
 
 
 class Transform(Task):
@@ -111,23 +93,5 @@ class Transform(Task):
         srcs = list(self.srcs.values()) if isinstance(self.srcs, dict) else self.srcs
         dsts = list(self.dsts.values()) if isinstance(self.dsts, dict) else self.dsts
         self.artifacts = [Artifact(source=srcs, destination=dsts)]
-
-        if self.spec.metrics:
-            destination = self.dsts if isinstance(self.dsts, str) else next(iter(self.dsts.values()))
-            dst_path = Path(destination)
-            dataset_path = dst_path.parent if dst_path.suffix else dst_path
-            dataset_name = dataset_path.name
-            release = self.context.scratchpad.sentinel_dict.get('release', '')
-            run = self.context.scratchpad.sentinel_dict.get('run', '')
-            out_file = dataset_path.parent.parent / 'metrics' / f'{dataset_name}.jsonl'
-            MetricRunner().run(
-                metrics=self.spec.metrics,
-                dataset_path=dataset_path,
-                out_file=out_file,
-                release=release,
-                run=run,
-                source=str(dataset_path),
-                destination=str(out_file),
-            )
 
         return self
