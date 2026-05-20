@@ -14,6 +14,17 @@ log = logging.getLogger(__name__)
 
 
 class MetricRunner:
+    def _read(self, dataset_path: Path, columns: list[str] | None) -> pl.DataFrame:
+        """Read parquet with optional column projection to minimise memory."""
+        lf = pl.scan_parquet(dataset_path / '*.parquet')
+        if columns is None:
+            return lf.collect()
+        if columns:
+            return lf.select(columns).collect()
+        # empty list → just need row count; read the first column only
+        first = lf.collect_schema().names()[0]
+        return lf.select(first).collect()
+
     def run(
         self,
         *,
@@ -24,11 +35,11 @@ class MetricRunner:
         release: str,
         run: str,
     ) -> None:
-        df = pl.read_parquet(dataset_path / '*.parquet')
         out_dir = metrics_root / dataset_name
         out_dir.mkdir(parents=True, exist_ok=True)
         for metric in metrics:
             try:
+                df = self._read(dataset_path, metric.required_columns)
                 result = metric.compute(df)
                 stamped = result.model_copy(update={'release': release, 'run': run})
                 (out_dir / f'{metric.name}.json').write_text(

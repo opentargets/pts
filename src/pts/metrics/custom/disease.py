@@ -10,6 +10,10 @@ from pts.metrics.grouped import GroupedCountResult, GroupRow
 class DiseaseByTherapeuticAreaMetric(Metric):
     """Counts diseases per therapeutic area by exploding the therapeuticAreas array."""
 
+    @property
+    def required_columns(self) -> list[str]:
+        return ['therapeuticAreas']
+
     def compute(self, df: pl.DataFrame) -> GroupedCountResult:
         """Compute per-therapeutic-area disease counts."""
         # 1. Filter out rows where therapeuticAreas is null

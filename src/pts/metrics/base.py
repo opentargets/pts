@@ -30,6 +30,11 @@ class Metric(BaseModel, ABC):
 
     name: str
 
+    @property
+    def required_columns(self) -> list[str] | None:
+        """Columns needed by compute(). None = all columns; [] = row count only."""
+        return None
+
     @abstractmethod
     def compute(self, df: pl.DataFrame) -> MetricResult:
         """Compute the metric from a Polars DataFrame."""

@@ -30,6 +30,10 @@ class GroupedCountMetric(Metric):
 
     group_by: list[str]
 
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.group_by)
+
     def compute(self, df: pl.DataFrame) -> GroupedCountResult:
         """Compute grouped row counts."""
         # Drop rows where ANY group_by column is null
@@ -71,6 +75,10 @@ class GroupedSumMetric(Metric):
 
     column: str
     group_by: list[str]
+
+    @property
+    def required_columns(self) -> list[str]:
+        return [self.column, *self.group_by]
 
     def compute(self, df: pl.DataFrame) -> GroupedSumResult:
         """Compute grouped sums."""

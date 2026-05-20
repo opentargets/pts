@@ -32,6 +32,10 @@ class DistributionMetric(Metric):
     column: str
     n_bins: int = 20
 
+    @property
+    def required_columns(self) -> list[str]:
+        return [self.column]
+
     def compute(self, df: pl.DataFrame) -> DistributionResult:
         """Compute equal-width histogram, dropping nulls."""
         series = df[self.column].drop_nulls()

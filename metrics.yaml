@@ -1,0 +1,330 @@
+---
+# metrics.yaml — standalone metrics collection config
+# Run:  uv run python scripts/collect_metrics.py [--release TAG] [--run ID]
+
+scratchpad:
+  release: 26.06-pub   # override with --release
+  run: testrun.1        # override with --run
+
+data_root: /home/misio-pysio/data/opentargets/output
+metrics_root: /home/misio-pysio/projects/OpenTargets/pts-wortkree/pts/metrics_output
+
+datasets:
+
+  disease:
+    metrics:
+      - type: count
+        name: total_count
+      - type: custom
+        class: pts.metrics.custom.disease.DiseaseByTherapeuticAreaMetric
+        name: count_by_therapeutic_area
+
+  target:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_count
+        name: count_by_biotype
+        group_by: [biotype]
+
+  drug_molecule:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_count
+        name: count_by_drug_type
+        group_by: [drugType]
+      - type: grouped_count
+        name: count_by_max_clinical_stage
+        group_by: [maximumClinicalStage]
+
+  study:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distinct_count
+        name: distinct_studies
+        columns: [studyId]
+      - type: grouped_count
+        name: count_by_study_type
+        group_by: [studyType]
+      - type: grouped_count
+        name: count_by_project
+        group_by: [projectId]
+
+  credible_set:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distinct_count
+        name: distinct_studies
+        columns: [studyId]
+      - type: distribution
+        name: log10bf_distribution
+        column: credibleSetlog10BF
+        n_bins: 20
+      - type: grouped_count
+        name: count_by_study_type
+        group_by: [studyType]
+      - type: grouped_count
+        name: count_by_finemapping_method
+        group_by: [finemappingMethod]
+
+  variant:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_count
+        name: count_by_most_severe_consequence
+        group_by: [mostSevereConsequenceId]
+
+  l2g_prediction:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distinct_count
+        name: distinct_genes
+        columns: [geneId]
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+      - type: custom
+        class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
+        name: significant_gene_count
+        threshold: 0.5
+
+  colocalisation:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_count
+        name: count_by_right_study_type
+        group_by: [rightStudyType]
+      - type: grouped_count
+        name: count_by_method
+        group_by: [colocalisationMethod]
+      - type: distribution
+        name: h4_distribution
+        column: h4
+        n_bins: 20
+      - type: distribution
+        name: clpp_distribution
+        column: clpp
+        n_bins: 20
+
+  association_by_datasource_direct:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: association_score_distribution
+        column: associationScore
+        n_bins: 20
+
+  association_by_datasource_indirect:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: association_score_distribution
+        column: associationScore
+        n_bins: 20
+
+  association_by_datatype_direct:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_sum
+        name: evidence_count_by_datatype
+        column: evidenceCount
+        group_by: [aggregationValue]
+
+  association_by_datatype_indirect:
+    metrics:
+      - type: count
+        name: total_count
+      - type: grouped_sum
+        name: evidence_count_by_datatype
+        column: evidenceCount
+        group_by: [aggregationValue]
+
+  evidence_cancer_biomarkers:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_cancer_gene_census:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_clingen:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_clinical_precedence:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_crispr:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_crispr_screen:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_europepmc:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_eva:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_eva_somatic:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_expression_atlas:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_gene2phenotype:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_gene_burden:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_genomics_england:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_gwas_credible_sets:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_impc:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_intogen:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_orphanet:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_reactome:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_uniprot_literature:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20
+
+  evidence_uniprot_variants:
+    metrics:
+      - type: count
+        name: total_count
+      - type: distribution
+        name: score_distribution
+        column: score
+        n_bins: 20

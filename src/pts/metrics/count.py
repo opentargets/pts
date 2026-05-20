@@ -29,6 +29,10 @@ class CountMetric(Metric):
 
     column: str | None = None
 
+    @property
+    def required_columns(self) -> list[str]:
+        return [self.column] if self.column else []
+
     def compute(self, df: pl.DataFrame) -> CountResult:
         """Compute count."""
         if self.column is None:
@@ -42,6 +46,10 @@ class DistinctCountMetric(Metric):
     """Counts distinct values across one or more columns."""
 
     columns: list[str]
+
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.columns)
 
     def compute(self, df: pl.DataFrame) -> DistinctCountResult:
         """Compute distinct count."""

@@ -12,6 +12,10 @@ class L2GSignificantGeneMetric(Metric):
 
     threshold: float = 0.5
 
+    @property
+    def required_columns(self) -> list[str]:
+        return ['geneId', 'score']
+
     def compute(self, df: pl.DataFrame) -> CountResult:
         """Count distinct geneId values where score >= threshold."""
         filtered = df.filter(pl.col("score") >= self.threshold)
