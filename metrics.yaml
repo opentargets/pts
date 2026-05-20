@@ -15,7 +15,7 @@ steps:
   disease_metrics:
     - name: collect_metrics disease
       source: output/disease
-      destination: metrics/disease.jsonl
+      destination: metrics/disease.parquet
       metrics:
         - type: count
           name: total_count
@@ -26,7 +26,7 @@ steps:
   target_metrics:
     - name: collect_metrics target
       source: output/target
-      destination: metrics/target.jsonl
+      destination: metrics/target.parquet
       metrics:
         - type: count
           name: total_count
@@ -37,7 +37,7 @@ steps:
   drug_molecule_metrics:
     - name: collect_metrics drug_molecule
       source: output/drug_molecule
-      destination: metrics/drug_molecule.jsonl
+      destination: metrics/drug_molecule.parquet
       metrics:
         - type: count
           name: total_count
@@ -51,7 +51,7 @@ steps:
   study_metrics:
     - name: collect_metrics study
       source: output/study
-      destination: metrics/study.jsonl
+      destination: metrics/study.parquet
       metrics:
         - type: count
           name: total_count
@@ -68,7 +68,7 @@ steps:
   credible_set_metrics:
     - name: collect_metrics credible_set
       source: output/credible_set
-      destination: metrics/credible_set.jsonl
+      destination: metrics/credible_set.parquet
       metrics:
         - type: count
           name: total_count
@@ -85,7 +85,7 @@ steps:
   variant_metrics:
     - name: collect_metrics variant
       source: output/variant
-      destination: metrics/variant.jsonl
+      destination: metrics/variant.parquet
       metrics:
         - type: count
           name: total_count
@@ -96,7 +96,7 @@ steps:
   l2g_prediction_metrics:
     - name: collect_metrics l2g_prediction
       source: output/l2g_prediction
-      destination: metrics/l2g_prediction.jsonl
+      destination: metrics/l2g_prediction.parquet
       metrics:
         - type: count
           name: total_count
@@ -110,7 +110,7 @@ steps:
   colocalisation_metrics:
     - name: collect_metrics colocalisation
       source: output/colocalisation
-      destination: metrics/colocalisation.jsonl
+      destination: metrics/colocalisation.parquet
       metrics:
         - type: count
           name: total_count
@@ -123,21 +123,21 @@ steps:
   association_by_datasource_direct_metrics:
     - name: collect_metrics association_by_datasource_direct
       source: output/association_by_datasource_direct
-      destination: metrics/association_by_datasource_direct.jsonl
+      destination: metrics/association_by_datasource_direct.parquet
       metrics:
         - type: count
           name: total_count
   association_by_datasource_indirect_metrics:
     - name: collect_metrics association_by_datasource_indirect
       source: output/association_by_datasource_indirect
-      destination: metrics/association_by_datasource_indirect.jsonl
+      destination: metrics/association_by_datasource_indirect.parquet
       metrics:
         - type: count
           name: total_count
   association_by_datatype_direct_metrics:
     - name: collect_metrics association_by_datatype_direct
       source: output/association_by_datatype_direct
-      destination: metrics/association_by_datatype_direct.jsonl
+      destination: metrics/association_by_datatype_direct.parquet
       metrics:
         - type: count
           name: total_count
@@ -149,7 +149,7 @@ steps:
   association_by_datatype_indirect_metrics:
     - name: collect_metrics association_by_datatype_indirect
       source: output/association_by_datatype_indirect
-      destination: metrics/association_by_datatype_indirect.jsonl
+      destination: metrics/association_by_datatype_indirect.parquet
       metrics:
         - type: count
           name: total_count
@@ -161,7 +161,7 @@ steps:
   evidence_cancer_biomarkers_metrics:
     - name: collect_metrics evidence_cancer_biomarkers
       source: output/evidence_cancer_biomarkers
-      destination: metrics/evidence_cancer_biomarkers.jsonl
+      destination: metrics/evidence_cancer_biomarkers.parquet
       metrics:
         - type: count
           name: total_count
@@ -172,7 +172,7 @@ steps:
   evidence_cancer_gene_census_metrics:
     - name: collect_metrics evidence_cancer_gene_census
       source: output/evidence_cancer_gene_census
-      destination: metrics/evidence_cancer_gene_census.jsonl
+      destination: metrics/evidence_cancer_gene_census.parquet
       metrics:
         - type: count
           name: total_count
@@ -183,7 +183,7 @@ steps:
   evidence_clingen_metrics:
     - name: collect_metrics evidence_clingen
       source: output/evidence_clingen
-      destination: metrics/evidence_clingen.jsonl
+      destination: metrics/evidence_clingen.parquet
       metrics:
         - type: count
           name: total_count
@@ -194,7 +194,7 @@ steps:
   evidence_clinical_precedence_metrics:
     - name: collect_metrics evidence_clinical_precedence
       source: output/evidence_clinical_precedence
-      destination: metrics/evidence_clinical_precedence.jsonl
+      destination: metrics/evidence_clinical_precedence.parquet
       metrics:
         - type: count
           name: total_count
@@ -205,7 +205,7 @@ steps:
   evidence_crispr_metrics:
     - name: collect_metrics evidence_crispr
       source: output/evidence_crispr
-      destination: metrics/evidence_crispr.jsonl
+      destination: metrics/evidence_crispr.parquet
       metrics:
         - type: count
           name: total_count
@@ -216,7 +216,7 @@ steps:
   evidence_crispr_screen_metrics:
     - name: collect_metrics evidence_crispr_screen
       source: output/evidence_crispr_screen
-      destination: metrics/evidence_crispr_screen.jsonl
+      destination: metrics/evidence_crispr_screen.parquet
       metrics:
         - type: count
           name: total_count
@@ -227,7 +227,7 @@ steps:
   evidence_europepmc_metrics:
     - name: collect_metrics evidence_europepmc
       source: output/evidence_europepmc
-      destination: metrics/evidence_europepmc.jsonl
+      destination: metrics/evidence_europepmc.parquet
       metrics:
         - type: count
           name: total_count
@@ -238,7 +238,7 @@ steps:
   evidence_eva_metrics:
     - name: collect_metrics evidence_eva
       source: output/evidence_eva
-      destination: metrics/evidence_eva.jsonl
+      destination: metrics/evidence_eva.parquet
       metrics:
         - type: count
           name: total_count
@@ -249,7 +249,7 @@ steps:
   evidence_eva_somatic_metrics:
     - name: collect_metrics evidence_eva_somatic
       source: output/evidence_eva_somatic
-      destination: metrics/evidence_eva_somatic.jsonl
+      destination: metrics/evidence_eva_somatic.parquet
       metrics:
         - type: count
           name: total_count
@@ -260,7 +260,7 @@ steps:
   evidence_expression_atlas_metrics:
     - name: collect_metrics evidence_expression_atlas
       source: output/evidence_expression_atlas
-      destination: metrics/evidence_expression_atlas.jsonl
+      destination: metrics/evidence_expression_atlas.parquet
       metrics:
         - type: count
           name: total_count
@@ -271,7 +271,7 @@ steps:
   evidence_gene2phenotype_metrics:
     - name: collect_metrics evidence_gene2phenotype
       source: output/evidence_gene2phenotype
-      destination: metrics/evidence_gene2phenotype.jsonl
+      destination: metrics/evidence_gene2phenotype.parquet
       metrics:
         - type: count
           name: total_count
@@ -282,7 +282,7 @@ steps:
   evidence_gene_burden_metrics:
     - name: collect_metrics evidence_gene_burden
       source: output/evidence_gene_burden
-      destination: metrics/evidence_gene_burden.jsonl
+      destination: metrics/evidence_gene_burden.parquet
       metrics:
         - type: count
           name: total_count
@@ -293,7 +293,7 @@ steps:
   evidence_genomics_england_metrics:
     - name: collect_metrics evidence_genomics_england
       source: output/evidence_genomics_england
-      destination: metrics/evidence_genomics_england.jsonl
+      destination: metrics/evidence_genomics_england.parquet
       metrics:
         - type: count
           name: total_count
@@ -304,7 +304,7 @@ steps:
   evidence_gwas_credible_sets_metrics:
     - name: collect_metrics evidence_gwas_credible_sets
       source: output/evidence_gwas_credible_sets
-      destination: metrics/evidence_gwas_credible_sets.jsonl
+      destination: metrics/evidence_gwas_credible_sets.parquet
       metrics:
         - type: count
           name: total_count
@@ -315,7 +315,7 @@ steps:
   evidence_impc_metrics:
     - name: collect_metrics evidence_impc
       source: output/evidence_impc
-      destination: metrics/evidence_impc.jsonl
+      destination: metrics/evidence_impc.parquet
       metrics:
         - type: count
           name: total_count
@@ -326,7 +326,7 @@ steps:
   evidence_intogen_metrics:
     - name: collect_metrics evidence_intogen
       source: output/evidence_intogen
-      destination: metrics/evidence_intogen.jsonl
+      destination: metrics/evidence_intogen.parquet
       metrics:
         - type: count
           name: total_count
@@ -337,7 +337,7 @@ steps:
   evidence_orphanet_metrics:
     - name: collect_metrics evidence_orphanet
       source: output/evidence_orphanet
-      destination: metrics/evidence_orphanet.jsonl
+      destination: metrics/evidence_orphanet.parquet
       metrics:
         - type: count
           name: total_count
@@ -348,7 +348,7 @@ steps:
   evidence_reactome_metrics:
     - name: collect_metrics evidence_reactome
       source: output/evidence_reactome
-      destination: metrics/evidence_reactome.jsonl
+      destination: metrics/evidence_reactome.parquet
       metrics:
         - type: count
           name: total_count
@@ -359,7 +359,7 @@ steps:
   evidence_uniprot_literature_metrics:
     - name: collect_metrics evidence_uniprot_literature
       source: output/evidence_uniprot_literature
-      destination: metrics/evidence_uniprot_literature.jsonl
+      destination: metrics/evidence_uniprot_literature.parquet
       metrics:
         - type: count
           name: total_count
@@ -370,7 +370,7 @@ steps:
   evidence_uniprot_variants_metrics:
     - name: collect_metrics evidence_uniprot_variants
       source: output/evidence_uniprot_variants
-      destination: metrics/evidence_uniprot_variants.jsonl
+      destination: metrics/evidence_uniprot_variants.parquet
       metrics:
         - type: count
           name: total_count

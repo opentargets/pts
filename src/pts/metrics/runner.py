@@ -1,4 +1,4 @@
-"""MetricRunner: reads parquet, computes metrics, writes unified JSONL output."""
+"""MetricRunner: reads parquet, computes metrics, writes unified Parquet output."""
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -12,9 +12,9 @@ from pts.metrics.base import Metric
 
 
 class MetricRunner:
-    """Reads a parquet dataset, runs each configured metric, and writes JSONL output.
+    """Reads a parquet dataset, runs each configured metric, and writes Parquet output.
 
-    Each metric produces one line in the output file via
+    Each metric produces one row in the output file via
     :meth:`~pts.metrics.base.MetricResult.to_unified_record`.
     """
 

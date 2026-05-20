@@ -58,7 +58,7 @@ class Metric(BaseModel, ABC):
     """
 
     name: str
-    """Unique metric name used to identify the result record in JSONL output."""
+    """Unique metric name used to identify the result row in Parquet output."""
 
     @property
     def required_columns(self) -> list[str] | None:

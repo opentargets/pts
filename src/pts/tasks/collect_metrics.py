@@ -9,7 +9,7 @@ from loguru import logger
 from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
 from otter.task.task_reporter import report
-from pydantic import field_validator
+from pydantic import field_serializer, field_validator
 
 from pts.metrics.base import Metric
 from pts.metrics.loader import MetricType
@@ -32,6 +32,10 @@ class CollectMetricsSpec(Spec):
         if not v:
             raise ValueError("'metrics' must contain at least one metric")
         return [cfg if isinstance(cfg, Metric) else MetricType.load(cfg) for cfg in v]
+
+    @field_serializer('metrics')
+    def _serialize_metrics(self, v: list[Metric]) -> list[dict[str, Any]]:
+        return [m.model_dump() for m in v]
 
 
 class CollectMetrics(Task):

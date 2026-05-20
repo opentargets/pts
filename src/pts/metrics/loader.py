@@ -47,6 +47,8 @@ class MetricType(Enum):
         """
         cfg = dict(cfg)
         raw_type = cfg.pop('type', None)
+        if raw_type is None:
+            raise ValueError("metric entry is missing required 'type' field")
         try:
             return cls[raw_type].value(**cfg)
         except KeyError:

@@ -9,6 +9,13 @@ from pts.metrics.base import Metric
 from pts.metrics.count import CountResult
 
 
+class L2GSignificantGeneResult(CountResult):
+    """Result for :class:`L2GSignificantGeneMetric`."""
+
+    metric_type: Literal['l2g_significant_gene'] = 'l2g_significant_gene'
+    """Always ``'l2g_significant_gene'``."""
+
+
 class L2GSignificantGeneMetric(Metric):
     """Counts distinct genes with an L2G score at or above a threshold."""
 
@@ -22,7 +29,7 @@ class L2GSignificantGeneMetric(Metric):
         """Columns needed to evaluate the thresholded distinct gene count."""
         return ['geneId', 'score']
 
-    def compute(self, df: pl.DataFrame) -> CountResult:
+    def compute(self, df: pl.DataFrame) -> L2GSignificantGeneResult:
         """Count distinct geneId values where score >= threshold.
 
         >>> df = pl.DataFrame({'geneId': ['G1', 'G1', 'G2', 'G3'], 'score': [0.8, 0.6, 0.3, 0.9]})
@@ -34,4 +41,4 @@ class L2GSignificantGeneMetric(Metric):
         """
         filtered = df.filter((pl.col('score') >= self.threshold) & pl.col('geneId').is_not_null())
         value = filtered.select('geneId').n_unique()
-        return CountResult(name=self.name, value=value)
+        return L2GSignificantGeneResult(name=self.name, value=value)

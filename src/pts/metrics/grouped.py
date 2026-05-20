@@ -16,8 +16,8 @@ class GroupRow(BaseModel):
 
     key: dict[str, Any]
     """Mapping of group-by column names to their values for this group."""
-    count: int
-    """Aggregated count (or sum) for this group."""
+    value: int
+    """Aggregated value (count or sum) for this group."""
 
 
 class GroupedCountMetric(Metric):
@@ -38,14 +38,14 @@ class GroupedCountMetric(Metric):
 
         >>> df = pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas', 'gwas']})
         >>> result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
-        >>> result.groups[0].key, result.groups[0].count
+        >>> result.groups[0].key, result.groups[0].value
         ({'studyType': 'gwas'}, 3)
         >>> df2 = pl.DataFrame({'studyType': ['gwas', 'gwas', None]})
         >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[1].key
         {'studyType': None}
         >>> df3 = pl.DataFrame({'type': ['gwas', 'gwas', 'gwas', 'eqtl'], 'pop': ['EUR', 'EUR', 'AFR', 'EUR']})
         >>> result3 = GroupedCountMetric(name='g', group_by=['type', 'pop']).compute(df3)
-        >>> result3.groups[0].key, result3.groups[0].count
+        >>> result3.groups[0].key, result3.groups[0].value
         ({'type': 'gwas', 'pop': 'EUR'}, 2)
         """
         agg = (
@@ -54,7 +54,7 @@ class GroupedCountMetric(Metric):
             .sort('count', descending=True)
         )
         groups = [
-            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            GroupRow(key={col: row[col] for col in self.group_by}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
 
@@ -100,11 +100,11 @@ class GroupedCountExplodeMetric(Metric):
 
         >>> df = pl.DataFrame({'ta': [['TA1', 'TA2'], ['TA1', 'TA3'], ['TA1']]})
         >>> result = GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(df)
-        >>> result.groups[0].key, result.groups[0].count
+        >>> result.groups[0].key, result.groups[0].value
         ({'ta': 'TA1'}, 3)
         >>> df2 = pl.DataFrame({'ta': [['TA1', 'TA2'], ['TA1']], 'ds': [['D1', 'D2'], ['D1']]})
         >>> result2 = GroupedCountExplodeMetric(name='g', group_by=['ta', 'ds']).compute(df2)
-        >>> result2.groups[0].key, result2.groups[0].count
+        >>> result2.groups[0].key, result2.groups[0].value
         ({'ta': 'TA1', 'ds': 'D1'}, 2)
         """
         exploded = reduce(lambda acc, col: acc.explode(col), self.group_by, df)
@@ -115,7 +115,7 @@ class GroupedCountExplodeMetric(Metric):
             .sort('count', descending=True)
         )
         groups = [
-            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            GroupRow(key={col: row[col] for col in self.group_by}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
 
@@ -157,7 +157,7 @@ class GroupedSumMetric(Metric):
 
         >>> df = pl.DataFrame({'agg': ['a', 'a', 'b'], 'n': [100, 200, 50]})
         >>> result = GroupedSumMetric(name='s', column='n', group_by=['agg']).compute(df)
-        >>> result.groups[0].count
+        >>> result.groups[0].value
         300
         """
         agg = (
@@ -166,7 +166,7 @@ class GroupedSumMetric(Metric):
             .sort('count', descending=True)
         )
         groups = [
-            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            GroupRow(key={col: row[col] for col in self.group_by}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
 
