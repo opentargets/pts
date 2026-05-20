@@ -28,6 +28,7 @@ class GroupedCountResult(MetricResult):
 class GroupedCountMetric(Metric):
     """Counts rows per group, sorted descending by count. Null keys excluded."""
 
+    type: Literal['grouped_count'] = 'grouped_count'
     group_by: list[str]
 
     @property
@@ -73,6 +74,7 @@ class GroupedSumResult(MetricResult):
 class GroupedSumMetric(Metric):
     """Sums a numeric column per group, sorted descending by sum. Null keys excluded."""
 
+    type: Literal['grouped_sum'] = 'grouped_sum'
     column: str
     group_by: list[str]
 

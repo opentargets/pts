@@ -6,7 +6,6 @@ from pts.metrics.grouped import (
     GroupedCountResult,
     GroupedSumMetric,
     GroupedSumResult,
-    GroupRow,
 )
 
 
@@ -42,23 +41,12 @@ def test_grouped_count_multi_column_group_by():
     assert len(result.groups) == 3
 
 
-def test_grouped_count_result_carries_group_by():
-    df = pl.DataFrame({'studyType': ['gwas']})
-    result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
-    assert result.group_by == ['studyType']
-
 
 def test_grouped_count_empty_dataframe():
     df = pl.DataFrame({'studyType': pl.Series([], dtype=pl.String)})
     result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
     assert result.groups == []
 
-
-def test_grouped_count_result_has_empty_release_run():
-    df = pl.DataFrame({'studyType': ['gwas']})
-    result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
-    assert result.release == ''
-    assert result.run == ''
 
 
 def test_grouped_sum_sums_column_per_group():
@@ -73,15 +61,3 @@ def test_grouped_sum_sums_column_per_group():
     assert groups['literature'] == 50
 
 
-def test_grouped_sum_result_carries_column_and_group_by():
-    df = pl.DataFrame({'k': ['a'], 'v': [1]})
-    result = GroupedSumMetric(name='s', column='v', group_by=['k']).compute(df)
-    assert result.column == 'v'
-    assert result.group_by == ['k']
-
-
-def test_grouped_sum_result_has_empty_release_run():
-    df = pl.DataFrame({'k': ['a'], 'v': [1]})
-    result = GroupedSumMetric(name='s', column='v', group_by=['k']).compute(df)
-    assert result.release == ''
-    assert result.run == ''

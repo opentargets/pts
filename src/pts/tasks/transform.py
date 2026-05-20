@@ -14,35 +14,10 @@ from otter.util.fs import check_destination
 from pydantic import field_validator
 
 from pts.metrics.base import Metric
-from pts.metrics.count import CountMetric, DistinctCountMetric
-from pts.metrics.distribution import DistributionMetric
-from pts.metrics.grouped import GroupedCountMetric, GroupedSumMetric
+from pts.metrics.loader import load_metric, metric_to_dict
 from pts.metrics.runner import MetricRunner
 
 TRANSFORMER_PACKAGE = 'pts.transformers'
-
-_STANDARD_METRIC_TYPES: dict[str, type[Metric]] = {
-    'count': CountMetric,
-    'distinct_count': DistinctCountMetric,
-    'distribution': DistributionMetric,
-    'grouped_count': GroupedCountMetric,
-    'grouped_sum': GroupedSumMetric,
-}
-
-
-def _load_metric(cfg: dict[str, Any]) -> Metric:
-    cfg = dict(cfg)
-    metric_type = cfg.pop('type', None)
-    if metric_type in _STANDARD_METRIC_TYPES:
-        return _STANDARD_METRIC_TYPES[metric_type](**cfg)
-    elif metric_type == 'custom':
-        class_path = cfg.pop('class')
-        module_path, cls_name = class_path.rsplit('.', 1)
-        module = import_module(module_path)
-        cls = getattr(module, cls_name)
-        return cls(**cfg)
-    else:
-        raise ValueError(f"unknown metric type '{metric_type}'")
 
 path_or_paths = str | dict[str, str]
 transformer_type = Callable[[str | dict[str, str], str | dict[str, str], dict[str, Any] | None], None]
@@ -76,8 +51,13 @@ class TransformSpec(Spec):
 
     @field_validator('metrics', mode='before')
     @classmethod
-    def _parse_metrics(cls, v: list[dict[str, Any]]) -> list[Metric]:
-        return [_load_metric(cfg) for cfg in v]
+    def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
+        return [cfg if isinstance(cfg, Metric) else load_metric(cfg) for cfg in v]
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        d = super().model_dump(**kwargs)
+        d['metrics'] = [metric_to_dict(m) for m in self.metrics]
+        return d
 
 
 class Transform(Task):
@@ -139,13 +119,15 @@ class Transform(Task):
             dataset_name = dataset_path.name
             release = self.context.scratchpad.sentinel_dict.get('release', '')
             run = self.context.scratchpad.sentinel_dict.get('run', '')
+            out_file = dataset_path.parent.parent / 'metrics' / f'{dataset_name}.jsonl'
             MetricRunner().run(
                 metrics=self.spec.metrics,
                 dataset_path=dataset_path,
-                metrics_root=dataset_path.parent.parent / 'metrics',
-                dataset_name=dataset_name,
+                out_file=out_file,
                 release=release,
                 run=run,
+                source=str(dataset_path),
+                destination=str(out_file),
             )
 
         return self

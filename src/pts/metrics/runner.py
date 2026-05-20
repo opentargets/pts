@@ -1,7 +1,6 @@
-"""MetricRunner: reads parquet, stamps release/run, writes JSON."""
+"""MetricRunner: reads parquet, computes metrics, writes unified JSONL output."""
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Sequence
@@ -30,21 +29,27 @@ class MetricRunner:
         *,
         metrics: Sequence[Metric],
         dataset_path: Path,
-        metrics_root: Path,
-        dataset_name: str,
+        out_file: Path,
         release: str,
         run: str,
+        source: str = '',
+        destination: str = '',
     ) -> None:
-        out_dir = metrics_root / dataset_name
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for metric in metrics:
-            try:
-                df = self._read(dataset_path, metric.required_columns)
-                result = metric.compute(df)
-                stamped = result.model_copy(update={'release': release, 'run': run})
-                (out_dir / f'{metric.name}.json').write_text(
-                    stamped.model_dump_json()
-                )
-            except Exception:
-                log.error('metric %s failed on dataset %s', metric.name, dataset_name)
-                raise
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        with out_file.open('w') as fh:
+            for metric in metrics:
+                try:
+                    df = self._read(dataset_path, metric.required_columns)
+                    result = metric.compute(df)
+                    stamped = result.model_copy(update={
+                        'release': release,
+                        'run': run,
+                        'dataset': dataset_path.name,
+                        'source': source,
+                        'destination': destination,
+                    })
+                    record = stamped.to_unified_record()
+                    fh.write(record.model_dump_json() + '\n')
+                except Exception:
+                    log.error('metric %s failed on dataset %s', metric.name, dataset_path.name)
+                    raise

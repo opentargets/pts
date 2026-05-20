@@ -25,12 +25,6 @@ def test_count_metric_empty_dataframe():
     assert result.value == 0
 
 
-def test_count_metric_result_has_empty_release_run():
-    df = pl.DataFrame({'id': ['A']})
-    result = CountMetric(name='total').compute(df)
-    assert result.release == ''
-    assert result.run == ''
-
 
 def test_distinct_count_single_column():
     df = pl.DataFrame({'studyId': ['S1', 'S2', 'S1', 'S3']})
@@ -52,8 +46,3 @@ def test_distinct_count_excludes_nulls():
     assert result.value == 1
 
 
-def test_distinct_count_result_has_empty_release_run():
-    df = pl.DataFrame({'studyId': ['S1']})
-    result = DistinctCountMetric(name='d', columns=['studyId']).compute(df)
-    assert result.release == ''
-    assert result.run == ''

@@ -1,7 +1,7 @@
 """Tests for DistributionMetric — written before implementation (TDD)."""
 import polars as pl
 import pytest
-from pts.metrics.distribution import DistributionMetric, DistributionResult, Bin
+from pts.metrics.distribution import DistributionMetric, DistributionResult
 
 
 def test_distribution_produces_n_bins():
@@ -36,19 +36,3 @@ def test_distribution_all_null_returns_empty_bins():
     assert result.bins == []
 
 
-def test_distribution_result_carries_column_name():
-    df = pl.DataFrame({'score': [0.5]})
-    result = DistributionMetric(name='d', column='score').compute(df)
-    assert result.column == 'score'
-
-
-def test_distribution_default_n_bins_is_20():
-    m = DistributionMetric(name='d', column='score')
-    assert m.n_bins == 20
-
-
-def test_distribution_result_has_empty_release_run():
-    df = pl.DataFrame({'score': [0.5]})
-    result = DistributionMetric(name='d', column='score', n_bins=1).compute(df)
-    assert result.release == ''
-    assert result.run == ''

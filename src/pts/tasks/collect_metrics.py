@@ -13,23 +13,28 @@ from pydantic import field_validator
 
 from pts.metrics.base import Metric
 from pts.metrics.runner import MetricRunner
-from pts.tasks.transform import _load_metric
+from pts.metrics.loader import load_metric, metric_to_dict
 
 
 class CollectMetricsSpec(Spec):
     """Configuration for the CollectMetrics task."""
 
-    dataset_path: str
-    """Absolute path to the directory containing parquet files."""
-    metrics_root: str
-    """Absolute path to the root directory for metrics JSON output."""
+    source: str
+    """Path to the directory containing parquet files (absolute or relative to work_path)."""
+    destination: str
+    """Exact output directory for metric JSON files (absolute or relative to work_path)."""
     metrics: list[Metric] = []
     """Metric definitions to compute on the dataset."""
 
     @field_validator('metrics', mode='before')
     @classmethod
-    def _parse_metrics(cls, v: list[dict[str, Any]]) -> list[Metric]:
-        return [_load_metric(cfg) for cfg in v]
+    def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
+        return [cfg if isinstance(cfg, Metric) else load_metric(cfg) for cfg in v]
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        d = super().model_dump(**kwargs)
+        d['metrics'] = [metric_to_dict(m) for m in self.metrics]
+        return d
 
 
 class CollectMetrics(Task):
@@ -41,19 +46,19 @@ class CollectMetrics(Task):
 
     @report
     def run(self) -> Self:
-        dataset_path = Path(make_absolute(self.spec.dataset_path, self.context.config))
-        dataset_name = dataset_path.name
-        metrics_root = Path(make_absolute(self.spec.metrics_root, self.context.config))
+        dataset_path = Path(make_absolute(self.spec.source, self.context.config))
+        out_file = Path(make_absolute(self.spec.destination, self.context.config))
         release = self.context.scratchpad.sentinel_dict.get('release', '')
         run = self.context.scratchpad.sentinel_dict.get('run', '')
 
-        logger.info(f'collecting {len(self.spec.metrics)} metrics for {dataset_name}')
+        logger.info(f'collecting {len(self.spec.metrics)} metrics for {out_file.stem}')
         MetricRunner().run(
             metrics=self.spec.metrics,
             dataset_path=dataset_path,
-            metrics_root=metrics_root,
-            dataset_name=dataset_name,
+            out_file=out_file,
             release=release,
             run=run,
+            source=str(dataset_path),
+            destination=str(out_file),
         )
         return self

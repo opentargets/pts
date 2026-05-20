@@ -67,7 +67,7 @@ def test_metric_runner_called_when_metrics_present(mock_import, mock_abs, mock_r
     call_kwargs = mock_runner.run.call_args.kwargs
     assert call_kwargs['release'] == '26.06-pub'
     assert call_kwargs['run'] == 'testrun.1'
-    assert call_kwargs['dataset_name'] == 'disease'
+    assert call_kwargs['out_file'].stem == 'disease'
 
 
 @patch('pts.tasks.transform.MetricRunner')

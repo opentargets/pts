@@ -273,8 +273,8 @@ steps:
     - name: collect_metrics target
       requires:
         - pyspark target
-      dataset_path: output/target
-      metrics_root: metrics
+      source: output/target
+      destination: metrics/target.jsonl
       metrics:
         - type: count
           name: total_count
@@ -558,8 +558,8 @@ steps:
     - name: collect_metrics drug_molecule
       requires:
         - pyspark drug_molecule
-      dataset_path: output/drug_molecule
-      metrics_root: metrics
+      source: output/drug_molecule
+      destination: metrics/drug_molecule.jsonl
       metrics:
         - type: count
           name: total_count
@@ -767,8 +767,8 @@ steps:
     - name: collect_metrics association_by_datasource_direct
       requires:
         - pyspark association
-      dataset_path: output/association_by_datasource_direct
-      metrics_root: metrics
+      source: output/association_by_datasource_direct
+      destination: metrics/association_by_datasource_direct.jsonl
       metrics:
         - type: count
           name: total_count
@@ -779,8 +779,8 @@ steps:
     - name: collect_metrics association_by_datasource_indirect
       requires:
         - pyspark association
-      dataset_path: output/association_by_datasource_indirect
-      metrics_root: metrics
+      source: output/association_by_datasource_indirect
+      destination: metrics/association_by_datasource_indirect.jsonl
       metrics:
         - type: count
           name: total_count
@@ -791,8 +791,8 @@ steps:
     - name: collect_metrics association_by_datatype_direct
       requires:
         - pyspark association
-      dataset_path: output/association_by_datatype_direct
-      metrics_root: metrics
+      source: output/association_by_datatype_direct
+      destination: metrics/association_by_datatype_direct.jsonl
       metrics:
         - type: count
           name: total_count
@@ -803,8 +803,8 @@ steps:
     - name: collect_metrics association_by_datatype_indirect
       requires:
         - pyspark association
-      dataset_path: output/association_by_datatype_indirect
-      metrics_root: metrics
+      source: output/association_by_datatype_indirect
+      destination: metrics/association_by_datatype_indirect.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1689,8 +1689,8 @@ steps:
     - name: collect_metrics evidence_gwas_credible_sets
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_gwas_credible_sets
-      metrics_root: metrics
+      source: output/evidence_gwas_credible_sets
+      destination: metrics/evidence_gwas_credible_sets.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1698,11 +1698,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_expression_atlas
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_expression_atlas
-      metrics_root: metrics
+      source: output/evidence_expression_atlas
+      destination: metrics/evidence_expression_atlas.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1710,11 +1713,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_eva
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_eva
-      metrics_root: metrics
+      source: output/evidence_eva
+      destination: metrics/evidence_eva.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1722,11 +1728,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_eva_somatic
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_eva_somatic
-      metrics_root: metrics
+      source: output/evidence_eva_somatic
+      destination: metrics/evidence_eva_somatic.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1734,11 +1743,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_uniprot_variants
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_uniprot_variants
-      metrics_root: metrics
+      source: output/evidence_uniprot_variants
+      destination: metrics/evidence_uniprot_variants.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1746,11 +1758,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_uniprot_literature
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_uniprot_literature
-      metrics_root: metrics
+      source: output/evidence_uniprot_literature
+      destination: metrics/evidence_uniprot_literature.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1758,11 +1773,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_clingen
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_clingen
-      metrics_root: metrics
+      source: output/evidence_clingen
+      destination: metrics/evidence_clingen.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1770,11 +1788,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_cancer_biomarkers
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_cancer_biomarkers
-      metrics_root: metrics
+      source: output/evidence_cancer_biomarkers
+      destination: metrics/evidence_cancer_biomarkers.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1782,11 +1803,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_clinical_precedence
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_clinical_precedence
-      metrics_root: metrics
+      source: output/evidence_clinical_precedence
+      destination: metrics/evidence_clinical_precedence.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1794,11 +1818,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_reactome
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_reactome
-      metrics_root: metrics
+      source: output/evidence_reactome
+      destination: metrics/evidence_reactome.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1806,11 +1833,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_impc
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_impc
-      metrics_root: metrics
+      source: output/evidence_impc
+      destination: metrics/evidence_impc.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1818,11 +1848,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_orphanet
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_orphanet
-      metrics_root: metrics
+      source: output/evidence_orphanet
+      destination: metrics/evidence_orphanet.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1830,11 +1863,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_gene2phenotype
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_gene2phenotype
-      metrics_root: metrics
+      source: output/evidence_gene2phenotype
+      destination: metrics/evidence_gene2phenotype.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1842,11 +1878,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_intogen
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_intogen
-      metrics_root: metrics
+      source: output/evidence_intogen
+      destination: metrics/evidence_intogen.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1854,11 +1893,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_gene_burden
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_gene_burden
-      metrics_root: metrics
+      source: output/evidence_gene_burden
+      destination: metrics/evidence_gene_burden.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1866,11 +1908,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_crispr_screen
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_crispr_screen
-      metrics_root: metrics
+      source: output/evidence_crispr_screen
+      destination: metrics/evidence_crispr_screen.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1878,11 +1923,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_europepmc
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_europepmc
-      metrics_root: metrics
+      source: output/evidence_europepmc
+      destination: metrics/evidence_europepmc.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1890,11 +1938,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_genomics_england
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_genomics_england
-      metrics_root: metrics
+      source: output/evidence_genomics_england
+      destination: metrics/evidence_genomics_england.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1902,11 +1953,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_crispr
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_crispr
-      metrics_root: metrics
+      source: output/evidence_crispr
+      destination: metrics/evidence_crispr.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1914,11 +1968,14 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
     - name: collect_metrics evidence_cancer_gene_census
       requires:
         - pyspark evidence_postprocess
-      dataset_path: output/evidence_cancer_gene_census
-      metrics_root: metrics
+      source: output/evidence_cancer_gene_census
+      destination: metrics/evidence_cancer_gene_census.jsonl
       metrics:
         - type: count
           name: total_count
@@ -1926,6 +1983,9 @@ steps:
           name: score_distribution
           column: score
           n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
   ##################################################################################################
 
   #: Association on the fly STEP :##################################################################
@@ -2110,8 +2170,8 @@ steps:
   # collect_metrics steps have no requires: and will run against whatever exists at the path.
   orphan_metrics:
     - name: collect_metrics study
-      dataset_path: output/study
-      metrics_root: metrics
+      source: output/study
+      destination: metrics/study.jsonl
       metrics:
         - type: count
           name: total_count
@@ -2126,8 +2186,8 @@ steps:
           group_by: [projectId]
 
     - name: collect_metrics credible_set
-      dataset_path: output/credible_set
-      metrics_root: metrics
+      source: output/credible_set
+      destination: metrics/credible_set.jsonl
       metrics:
         - type: count
           name: total_count
@@ -2146,8 +2206,8 @@ steps:
           group_by: [finemappingMethod]
 
     - name: collect_metrics variant
-      dataset_path: output/variant
-      metrics_root: metrics
+      source: output/variant
+      destination: metrics/variant.jsonl
       metrics:
         - type: count
           name: total_count
@@ -2156,8 +2216,8 @@ steps:
           group_by: [mostSevereConsequenceId]
 
     - name: collect_metrics colocalisation
-      dataset_path: output/colocalisation
-      metrics_root: metrics
+      source: output/colocalisation
+      destination: metrics/colocalisation.jsonl
       metrics:
         - type: count
           name: total_count
@@ -2177,8 +2237,8 @@ steps:
           n_bins: 20
 
     - name: collect_metrics l2g_prediction
-      dataset_path: output/l2g_prediction
-      metrics_root: metrics
+      source: output/l2g_prediction
+      destination: metrics/l2g_prediction.jsonl
       metrics:
         - type: count
           name: total_count

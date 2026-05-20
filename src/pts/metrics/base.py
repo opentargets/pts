@@ -2,23 +2,60 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 
 import polars as pl
 from pydantic import BaseModel
+
+_ENVELOPE_FIELDS = frozenset({
+    'name', 'metric_type', 'release', 'run', 'dataset', 'source', 'destination',
+})
+
+
+class UnifiedMetricRecord(BaseModel):
+    """Flat, parquet-compatible record written as one JSONL line per metric."""
+
+    name: str
+    metric_type: str
+    release: str
+    run: str
+    dataset: str
+    source: str
+    destination: str
+    result: str  # JSON blob of metric-specific fields (no envelope keys)
 
 
 class MetricResult(BaseModel, ABC):
     """Base class for all metric result types.
 
     Subclasses add metric-specific fields (e.g. value, bins, groups).
-    ``release`` and ``run`` are injected by MetricRunner after compute() returns.
+    Envelope fields (release, run, dataset, source, destination) are injected
+    by MetricRunner after compute() returns.
     """
 
     name: str
     metric_type: str
     release: str
     run: str
+    dataset: str = ''
+    source: str = ''
+    destination: str = ''
+
+    def to_unified_record(self) -> UnifiedMetricRecord:
+        """Produce a flat UnifiedMetricRecord; metric-specific fields go into result."""
+        data = self.model_dump()
+        payload = {k: v for k, v in data.items() if k not in _ENVELOPE_FIELDS}
+        return UnifiedMetricRecord(
+            name=self.name,
+            metric_type=self.metric_type,
+            release=self.release,
+            run=self.run,
+            dataset=self.dataset,
+            source=self.source,
+            destination=self.destination,
+            result=json.dumps(payload),
+        )
 
 
 class Metric(BaseModel, ABC):

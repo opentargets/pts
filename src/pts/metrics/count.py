@@ -27,6 +27,7 @@ class DistinctCountResult(MetricResult):
 class CountMetric(Metric):
     """Counts rows, or non-null values of a column."""
 
+    type: Literal['count'] = 'count'
     column: str | None = None
 
     @property
@@ -45,6 +46,7 @@ class CountMetric(Metric):
 class DistinctCountMetric(Metric):
     """Counts distinct values across one or more columns."""
 
+    type: Literal['distinct_count'] = 'distinct_count'
     columns: list[str]
 
     @property

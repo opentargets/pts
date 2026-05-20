@@ -1,330 +1,487 @@
 ---
-# metrics.yaml — standalone metrics collection config
-# Run:  uv run python scripts/collect_metrics.py [--release TAG] [--run ID]
+# metrics.yaml — standalone otter config for metrics collection
+# Points at the real output data directory; run with:
+#   otter run -c metrics.yaml
+work_path: /home/misio-pysio/data/opentargets
+log_level: INFO
+pool_size: 4
 
 scratchpad:
-  release: 26.06-pub   # override with --release
-  run: testrun.1        # override with --run
+  release: 26.06-pub
+  run: testrun.1
 
-data_root: /home/misio-pysio/data/opentargets/output
-metrics_root: /home/misio-pysio/projects/OpenTargets/pts-wortkree/pts/metrics_output
+steps:
 
-datasets:
+  disease_metrics:
+    - name: collect_metrics disease
+      source: output/disease
+      destination: metrics/disease.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: custom
+          class: pts.metrics.custom.disease.DiseaseByTherapeuticAreaMetric
+          name: count_by_therapeutic_area
 
-  disease:
-    metrics:
-      - type: count
-        name: total_count
-      - type: custom
-        class: pts.metrics.custom.disease.DiseaseByTherapeuticAreaMetric
-        name: count_by_therapeutic_area
+  target_metrics:
+    - name: collect_metrics target
+      source: output/target
+      destination: metrics/target.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_biotype
+          group_by: [biotype]
 
-  target:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_count
-        name: count_by_biotype
-        group_by: [biotype]
+  drug_molecule_metrics:
+    - name: collect_metrics drug_molecule
+      source: output/drug_molecule
+      destination: metrics/drug_molecule.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_drug_type
+          group_by: [drugType]
+        - type: grouped_count
+          name: count_by_max_clinical_stage
+          group_by: [maximumClinicalStage]
 
-  drug_molecule:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_count
-        name: count_by_drug_type
-        group_by: [drugType]
-      - type: grouped_count
-        name: count_by_max_clinical_stage
-        group_by: [maximumClinicalStage]
+  study_metrics:
+    - name: collect_metrics study
+      source: output/study
+      destination: metrics/study.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_project
+          group_by: [projectId]
 
-  study:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distinct_count
-        name: distinct_studies
-        columns: [studyId]
-      - type: grouped_count
-        name: count_by_study_type
-        group_by: [studyType]
-      - type: grouped_count
-        name: count_by_project
-        group_by: [projectId]
+  credible_set_metrics:
+    - name: collect_metrics credible_set
+      source: output/credible_set
+      destination: metrics/credible_set.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: distribution
+          name: log10bf_distribution
+          column: credibleSetlog10BF
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_finemapping_method
+          group_by: [finemappingMethod]
 
-  credible_set:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distinct_count
-        name: distinct_studies
-        columns: [studyId]
-      - type: distribution
-        name: log10bf_distribution
-        column: credibleSetlog10BF
-        n_bins: 20
-      - type: grouped_count
-        name: count_by_study_type
-        group_by: [studyType]
-      - type: grouped_count
-        name: count_by_finemapping_method
-        group_by: [finemappingMethod]
+  variant_metrics:
+    - name: collect_metrics variant
+      source: output/variant
+      destination: metrics/variant.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_most_severe_consequence
+          group_by: [mostSevereConsequenceId]
 
-  variant:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_count
-        name: count_by_most_severe_consequence
-        group_by: [mostSevereConsequenceId]
+  l2g_prediction_metrics:
+    - name: collect_metrics l2g_prediction
+      source: output/l2g_prediction
+      destination: metrics/l2g_prediction.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_genes
+          columns: [geneId]
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: custom
+          class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
+          name: significant_gene_count
+          threshold: 0.5
 
-  l2g_prediction:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distinct_count
-        name: distinct_genes
-        columns: [geneId]
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
-      - type: custom
-        class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
-        name: significant_gene_count
-        threshold: 0.5
+  colocalisation_metrics:
+    - name: collect_metrics colocalisation
+      source: output/colocalisation
+      destination: metrics/colocalisation.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_right_study_type
+          group_by: [rightStudyType]
+        - type: grouped_count
+          name: count_by_method
+          group_by: [colocalisationMethod]
+        - type: distribution
+          name: h4_distribution
+          column: h4
+          n_bins: 20
+        - type: distribution
+          name: clpp_distribution
+          column: clpp
+          n_bins: 20
 
-  colocalisation:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_count
-        name: count_by_right_study_type
-        group_by: [rightStudyType]
-      - type: grouped_count
-        name: count_by_method
-        group_by: [colocalisationMethod]
-      - type: distribution
-        name: h4_distribution
-        column: h4
-        n_bins: 20
-      - type: distribution
-        name: clpp_distribution
-        column: clpp
-        n_bins: 20
+  association_by_datasource_direct_metrics:
+    - name: collect_metrics association_by_datasource_direct
+      source: output/association_by_datasource_direct
+      destination: metrics/association_by_datasource_direct.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: association_score_distribution
+          column: associationScore
+          n_bins: 20
 
-  association_by_datasource_direct:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: association_score_distribution
-        column: associationScore
-        n_bins: 20
+  association_by_datasource_indirect_metrics:
+    - name: collect_metrics association_by_datasource_indirect
+      source: output/association_by_datasource_indirect
+      destination: metrics/association_by_datasource_indirect.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: association_score_distribution
+          column: associationScore
+          n_bins: 20
 
-  association_by_datasource_indirect:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: association_score_distribution
-        column: associationScore
-        n_bins: 20
+  association_by_datatype_direct_metrics:
+    - name: collect_metrics association_by_datatype_direct
+      source: output/association_by_datatype_direct
+      destination: metrics/association_by_datatype_direct.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
 
-  association_by_datatype_direct:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_sum
-        name: evidence_count_by_datatype
-        column: evidenceCount
-        group_by: [aggregationValue]
+  association_by_datatype_indirect_metrics:
+    - name: collect_metrics association_by_datatype_indirect
+      source: output/association_by_datatype_indirect
+      destination: metrics/association_by_datatype_indirect.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
 
-  association_by_datatype_indirect:
-    metrics:
-      - type: count
-        name: total_count
-      - type: grouped_sum
-        name: evidence_count_by_datatype
-        column: evidenceCount
-        group_by: [aggregationValue]
+  evidence_cancer_biomarkers_metrics:
+    - name: collect_metrics evidence_cancer_biomarkers
+      source: output/evidence_cancer_biomarkers
+      destination: metrics/evidence_cancer_biomarkers.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_cancer_biomarkers:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_cancer_gene_census_metrics:
+    - name: collect_metrics evidence_cancer_gene_census
+      source: output/evidence_cancer_gene_census
+      destination: metrics/evidence_cancer_gene_census.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_cancer_gene_census:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_clingen_metrics:
+    - name: collect_metrics evidence_clingen
+      source: output/evidence_clingen
+      destination: metrics/evidence_clingen.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_clingen:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_clinical_precedence_metrics:
+    - name: collect_metrics evidence_clinical_precedence
+      source: output/evidence_clinical_precedence
+      destination: metrics/evidence_clinical_precedence.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_clinical_precedence:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_crispr_metrics:
+    - name: collect_metrics evidence_crispr
+      source: output/evidence_crispr
+      destination: metrics/evidence_crispr.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_crispr:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_crispr_screen_metrics:
+    - name: collect_metrics evidence_crispr_screen
+      source: output/evidence_crispr_screen
+      destination: metrics/evidence_crispr_screen.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_crispr_screen:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_europepmc_metrics:
+    - name: collect_metrics evidence_europepmc
+      source: output/evidence_europepmc
+      destination: metrics/evidence_europepmc.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_europepmc:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_eva_metrics:
+    - name: collect_metrics evidence_eva
+      source: output/evidence_eva
+      destination: metrics/evidence_eva.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_eva:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_eva_somatic_metrics:
+    - name: collect_metrics evidence_eva_somatic
+      source: output/evidence_eva_somatic
+      destination: metrics/evidence_eva_somatic.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_eva_somatic:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_expression_atlas_metrics:
+    - name: collect_metrics evidence_expression_atlas
+      source: output/evidence_expression_atlas
+      destination: metrics/evidence_expression_atlas.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_expression_atlas:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_gene2phenotype_metrics:
+    - name: collect_metrics evidence_gene2phenotype
+      source: output/evidence_gene2phenotype
+      destination: metrics/evidence_gene2phenotype.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_gene2phenotype:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_gene_burden_metrics:
+    - name: collect_metrics evidence_gene_burden
+      source: output/evidence_gene_burden
+      destination: metrics/evidence_gene_burden.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_gene_burden:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_genomics_england_metrics:
+    - name: collect_metrics evidence_genomics_england
+      source: output/evidence_genomics_england
+      destination: metrics/evidence_genomics_england.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_genomics_england:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_gwas_credible_sets_metrics:
+    - name: collect_metrics evidence_gwas_credible_sets
+      source: output/evidence_gwas_credible_sets
+      destination: metrics/evidence_gwas_credible_sets.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_gwas_credible_sets:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_impc_metrics:
+    - name: collect_metrics evidence_impc
+      source: output/evidence_impc
+      destination: metrics/evidence_impc.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_impc:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_intogen_metrics:
+    - name: collect_metrics evidence_intogen
+      source: output/evidence_intogen
+      destination: metrics/evidence_intogen.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_intogen:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_orphanet_metrics:
+    - name: collect_metrics evidence_orphanet
+      source: output/evidence_orphanet
+      destination: metrics/evidence_orphanet.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_orphanet:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_reactome_metrics:
+    - name: collect_metrics evidence_reactome
+      source: output/evidence_reactome
+      destination: metrics/evidence_reactome.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_reactome:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_uniprot_literature_metrics:
+    - name: collect_metrics evidence_uniprot_literature
+      source: output/evidence_uniprot_literature
+      destination: metrics/evidence_uniprot_literature.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
 
-  evidence_uniprot_literature:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
-
-  evidence_uniprot_variants:
-    metrics:
-      - type: count
-        name: total_count
-      - type: distribution
-        name: score_distribution
-        column: score
-        n_bins: 20
+  evidence_uniprot_variants_metrics:
+    - name: collect_metrics evidence_uniprot_variants
+      source: output/evidence_uniprot_variants
+      destination: metrics/evidence_uniprot_variants.jsonl
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]

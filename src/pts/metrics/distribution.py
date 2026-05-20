@@ -29,6 +29,7 @@ class DistributionResult(MetricResult):
 class DistributionMetric(Metric):
     """Computes an equal-width histogram over a numeric column."""
 
+    type: Literal['distribution'] = 'distribution'
     column: str
     n_bins: int = 20
 
