@@ -1,7 +1,10 @@
-"""Tests for GroupedCountMetric and GroupedSumMetric — written before implementation (TDD)."""
+"""Tests for GroupedCountMetric, GroupedSumMetric, GroupedCountExplodeMetric."""
 import polars as pl
 import pytest
+
 from pts.metrics.grouped import (
+    GroupedCountExplodeMetric,
+    GroupedCountExplodeResult,
     GroupedCountMetric,
     GroupedCountResult,
     GroupedSumMetric,
@@ -41,12 +44,10 @@ def test_grouped_count_multi_column_group_by():
     assert len(result.groups) == 3
 
 
-
 def test_grouped_count_empty_dataframe():
     df = pl.DataFrame({'studyType': pl.Series([], dtype=pl.String)})
     result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
     assert result.groups == []
-
 
 
 def test_grouped_sum_sums_column_per_group():
@@ -61,3 +62,36 @@ def test_grouped_sum_sums_column_per_group():
     assert groups['literature'] == 50
 
 
+# ── GroupedCountExplodeMetric ─────────────────────────────────────────────────
+
+def test_grouped_count_explode_counts_per_exploded_value():
+    df = pl.DataFrame({'therapeuticAreas': [['TA1', 'TA2'], ['TA1', 'TA3']]})
+    result = GroupedCountExplodeMetric(name='g', group_by=['therapeuticAreas']).compute(df)
+    assert isinstance(result, GroupedCountExplodeResult)
+    counts = {g.key['therapeuticAreas']: g.count for g in result.groups}
+    assert counts['TA1'] == 2
+    assert counts['TA2'] == 1
+    assert counts['TA3'] == 1
+
+
+def test_grouped_count_explode_sorted_descending():
+    df = pl.DataFrame({'therapeuticAreas': [['TA1', 'TA2'], ['TA1', 'TA3'], ['TA1']]})
+    result = GroupedCountExplodeMetric(name='g', group_by=['therapeuticAreas']).compute(df)
+    assert result.groups[0].key == {'therapeuticAreas': 'TA1'}
+    assert result.groups[0].count == 3
+
+
+def test_grouped_count_explode_excludes_null_rows():
+    df = pl.DataFrame({'therapeuticAreas': [['TA1'], None, ['TA1', 'TA2']]})
+    result = GroupedCountExplodeMetric(name='g', group_by=['therapeuticAreas']).compute(df)
+    counts = {g.key['therapeuticAreas']: g.count for g in result.groups}
+    assert counts == {'TA1': 2, 'TA2': 1}
+
+
+@pytest.mark.parametrize('df', [
+    pl.DataFrame({'therapeuticAreas': pl.Series([], dtype=pl.List(pl.String))}),
+    pl.DataFrame({'therapeuticAreas': pl.Series([None, None], dtype=pl.List(pl.String))}),
+])
+def test_grouped_count_explode_returns_empty_groups(df):
+    result = GroupedCountExplodeMetric(name='g', group_by=['therapeuticAreas']).compute(df)
+    assert result.groups == []

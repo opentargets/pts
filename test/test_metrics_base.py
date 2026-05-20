@@ -9,7 +9,6 @@ def test_metric_is_abstract():
 
 
 def test_metric_subclasses_must_implement_compute():
-    import polars as pl
     from pts.metrics.base import Metric
 
     class IncompleteMetric(Metric):
@@ -21,8 +20,7 @@ def test_metric_subclasses_must_implement_compute():
 
 def test_metric_result_has_release_run_fields():
     from pts.metrics.count import CountResult
+
     r = CountResult(name='n', release='26.06-pub', run='testrun.1', value=1)
     assert r.release == '26.06-pub'
     assert r.run == 'testrun.1'
-
-

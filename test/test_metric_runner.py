@@ -1,8 +1,8 @@
 """Tests for MetricRunner."""
 import json
+
 import polars as pl
 import pytest
-from pathlib import Path
 
 from pts.metrics import CountMetric, GroupedCountMetric
 from pts.metrics.runner import MetricRunner
@@ -17,48 +17,8 @@ def dataset(tmp_path):
     return path
 
 
-def test_runner_writes_jsonl_file(dataset, tmp_path):
+def test_runner_writes_jsonl_record_with_expected_envelope(dataset, tmp_path):
     out = tmp_path / 'metrics' / 'study.jsonl'
-    MetricRunner().run(
-        metrics=[CountMetric(name='total_count')],
-        dataset_path=dataset,
-        out_file=out,
-        release='26.06-pub',
-        run='testrun.1',
-    )
-    assert out.exists()
-
-
-def test_runner_stamps_release_and_run(dataset, tmp_path):
-    out = tmp_path / 'metrics' / 'study.jsonl'
-    MetricRunner().run(
-        metrics=[CountMetric(name='total_count')],
-        dataset_path=dataset,
-        out_file=out,
-        release='26.06-pub',
-        run='testrun.1',
-    )
-    record = json.loads(out.read_text().splitlines()[0])
-    assert record['release'] == '26.06-pub'
-    assert record['run'] == 'testrun.1'
-
-
-def test_runner_json_content_is_valid(dataset, tmp_path):
-    out = tmp_path / 'metrics' / 'study.jsonl'
-    MetricRunner().run(
-        metrics=[CountMetric(name='total_count')],
-        dataset_path=dataset,
-        out_file=out,
-        release='26.06-pub',
-        run='testrun.1',
-    )
-    record = json.loads(out.read_text().splitlines()[0])
-    assert json.loads(record['result'])['value'] == 3
-    assert record['metric_type'] == 'count'
-
-
-def test_runner_stamps_dataset_source_destination(dataset, tmp_path):
-    out = tmp_path / 'metrics' / 'dataset.jsonl'
     MetricRunner().run(
         metrics=[CountMetric(name='total_count')],
         dataset_path=dataset,
@@ -68,10 +28,19 @@ def test_runner_stamps_dataset_source_destination(dataset, tmp_path):
         release='26.06-pub',
         run='testrun.1',
     )
+    assert out.exists()
     record = json.loads(out.read_text().splitlines()[0])
-    assert record['dataset'] == dataset.name
-    assert record['source'] == str(dataset)
-    assert record['destination'] == str(out)
+
+    assert record == {
+        'name': 'total_count',
+        'metric_type': 'count',
+        'release': '26.06-pub',
+        'run': 'testrun.1',
+        'dataset': dataset.name,
+        'source': str(dataset),
+        'destination': str(out),
+        'result': json.dumps({'value': 3}),
+    }
 
 
 def test_runner_bad_column_raises(dataset, tmp_path):

@@ -33,6 +33,7 @@ class GroupedCountMetric(Metric):
 
     @property
     def required_columns(self) -> list[str]:
+        """Columns needed to construct the grouping key."""
         return list(self.group_by)
 
     def compute(self, df: pl.DataFrame) -> GroupedCountResult:
@@ -62,6 +63,57 @@ class GroupedCountMetric(Metric):
         )
 
 
+class GroupedCountExplodeResult(MetricResult):
+    """Result for GroupedCountExplodeMetric."""
+
+    metric_type: Literal['grouped_count_explode'] = 'grouped_count_explode'
+    group_by: list[str]
+    groups: list[GroupRow]
+
+
+class GroupedCountExplodeMetric(Metric):
+    """Explodes list columns in group_by, then counts rows per group, sorted descending."""
+
+    type: Literal['grouped_count_explode'] = 'grouped_count_explode'
+    group_by: list[str]
+
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.group_by)
+
+    def compute(self, df: pl.DataFrame) -> GroupedCountExplodeResult:
+        filtered = df.drop_nulls(subset=self.group_by)
+
+        if filtered.is_empty():
+            return GroupedCountExplodeResult(name=self.name, release='', run='', group_by=self.group_by, groups=[])
+
+        exploded = filtered
+        for col in self.group_by:
+            exploded = exploded.explode(col)
+        exploded = exploded.drop_nulls(subset=self.group_by)
+
+        if exploded.is_empty():
+            groups: list[GroupRow] = []
+        else:
+            agg = (
+                exploded.group_by(self.group_by)
+                .agg(pl.len().alias('count'))
+                .sort('count', descending=True)
+            )
+            groups = [
+                GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+                for row in agg.iter_rows(named=True)
+            ]
+
+        return GroupedCountExplodeResult(
+            name=self.name,
+            release='',
+            run='',
+            group_by=self.group_by,
+            groups=groups,
+        )
+
+
 class GroupedSumResult(MetricResult):
     """Result for GroupedSumMetric."""
 
@@ -80,6 +132,7 @@ class GroupedSumMetric(Metric):
 
     @property
     def required_columns(self) -> list[str]:
+        """Columns needed for the grouped summation."""
         return [self.column, *self.group_by]
 
     def compute(self, df: pl.DataFrame) -> GroupedSumResult:

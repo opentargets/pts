@@ -1,19 +1,22 @@
 """Metric type registry: MetricType enum and load_metric dispatcher."""
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from importlib import import_module
 from typing import Any
 
 from pts.metrics.base import Metric
 from pts.metrics.count import CountMetric, DistinctCountMetric
-from pts.metrics.grouped import GroupedCountMetric, GroupedSumMetric
+from pts.metrics.grouped import GroupedCountExplodeMetric, GroupedCountMetric, GroupedSumMetric
 
 
-class MetricType(str, Enum):
+class MetricType(StrEnum):
+    """Supported metric kinds that can be instantiated from config."""
+
     count = 'count'
     distinct_count = 'distinct_count'
     grouped_count = 'grouped_count'
+    grouped_count_explode = 'grouped_count_explode'
     grouped_sum = 'grouped_sum'
     custom = 'custom'
 
@@ -22,6 +25,7 @@ _IMPLEMENTERS: dict[MetricType, type[Metric]] = {
     MetricType.count: CountMetric,
     MetricType.distinct_count: DistinctCountMetric,
     MetricType.grouped_count: GroupedCountMetric,
+    MetricType.grouped_count_explode: GroupedCountExplodeMetric,
     MetricType.grouped_sum: GroupedSumMetric,
 }
 

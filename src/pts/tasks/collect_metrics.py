@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from loguru import logger
 from otter.storage.util import make_absolute
@@ -12,8 +12,8 @@ from otter.task.task_reporter import report
 from pydantic import field_validator
 
 from pts.metrics.base import Metric
-from pts.metrics.runner import MetricRunner
 from pts.metrics.loader import load_metric, metric_to_dict
+from pts.metrics.runner import MetricRunner
 
 
 class CollectMetricsSpec(Spec):
@@ -43,21 +43,27 @@ class CollectMetrics(Task):
     def __init__(self, spec: CollectMetricsSpec, context: TaskContext) -> None:
         super().__init__(spec, context)
         self.spec: CollectMetricsSpec
+        release = context.scratchpad.sentinel_dict.get('release')
+        run = context.scratchpad.sentinel_dict.get('run')
+        if not release:
+            raise ValueError("scratchpad is missing required key 'release'")
+        if not run:
+            raise ValueError("scratchpad is missing required key 'run'")
+        self._release = release
+        self._run = run
 
     @report
     def run(self) -> Self:
-        dataset_path = Path(make_absolute(self.spec.source, self.context.config))
-        out_file = Path(make_absolute(self.spec.destination, self.context.config))
-        release = self.context.scratchpad.sentinel_dict.get('release', '')
-        run = self.context.scratchpad.sentinel_dict.get('run', '')
+        dataset_path = Path(cast(str, make_absolute(self.spec.source, self.context.config)))
+        out_file = Path(cast(str, make_absolute(self.spec.destination, self.context.config)))
 
         logger.info(f'collecting {len(self.spec.metrics)} metrics for {out_file.stem}')
         MetricRunner().run(
             metrics=self.spec.metrics,
             dataset_path=dataset_path,
             out_file=out_file,
-            release=release,
-            run=run,
+            release=self._release,
+            run=self._run,
             source=str(dataset_path),
             destination=str(out_file),
         )

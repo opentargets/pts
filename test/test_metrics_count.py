@@ -1,6 +1,6 @@
 """Tests for CountMetric and DistinctCountMetric — written before implementation (TDD)."""
 import polars as pl
-import pytest
+
 from pts.metrics import CountMetric, DistinctCountMetric
 from pts.metrics.count import CountResult, DistinctCountResult
 
@@ -25,7 +25,6 @@ def test_count_metric_empty_dataframe():
     assert result.value == 0
 
 
-
 def test_distinct_count_single_column():
     df = pl.DataFrame({'studyId': ['S1', 'S2', 'S1', 'S3']})
     result = DistinctCountMetric(name='d', columns=['studyId']).compute(df)
@@ -44,5 +43,3 @@ def test_distinct_count_excludes_nulls():
     df = pl.DataFrame({'studyId': ['S1', None, 'S1']})
     result = DistinctCountMetric(name='d', columns=['studyId']).compute(df)
     assert result.value == 1
-
-

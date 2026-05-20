@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
+from typing import cast
 
 import polars as pl
 
@@ -13,16 +14,18 @@ log = logging.getLogger(__name__)
 
 
 class MetricRunner:
+    """Run configured metrics against a parquet dataset and emit JSONL records."""
+
     def _read(self, dataset_path: Path, columns: list[str] | None) -> pl.DataFrame:
         """Read parquet with optional column projection to minimise memory."""
         lf = pl.scan_parquet(dataset_path / '*.parquet')
         if columns is None:
-            return lf.collect()
+            return cast(pl.DataFrame, lf.collect())
         if columns:
-            return lf.select(columns).collect()
+            return cast(pl.DataFrame, lf.select(columns).collect())
         # empty list → just need row count; read the first column only
         first = lf.collect_schema().names()[0]
-        return lf.select(first).collect()
+        return cast(pl.DataFrame, lf.select(first).collect())
 
     def run(
         self,
@@ -35,6 +38,7 @@ class MetricRunner:
         source: str = '',
         destination: str = '',
     ) -> None:
+        """Compute metrics for one dataset and write one unified record per metric."""
         out_file.parent.mkdir(parents=True, exist_ok=True)
         with out_file.open('w') as fh:
             for metric in metrics:

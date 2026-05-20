@@ -2,13 +2,14 @@
 
 from pts.metrics.base import Metric, MetricResult
 from pts.metrics.count import CountMetric, DistinctCountMetric
-from pts.metrics.grouped import GroupedCountMetric, GroupedSumMetric
+from pts.metrics.grouped import GroupedCountExplodeMetric, GroupedCountMetric, GroupedSumMetric
 
 __all__ = [
-    'Metric',
-    'MetricResult',
     'CountMetric',
     'DistinctCountMetric',
+    'GroupedCountExplodeMetric',
     'GroupedCountMetric',
     'GroupedSumMetric',
+    'Metric',
+    'MetricResult',
 ]

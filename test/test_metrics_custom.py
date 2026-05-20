@@ -1,47 +1,16 @@
-"""Tests for custom metric types (Issues 5 and 6) — TDD, written before implementation."""
+"""Tests for custom metric types."""
 import polars as pl
 import pytest
 
-from pts.metrics.custom import DiseaseByTherapeuticAreaMetric, L2GSignificantGeneMetric
-from pts.metrics.grouped import GroupedCountResult
 from pts.metrics.count import CountResult
+from pts.metrics.custom import L2GSignificantGeneMetric
 
-
-# ── Issue 5: DiseaseByTherapeuticAreaMetric ──────────────────────────────────
-
-def test_disease_by_therapeutic_area_counts_per_area():
-    df = pl.DataFrame({
-        'id': ['D1', 'D2', 'D3'],
-        'therapeuticAreas': [['ONCOLOGY', 'NEURO'], ['ONCOLOGY'], ['NEURO']],
-    })
-    result = DiseaseByTherapeuticAreaMetric(name='ta').compute(df)
-    assert isinstance(result, GroupedCountResult)
-    groups = {g.key['therapeuticAreas']: g.count for g in result.groups}
-    assert groups['ONCOLOGY'] == 2
-    assert groups['NEURO'] == 2
-
-
-def test_disease_by_therapeutic_area_excludes_nulls():
-    df = pl.DataFrame({
-        'id': ['D1', 'D2'],
-        'therapeuticAreas': [['ONCOLOGY'], None],
-    })
-    result = DiseaseByTherapeuticAreaMetric(name='ta').compute(df)
-    assert len(result.groups) == 1
-
-
-def test_disease_by_therapeutic_area_group_by_field():
-    df = pl.DataFrame({'id': ['D1'], 'therapeuticAreas': [['X']]})
-    result = DiseaseByTherapeuticAreaMetric(name='ta').compute(df)
-    assert result.group_by == ['therapeuticAreas']
-
-
-# ── Issue 6: L2GSignificantGeneMetric ────────────────────────────────────────
+# ── L2GSignificantGeneMetric ──────────────────────────────────────────────────
 
 def test_l2g_counts_genes_above_threshold():
     df = pl.DataFrame({
         'geneId': ['G1', 'G1', 'G2', 'G3'],
-        'score':  [0.8,  0.6,  0.3,  0.9],
+        'score': [0.8, 0.6, 0.3, 0.9],
     })
     result = L2GSignificantGeneMetric(name='sig', threshold=0.5).compute(df)
     assert isinstance(result, CountResult)
@@ -54,6 +23,12 @@ def test_l2g_threshold_exclusive_below():
     assert result.value == 0
 
 
+def test_l2g_excludes_null_gene_ids():
+    df = pl.DataFrame({'geneId': ['G1', None], 'score': [0.6, 0.8]})
+    result = L2GSignificantGeneMetric(name='sig', threshold=0.5).compute(df)
+    assert result.value == 1
+
+
 def test_l2g_default_threshold_is_0_5():
     m = L2GSignificantGeneMetric(name='sig')
-    assert m.threshold == 0.5
+    assert m.threshold == pytest.approx(0.5)
