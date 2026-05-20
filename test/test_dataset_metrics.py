@@ -4,7 +4,14 @@ from pathlib import Path
 
 import polars as pl
 
-from pts.transformers.dataset_metrics import _dataset_file_stats, compute_breakdown, compute_filter_count
+from pts.transformers.dataset_metrics import (
+    OUTPUT_SCHEMA,
+    _breakdowns_to_struct,
+    _dataset_file_stats,
+    _filter_counts_to_struct,
+    compute_breakdown,
+    compute_filter_count,
+)
 
 
 def test_compute_breakdown_plain_column_with_null() -> None:
@@ -44,3 +51,39 @@ def test_dataset_file_stats(tmp_path: Path) -> None:
 
     assert n_partitions == 2
     assert file_size > 0
+
+
+def test_breakdowns_to_struct() -> None:
+    out = _breakdowns_to_struct({'studyType': {'gwas': 2, 'eqtl': 1}})
+    assert out == [
+        {'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}
+    ]
+
+
+def test_filter_counts_to_struct() -> None:
+    assert _filter_counts_to_struct({'prioritised_genes': 18422}) == [
+        {'name': 'prioritised_genes', 'count': 18422}
+    ]
+
+
+def test_output_schema_builds_and_roundtrips(tmp_path: Path) -> None:
+    rows = [
+        {
+            'id': 'study', 'count': 2, 'file_size': 10, 'number_of_partitions': 1,
+            'breakdowns': _breakdowns_to_struct({'studyType': {'gwas': 1, 'eqtl': 1}}),
+            'filter_counts': [],
+        },
+        {
+            'id': 'biosample', 'count': 5, 'file_size': 7, 'number_of_partitions': 1,
+            'breakdowns': [], 'filter_counts': [],
+        },
+    ]
+    out = tmp_path / 'metrics'
+    pl.DataFrame(rows, schema=OUTPUT_SCHEMA).write_parquet(out, mkdir=True)
+    back = pl.read_parquet(out)
+
+    assert back.height == 2
+    assert back.schema == pl.Schema(OUTPUT_SCHEMA)
+    assert back.filter(pl.col('id') == 'study')['breakdowns'].to_list() == [
+        [{'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 1}, {'value': 'eqtl', 'count': 1}]}]
+    ]
