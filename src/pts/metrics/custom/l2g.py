@@ -21,4 +21,4 @@ class L2GSignificantGeneMetric(Metric):
         """Count distinct geneId values where score >= threshold."""
         filtered = df.filter((pl.col('score') >= self.threshold) & pl.col('geneId').is_not_null())
         value = filtered.select('geneId').n_unique()
-        return CountResult(name=self.name, release='', run='', value=value)
+        return CountResult(name=self.name, value=value)

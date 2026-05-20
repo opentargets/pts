@@ -49,6 +49,6 @@ def test_runner_bad_column_raises(dataset, tmp_path):
             metrics=[GroupedCountMetric(name='g', group_by=['nonexistent'])],
             dataset_path=dataset,
             out_file=tmp_path / 'metrics' / 'study.jsonl',
-            release='',
-            run='',
+            release='26.06-pub',
+            run='testrun.1',
         )

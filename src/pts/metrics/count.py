@@ -41,7 +41,7 @@ class CountMetric(Metric):
             value = df.height
         else:
             value = int(df[self.column].is_not_null().sum())
-        return CountResult(name=self.name, release='', run='', value=value)
+        return CountResult(name=self.name, value=value)
 
 
 class DistinctCountMetric(Metric):
@@ -58,4 +58,4 @@ class DistinctCountMetric(Metric):
     def compute(self, df: pl.DataFrame) -> DistinctCountResult:
         """Compute distinct count."""
         value = df.select(self.columns).drop_nulls().n_unique()
-        return DistinctCountResult(name=self.name, release='', run='', columns=self.columns, value=value)
+        return DistinctCountResult(name=self.name, columns=self.columns, value=value)

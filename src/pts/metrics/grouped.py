@@ -56,8 +56,6 @@ class GroupedCountMetric(Metric):
 
         return GroupedCountResult(
             name=self.name,
-            release='',
-            run='',
             group_by=self.group_by,
             groups=groups,
         )
@@ -87,7 +85,7 @@ class GroupedCountExplodeMetric(Metric):
         filtered = df.drop_nulls(subset=self.group_by)
 
         if filtered.is_empty():
-            return GroupedCountExplodeResult(name=self.name, release='', run='', group_by=self.group_by, groups=[])
+            return GroupedCountExplodeResult(name=self.name, group_by=self.group_by, groups=[])
 
         exploded = filtered
         for col in self.group_by:
@@ -109,8 +107,6 @@ class GroupedCountExplodeMetric(Metric):
 
         return GroupedCountExplodeResult(
             name=self.name,
-            release='',
-            run='',
             group_by=self.group_by,
             groups=groups,
         )
@@ -157,8 +153,6 @@ class GroupedSumMetric(Metric):
 
         return GroupedSumResult(
             name=self.name,
-            release='',
-            run='',
             column=self.column,
             group_by=self.group_by,
             groups=groups,

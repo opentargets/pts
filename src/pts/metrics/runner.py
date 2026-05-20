@@ -45,14 +45,13 @@ class MetricRunner:
                 try:
                     df = self._read(dataset_path, metric.required_columns)
                     result = metric.compute(df)
-                    stamped = result.model_copy(update={
-                        'release': release,
-                        'run': run,
-                        'dataset': dataset_path.name,
-                        'source': source,
-                        'destination': destination,
-                    })
-                    record = stamped.to_unified_record()
+                    record = result.to_unified_record(
+                        release=release,
+                        run=run,
+                        dataset=dataset_path.name,
+                        source=source,
+                        destination=destination,
+                    )
                     fh.write(record.model_dump_json() + '\n')
                 except Exception:
                     log.error('metric %s failed on dataset %s', metric.name, dataset_path.name)

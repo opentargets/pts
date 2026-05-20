@@ -8,9 +8,7 @@ from abc import ABC, abstractmethod
 import polars as pl
 from pydantic import BaseModel
 
-_ENVELOPE_FIELDS = frozenset({
-    'name', 'metric_type', 'release', 'run', 'dataset', 'source', 'destination',
-})
+_ENVELOPE_FIELDS = frozenset({'name', 'metric_type'})
 
 
 class UnifiedMetricRecord(BaseModel):
@@ -29,31 +27,33 @@ class UnifiedMetricRecord(BaseModel):
 class MetricResult(BaseModel, ABC):
     """Base class for all metric result types.
 
-    Subclasses add metric-specific fields (e.g. value, bins, groups).
+    Subclasses add metric-specific fields (e.g. value, groups).
     Envelope fields (release, run, dataset, source, destination) are injected
-    by MetricRunner after compute() returns.
+    by MetricRunner via to_unified_record().
     """
 
     name: str
     metric_type: str
-    release: str
-    run: str
-    dataset: str = ''
-    source: str = ''
-    destination: str = ''
 
-    def to_unified_record(self) -> UnifiedMetricRecord:
+    def to_unified_record(
+        self,
+        *,
+        release: str,
+        run: str,
+        dataset: str = '',
+        source: str = '',
+        destination: str = '',
+    ) -> UnifiedMetricRecord:
         """Produce a flat UnifiedMetricRecord; metric-specific fields go into result."""
-        data = self.model_dump()
-        payload = {k: v for k, v in data.items() if k not in _ENVELOPE_FIELDS}
+        payload = {k: v for k, v in self.model_dump().items() if k not in _ENVELOPE_FIELDS}
         return UnifiedMetricRecord(
             name=self.name,
             metric_type=self.metric_type,
-            release=self.release,
-            run=self.run,
-            dataset=self.dataset,
-            source=self.source,
-            destination=self.destination,
+            release=release,
+            run=run,
+            dataset=dataset,
+            source=source,
+            destination=destination,
             result=json.dumps(payload),
         )
 
