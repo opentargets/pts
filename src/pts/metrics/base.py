@@ -27,14 +27,6 @@ Adding a new built-in metric type
 
 3. **Export** from :mod:`pts.metrics` (``__init__.py``) if the type is part of
    the public API.
-
-For one-off, dataset-specific metrics use ``type: custom`` in config and reference
-the class by dotted path — no loader registration needed::
-
-    metrics:
-      - type: custom
-        class: pts.metrics.custom.my_module.MyMetric
-        name: my_metric_name
 """
 
 from __future__ import annotations
@@ -60,9 +52,9 @@ class Metric(BaseModel, ABC):
     implement :meth:`compute`. Callers (i.e. :class:`MetricRunner`) invoke
     :meth:`run`, which wraps :meth:`compute` with debug logging.
 
-    Each built-in subclass must carry a ``type: Literal['<kind>'] = '<kind>'``
-    discriminator field so that :func:`~pts.metrics.loader.load_metric` can
-    reconstruct the correct class from a config dict.
+    Each subclass must carry a ``type: Literal['<kind>'] = '<kind>'``
+    discriminator field so that :meth:`~pts.metrics.loader.MetricType.load`
+    can reconstruct the correct class from a config dict.
     """
 
     name: str

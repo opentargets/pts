@@ -103,8 +103,7 @@ steps:
         - type: distinct_count
           name: distinct_genes
           columns: [geneId]
-        - type: custom
-          class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
+        - type: l2g_significant_gene
           name: significant_gene_count
           threshold: 0.5
 

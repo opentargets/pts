@@ -43,6 +43,10 @@ class GroupedCountMetric(Metric):
         >>> df2 = pl.DataFrame({'studyType': ['gwas', 'gwas', None]})
         >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[1].key
         {'studyType': None}
+        >>> df3 = pl.DataFrame({'type': ['gwas', 'gwas', 'gwas', 'eqtl'], 'pop': ['EUR', 'EUR', 'AFR', 'EUR']})
+        >>> result3 = GroupedCountMetric(name='g', group_by=['type', 'pop']).compute(df3)
+        >>> result3.groups[0].key, result3.groups[0].count
+        ({'type': 'gwas', 'pop': 'EUR'}, 2)
         """
         agg = (
             df.group_by(self.group_by)
@@ -98,6 +102,10 @@ class GroupedCountExplodeMetric(Metric):
         >>> result = GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(df)
         >>> result.groups[0].key, result.groups[0].count
         ({'ta': 'TA1'}, 3)
+        >>> df2 = pl.DataFrame({'ta': [['TA1', 'TA2'], ['TA1']], 'ds': [['D1', 'D2'], ['D1']]})
+        >>> result2 = GroupedCountExplodeMetric(name='g', group_by=['ta', 'ds']).compute(df2)
+        >>> result2.groups[0].key, result2.groups[0].count
+        ({'ta': 'TA1', 'ds': 'D1'}, 2)
         """
         exploded = reduce(lambda acc, col: acc.explode(col), self.group_by, df)
 

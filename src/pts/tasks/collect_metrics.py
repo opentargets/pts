@@ -12,7 +12,7 @@ from otter.task.task_reporter import report
 from pydantic import field_validator
 
 from pts.metrics.base import Metric
-from pts.metrics.loader import load_metric, metric_to_dict
+from pts.metrics.loader import MetricType
 from pts.metrics.runner import MetricRunner
 
 
@@ -31,12 +31,7 @@ class CollectMetricsSpec(Spec):
     def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
         if not v:
             raise ValueError("'metrics' must contain at least one metric")
-        return [cfg if isinstance(cfg, Metric) else load_metric(cfg) for cfg in v]
-
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        d = super().model_dump(**kwargs)
-        d['metrics'] = [metric_to_dict(m) for m in self.metrics]
-        return d
+        return [cfg if isinstance(cfg, Metric) else MetricType.load(cfg) for cfg in v]
 
 
 class CollectMetrics(Task):

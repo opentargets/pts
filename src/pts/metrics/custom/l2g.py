@@ -1,6 +1,8 @@
 """Custom metric: L2G significant gene count."""
 from __future__ import annotations
 
+from typing import Literal
+
 import polars as pl
 
 from pts.metrics.base import Metric
@@ -10,6 +12,8 @@ from pts.metrics.count import CountResult
 class L2GSignificantGeneMetric(Metric):
     """Counts distinct genes with an L2G score at or above a threshold."""
 
+    type: Literal['l2g_significant_gene'] = 'l2g_significant_gene'
+    """Always ``'l2g_significant_gene'``; used by the metric loader as the config discriminator."""
     threshold: float = 0.5
     """Minimum L2G score a gene must reach to be counted. Defaults to 0.5."""
 
