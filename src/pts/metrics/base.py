@@ -49,6 +49,10 @@ from pydantic import BaseModel
 _ENVELOPE_FIELDS = frozenset({'name', 'metric_type'})
 
 
+class EmptyDatasetError(ValueError):
+    """Raised when a metric is run against an empty DataFrame."""
+
+
 class Metric(BaseModel, ABC):
     """Abstract base for all metric definitions.
 
@@ -70,7 +74,12 @@ class Metric(BaseModel, ABC):
         return None
 
     def run(self, df: pl.DataFrame) -> MetricResult:
-        """Invoke :meth:`compute` with debug logging; entry point for :class:`MetricRunner`."""
+        """Invoke :meth:`compute` with debug logging; entry point for :class:`MetricRunner`.
+
+        Raises :class:`EmptyDatasetError` if ``df`` has no rows.
+        """
+        if df.is_empty():
+            raise EmptyDatasetError(f"metric '{self.name}': input DataFrame is empty")
         logger.debug('metric {} | {} rows', self.name, df.height)
         result = self.compute(df)
         logger.debug('metric {} | done ({})', self.name, result.metric_type)

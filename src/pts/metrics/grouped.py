@@ -20,7 +20,7 @@ class GroupRow(BaseModel):
 
 
 class GroupedCountMetric(Metric):
-    """Counts rows per group, sorted descending by count. Null keys excluded."""
+    """Counts rows per group, sorted descending by count. Null keys form their own group."""
 
     type: Literal['grouped_count'] = 'grouped_count'
     """Always ``'grouped_count'``; used by the metric loader as the config discriminator."""
@@ -39,24 +39,19 @@ class GroupedCountMetric(Metric):
         >>> result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
         >>> result.groups[0].key, result.groups[0].count
         ({'studyType': 'gwas'}, 3)
-        >>> df2 = pl.DataFrame({'studyType': ['gwas', None]})
-        >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[0].key
-        {'studyType': 'gwas'}
+        >>> df2 = pl.DataFrame({'studyType': ['gwas', 'gwas', None]})
+        >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[1].key
+        {'studyType': None}
         """
-        filtered = df.drop_nulls(subset=self.group_by)
-
-        if filtered.is_empty():
-            groups = []
-        else:
-            agg = (
-                filtered.group_by(self.group_by)
-                .agg(pl.len().alias('count'))
-                .sort('count', descending=True)
-            )
-            groups = [
-                GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
-                for row in agg.iter_rows(named=True)
-            ]
+        agg = (
+            df.group_by(self.group_by)
+            .agg(pl.len().alias('count'))
+            .sort('count', descending=True)
+        )
+        groups = [
+            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            for row in agg.iter_rows(named=True)
+        ]
 
         return GroupedCountResult(
             name=self.name,
@@ -73,7 +68,7 @@ class GroupedCountResult(MetricResult):
     group_by: list[str]
     """Column names used to form groups."""
     groups: list[GroupRow]
-    """One entry per distinct key combination, sorted descending by count; rows with null keys excluded."""
+    """One entry per distinct key combination, sorted descending by count; null keys form their own group."""
 
 
 class GroupedCountExplodeMetric(Metric):
@@ -82,6 +77,7 @@ class GroupedCountExplodeMetric(Metric):
     Each column in ``group_by`` is expected to hold list values. All columns are
     exploded before grouping, so a row contributing to multiple groups (e.g. a
     disease mapped to several therapeutic areas) is counted once per group.
+    Null values after exploding form their own group.
     """
 
     type: Literal['grouped_count_explode'] = 'grouped_count_explode'
@@ -101,32 +97,20 @@ class GroupedCountExplodeMetric(Metric):
         >>> result = GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(df)
         >>> result.groups[0].key, result.groups[0].count
         ({'ta': 'TA1'}, 3)
-        >>> empty = pl.DataFrame({'ta': pl.Series([], dtype=pl.List(pl.String))})
-        >>> GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(empty).groups
-        []
         """
-        filtered = df.drop_nulls(subset=self.group_by)
-
-        if filtered.is_empty():
-            return GroupedCountExplodeResult(name=self.name, group_by=self.group_by, groups=[])
-
-        exploded = filtered
+        exploded = df
         for col in self.group_by:
             exploded = exploded.explode(col)
-        exploded = exploded.drop_nulls(subset=self.group_by)
 
-        if exploded.is_empty():
-            groups: list[GroupRow] = []
-        else:
-            agg = (
-                exploded.group_by(self.group_by)
-                .agg(pl.len().alias('count'))
-                .sort('count', descending=True)
-            )
-            groups = [
-                GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
-                for row in agg.iter_rows(named=True)
-            ]
+        agg = (
+            exploded.group_by(self.group_by)
+            .agg(pl.len().alias('count'))
+            .sort('count', descending=True)
+        )
+        groups = [
+            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            for row in agg.iter_rows(named=True)
+        ]
 
         return GroupedCountExplodeResult(
             name=self.name,
@@ -143,11 +127,11 @@ class GroupedCountExplodeResult(MetricResult):
     group_by: list[str]
     """Column names that were exploded then grouped."""
     groups: list[GroupRow]
-    """One entry per distinct exploded value, sorted descending by count; null values excluded after exploding."""
+    """One entry per distinct exploded value, sorted descending by count; null values form their own group."""
 
 
 class GroupedSumMetric(Metric):
-    """Sums a numeric column per group, sorted descending by sum. Null keys excluded."""
+    """Sums a numeric column per group, sorted descending by sum. Null keys form their own group."""
 
     type: Literal['grouped_sum'] = 'grouped_sum'
     """Always ``'grouped_sum'``; used by the metric loader as the config discriminator."""
@@ -169,20 +153,15 @@ class GroupedSumMetric(Metric):
         >>> result.groups[0].count
         300
         """
-        filtered = df.drop_nulls(subset=self.group_by)
-
-        if filtered.is_empty():
-            groups = []
-        else:
-            agg = (
-                filtered.group_by(self.group_by)
-                .agg(pl.sum(self.column).alias('count'))
-                .sort('count', descending=True)
-            )
-            groups = [
-                GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
-                for row in agg.iter_rows(named=True)
-            ]
+        agg = (
+            df.group_by(self.group_by)
+            .agg(pl.sum(self.column).alias('count'))
+            .sort('count', descending=True)
+        )
+        groups = [
+            GroupRow(key={col: row[col] for col in self.group_by}, count=row['count'])
+            for row in agg.iter_rows(named=True)
+        ]
 
         return GroupedSumResult(
             name=self.name,
@@ -202,4 +181,4 @@ class GroupedSumResult(MetricResult):
     group_by: list[str]
     """Column names used to form groups."""
     groups: list[GroupRow]
-    """One entry per distinct key combination, sorted descending by sum; rows with null keys excluded."""
+    """One entry per distinct key combination, sorted descending by sum; null keys form their own group."""
