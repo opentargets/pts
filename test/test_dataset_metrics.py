@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 
 from pts.transformers.dataset_metrics import (
     OUTPUT_SCHEMA,
     _breakdowns_to_struct,
+    _config_for_dataset,
     _dataset_file_stats,
     _filter_counts_to_struct,
     compute_breakdown,
     compute_filter_count,
+    dataset_metrics,
     profile_dataset,
 )
 
@@ -138,3 +141,46 @@ def test_profile_dataset_unreadable_returns_none(tmp_path: Path) -> None:
     empty_dir.mkdir()
     (empty_dir / 'readme.txt').write_text('not parquet')
     assert profile_dataset(str(empty_dir), 'not_parquet', {}) is None
+
+
+def test_dataset_metrics_writes_one_parquet_per_dataset(tmp_path: Path, monkeypatch) -> None:
+    study = _write_dataset(tmp_path / 'study', pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas']}))
+    biosample = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
+    # a discovered dataset whose basename collides with the output dir must be skipped:
+    discovered = {
+        '/output/study': study,
+        '/output/biosample': biosample,
+        '/output/metrics': str(tmp_path / 'ignored'),
+    }
+    monkeypatch.setattr(
+        'pts.transformers.dataset_metrics._discover_dataset_paths',
+        lambda root, scopes, config: discovered,
+    )
+
+    out_dir = tmp_path / 'metrics'
+    config = SimpleNamespace(release_uri=str(tmp_path), work_path=tmp_path)
+    settings = {'datasets': {'study': {'groupings': {'studyType': 'studyType'}}}}
+
+    dataset_metrics({}, {'directory': str(out_dir)}, settings, config)
+
+    files = sorted(p.name for p in out_dir.glob('*.parquet'))
+    assert files == ['biosample.parquet', 'study.parquet']  # 'metrics' skipped
+
+    study_df = pl.read_parquet(out_dir / 'study.parquet')
+    assert study_df.height == 1
+    assert study_df['id'].item() == 'study'
+    assert study_df['count'].item() == 3
+    assert study_df['breakdowns'].to_list() == [
+        [{'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}]
+    ]
+    assert pl.read_parquet(out_dir / 'biosample.parquet')['breakdowns'].to_list() == [[]]
+
+
+def test_config_for_dataset_pattern_match() -> None:
+    cfg = {
+        'study': {'groupings': {'a': 'a'}},
+        'evidence_*': {'groupings': {'datatype': 'datatypeId'}},
+    }
+    assert _config_for_dataset('study', cfg) == {'groupings': {'a': 'a'}}
+    assert _config_for_dataset('evidence_eva', cfg) == {'groupings': {'datatype': 'datatypeId'}}
+    assert _config_for_dataset('biosample', cfg) == {}
