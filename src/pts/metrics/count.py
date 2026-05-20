@@ -36,7 +36,13 @@ class CountMetric(Metric):
         return [self.column] if self.column else []
 
     def compute(self, df: pl.DataFrame) -> CountResult:
-        """Compute count."""
+        """Compute count.
+
+        >>> CountMetric(name='total').compute(pl.DataFrame({'id': ['A', 'B', 'C']})).value
+        3
+        >>> CountMetric(name='nn', column='score').compute(pl.DataFrame({'score': [0.5, None, 0.9]})).value
+        2
+        """
         if self.column is None:
             value = df.height
         else:
@@ -56,6 +62,10 @@ class DistinctCountMetric(Metric):
         return list(self.columns)
 
     def compute(self, df: pl.DataFrame) -> DistinctCountResult:
-        """Compute distinct count."""
+        """Compute distinct count.
+
+        >>> DistinctCountMetric(name='d', columns=['s']).compute(pl.DataFrame({'s': ['A', 'B', 'A', None]})).value
+        2
+        """
         value = df.select(self.columns).drop_nulls().n_unique()
         return DistinctCountResult(name=self.name, columns=self.columns, value=value)

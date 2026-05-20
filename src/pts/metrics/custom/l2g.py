@@ -18,7 +18,15 @@ class L2GSignificantGeneMetric(Metric):
         return ['geneId', 'score']
 
     def compute(self, df: pl.DataFrame) -> CountResult:
-        """Count distinct geneId values where score >= threshold."""
+        """Count distinct geneId values where score >= threshold.
+
+        >>> df = pl.DataFrame({'geneId': ['G1', 'G1', 'G2', 'G3'], 'score': [0.8, 0.6, 0.3, 0.9]})
+        >>> L2GSignificantGeneMetric(name='sig').compute(df).value
+        2
+        >>> df2 = pl.DataFrame({'geneId': ['G1', None], 'score': [0.6, 0.8]})
+        >>> L2GSignificantGeneMetric(name='sig').compute(df2).value
+        1
+        """
         filtered = df.filter((pl.col('score') >= self.threshold) & pl.col('geneId').is_not_null())
         value = filtered.select('geneId').n_unique()
         return CountResult(name=self.name, value=value)

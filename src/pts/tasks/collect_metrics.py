@@ -29,6 +29,8 @@ class CollectMetricsSpec(Spec):
     @field_validator('metrics', mode='before')
     @classmethod
     def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
+        if not v:
+            raise ValueError("'metrics' must contain at least one metric")
         return [cfg if isinstance(cfg, Metric) else load_metric(cfg) for cfg in v]
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:

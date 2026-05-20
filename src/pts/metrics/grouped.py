@@ -37,7 +37,16 @@ class GroupedCountMetric(Metric):
         return list(self.group_by)
 
     def compute(self, df: pl.DataFrame) -> GroupedCountResult:
-        """Compute grouped row counts."""
+        """Compute grouped row counts.
+
+        >>> df = pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas', 'gwas']})
+        >>> result = GroupedCountMetric(name='g', group_by=['studyType']).compute(df)
+        >>> result.groups[0].key, result.groups[0].count
+        ({'studyType': 'gwas'}, 3)
+        >>> df2 = pl.DataFrame({'studyType': ['gwas', None]})
+        >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[0].key
+        {'studyType': 'gwas'}
+        """
         # Drop rows where ANY group_by column is null
         filtered = df.drop_nulls(subset=self.group_by)
 
@@ -81,7 +90,16 @@ class GroupedCountExplodeMetric(Metric):
         return list(self.group_by)
 
     def compute(self, df: pl.DataFrame) -> GroupedCountExplodeResult:
-        """Explode list columns then compute grouped row counts."""
+        """Explode list columns then compute grouped row counts.
+
+        >>> df = pl.DataFrame({'ta': [['TA1', 'TA2'], ['TA1', 'TA3'], ['TA1']]})
+        >>> result = GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(df)
+        >>> result.groups[0].key, result.groups[0].count
+        ({'ta': 'TA1'}, 3)
+        >>> empty = pl.DataFrame({'ta': pl.Series([], dtype=pl.List(pl.String))})
+        >>> GroupedCountExplodeMetric(name='g', group_by=['ta']).compute(empty).groups
+        []
+        """
         filtered = df.drop_nulls(subset=self.group_by)
 
         if filtered.is_empty():
@@ -134,7 +152,13 @@ class GroupedSumMetric(Metric):
         return [self.column, *self.group_by]
 
     def compute(self, df: pl.DataFrame) -> GroupedSumResult:
-        """Compute grouped sums."""
+        """Compute grouped sums.
+
+        >>> df = pl.DataFrame({'agg': ['a', 'a', 'b'], 'n': [100, 200, 50]})
+        >>> result = GroupedSumMetric(name='s', column='n', group_by=['agg']).compute(df)
+        >>> result.groups[0].count
+        300
+        """
         # Drop rows where ANY group_by column is null
         filtered = df.drop_nulls(subset=self.group_by)
 

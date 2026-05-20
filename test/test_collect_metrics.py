@@ -53,6 +53,16 @@ def test_spec_rejects_unknown_metric_type():
         )
 
 
+def test_spec_rejects_empty_metrics():
+    with pytest.raises(ValueError, match='metrics'):
+        CollectMetricsSpec(
+            name='collect_metrics test',
+            source='/tmp/data',
+            destination='/tmp/metrics/data.jsonl',
+            metrics=cast(Any, []),
+        )
+
+
 @pytest.mark.parametrize('config_name', ['config.yaml', 'metrics.yaml'])
 def test_checked_in_metric_configs_are_valid(config_name):
     repo_root = Path(__file__).resolve().parents[1]
