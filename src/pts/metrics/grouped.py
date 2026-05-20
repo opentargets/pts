@@ -11,14 +11,26 @@ from pts.metrics.base import Metric, MetricResult
 
 
 class GroupRow(BaseModel):
-    """A single group key and its aggregated value."""
+    """A single group key and its aggregated value.
+
+    Attributes:
+        key: Mapping of group-by column names to their values for this group.
+        count: Aggregated count (or sum) for this group.
+    """
 
     key: dict[str, Any]
     count: int
 
 
 class GroupedCountResult(MetricResult):
-    """Result for GroupedCountMetric."""
+    """Result for :class:`GroupedCountMetric`.
+
+    Attributes:
+        metric_type: Always ``'grouped_count'``.
+        group_by: Column names used to form groups.
+        groups: One entry per distinct key combination, sorted descending by count;
+            rows with null keys are excluded.
+    """
 
     metric_type: Literal['grouped_count'] = 'grouped_count'
     group_by: list[str]
@@ -26,7 +38,12 @@ class GroupedCountResult(MetricResult):
 
 
 class GroupedCountMetric(Metric):
-    """Counts rows per group, sorted descending by count. Null keys excluded."""
+    """Counts rows per group, sorted descending by count. Null keys excluded.
+
+    Attributes:
+        type: Always ``'grouped_count'``; used by the metric loader as the config discriminator.
+        group_by: Column names to group by.
+    """
 
     type: Literal['grouped_count'] = 'grouped_count'
     group_by: list[str]
@@ -47,7 +64,6 @@ class GroupedCountMetric(Metric):
         >>> GroupedCountMetric(name='g', group_by=['studyType']).compute(df2).groups[0].key
         {'studyType': 'gwas'}
         """
-        # Drop rows where ANY group_by column is null
         filtered = df.drop_nulls(subset=self.group_by)
 
         if filtered.is_empty():
@@ -71,7 +87,14 @@ class GroupedCountMetric(Metric):
 
 
 class GroupedCountExplodeResult(MetricResult):
-    """Result for GroupedCountExplodeMetric."""
+    """Result for :class:`GroupedCountExplodeMetric`.
+
+    Attributes:
+        metric_type: Always ``'grouped_count_explode'``.
+        group_by: Column names that were exploded then grouped.
+        groups: One entry per distinct exploded value combination, sorted descending
+            by count; null values are excluded after exploding.
+    """
 
     metric_type: Literal['grouped_count_explode'] = 'grouped_count_explode'
     group_by: list[str]
@@ -79,7 +102,17 @@ class GroupedCountExplodeResult(MetricResult):
 
 
 class GroupedCountExplodeMetric(Metric):
-    """Explodes list columns in group_by, then counts rows per group, sorted descending."""
+    """Explodes list columns then counts rows per group, sorted descending.
+
+    Each column in ``group_by`` is expected to hold list values. All columns are
+    exploded before grouping, so a row contributing to multiple groups (e.g. a
+    disease mapped to several therapeutic areas) is counted once per group.
+
+    Attributes:
+        type: Always ``'grouped_count_explode'``; used by the metric loader as the
+            config discriminator.
+        group_by: List-typed column names to explode and then group by.
+    """
 
     type: Literal['grouped_count_explode'] = 'grouped_count_explode'
     group_by: list[str]
@@ -131,7 +164,15 @@ class GroupedCountExplodeMetric(Metric):
 
 
 class GroupedSumResult(MetricResult):
-    """Result for GroupedSumMetric."""
+    """Result for :class:`GroupedSumMetric`.
+
+    Attributes:
+        metric_type: Always ``'grouped_sum'``.
+        column: Name of the column that was summed.
+        group_by: Column names used to form groups.
+        groups: One entry per distinct key combination, sorted descending by sum;
+            rows with null keys are excluded.
+    """
 
     metric_type: Literal['grouped_sum'] = 'grouped_sum'
     column: str
@@ -140,7 +181,13 @@ class GroupedSumResult(MetricResult):
 
 
 class GroupedSumMetric(Metric):
-    """Sums a numeric column per group, sorted descending by sum. Null keys excluded."""
+    """Sums a numeric column per group, sorted descending by sum. Null keys excluded.
+
+    Attributes:
+        type: Always ``'grouped_sum'``; used by the metric loader as the config discriminator.
+        column: Numeric column whose values are summed within each group.
+        group_by: Column names to group by.
+    """
 
     type: Literal['grouped_sum'] = 'grouped_sum'
     column: str
@@ -159,7 +206,6 @@ class GroupedSumMetric(Metric):
         >>> result.groups[0].count
         300
         """
-        # Drop rows where ANY group_by column is null
         filtered = df.drop_nulls(subset=self.group_by)
 
         if filtered.is_empty():

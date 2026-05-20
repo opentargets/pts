@@ -3,7 +3,9 @@ work_path: ../pipeline_work
 log_level: DEBUG
 pool_size: 4
 
-scratchpad: {}
+scratchpad:
+  release: '26.06'
+  run: '1'
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -1681,6 +1683,11 @@ steps:
           - resourceScore
           - diseaseCellLines
           - primaryProjectId
+  ##################################################################################################
+
+  #: EVIDENCE METRICS STEP :########################################################################
+  # Runs after all evidence_postprocess steps; depends on any step named 'pyspark evidence_postprocess'.
+  evidence_metrics:
     - name: collect_metrics evidence_gwas_credible_sets
       requires:
         - pyspark evidence_postprocess

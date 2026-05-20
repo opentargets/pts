@@ -44,11 +44,14 @@ def test_runner_writes_jsonl_record_with_expected_envelope(dataset, tmp_path):
 
 
 def test_runner_bad_column_raises(dataset, tmp_path):
+    out = tmp_path / 'metrics' / 'study.jsonl'
     with pytest.raises(Exception, match='nonexistent'):
         MetricRunner().run(
             metrics=[GroupedCountMetric(name='g', group_by=['nonexistent'])],
             dataset_path=dataset,
-            out_file=tmp_path / 'metrics' / 'study.jsonl',
+            out_file=out,
+            source=str(dataset),
+            destination=str(out),
             release='26.06-pub',
             run='testrun.1',
         )

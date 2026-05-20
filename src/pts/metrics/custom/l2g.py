@@ -8,7 +8,11 @@ from pts.metrics.count import CountResult
 
 
 class L2GSignificantGeneMetric(Metric):
-    """Counts distinct genes with L2G score >= threshold."""
+    """Counts distinct genes with an L2G score at or above a threshold.
+
+    Attributes:
+        threshold: Minimum L2G score a gene must reach to be counted. Defaults to 0.5.
+    """
 
     threshold: float = 0.5
 

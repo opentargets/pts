@@ -17,14 +17,20 @@ from pts.metrics.runner import MetricRunner
 
 
 class CollectMetricsSpec(Spec):
-    """Configuration for the CollectMetrics task."""
+    """Configuration for the CollectMetrics task.
+
+    Attributes:
+        source: Path to the directory containing parquet files
+            (absolute, or relative to ``config.work_path``).
+        destination: Exact path of the output JSONL file
+            (absolute, or relative to ``config.work_path``).
+        metrics: One or more metric definitions to compute on the dataset.
+            Must not be empty.
+    """
 
     source: str
-    """Path to the directory containing parquet files (absolute or relative to work_path)."""
     destination: str
-    """Exact output directory for metric JSON files (absolute or relative to work_path)."""
-    metrics: list[Metric] = []
-    """Metric definitions to compute on the dataset."""
+    metrics: list[Metric]
 
     @field_validator('metrics', mode='before')
     @classmethod
@@ -40,7 +46,11 @@ class CollectMetricsSpec(Spec):
 
 
 class CollectMetrics(Task):
-    """Task that computes metrics on an already-produced dataset."""
+    """Reads ``release`` and ``run`` from the scratchpad and runs all configured metrics.
+
+    Raises ``ValueError`` at construction time if either scratchpad key is absent,
+    so misconfiguration is caught before the pipeline starts.
+    """
 
     def __init__(self, spec: CollectMetricsSpec, context: TaskContext) -> None:
         super().__init__(spec, context)

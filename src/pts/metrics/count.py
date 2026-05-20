@@ -1,4 +1,4 @@
-"""Count and distinct-count metric types — stub for base tests; full impl in Issue 2."""
+"""Count and distinct-count metric types."""
 
 from __future__ import annotations
 
@@ -10,14 +10,25 @@ from pts.metrics.base import Metric, MetricResult
 
 
 class CountResult(MetricResult):
-    """Result for CountMetric."""
+    """Result for :class:`CountMetric`.
+
+    Attributes:
+        metric_type: Always ``'count'``.
+        value: Row count, or non-null value count when ``column`` is specified.
+    """
 
     metric_type: Literal['count'] = 'count'
     value: int
 
 
 class DistinctCountResult(MetricResult):
-    """Result for DistinctCountMetric."""
+    """Result for :class:`DistinctCountMetric`.
+
+    Attributes:
+        metric_type: Always ``'distinct_count'``.
+        columns: Column names whose combined values were counted.
+        value: Number of distinct non-null value combinations.
+    """
 
     metric_type: Literal['distinct_count'] = 'distinct_count'
     columns: list[str]
@@ -25,7 +36,12 @@ class DistinctCountResult(MetricResult):
 
 
 class CountMetric(Metric):
-    """Counts rows, or non-null values of a column."""
+    """Counts rows, or non-null values of a column.
+
+    Attributes:
+        type: Always ``'count'``; used by the metric loader as the config discriminator.
+        column: Column to count non-null values for. When ``None``, counts all rows.
+    """
 
     type: Literal['count'] = 'count'
     column: str | None = None
@@ -51,7 +67,12 @@ class CountMetric(Metric):
 
 
 class DistinctCountMetric(Metric):
-    """Counts distinct values across one or more columns."""
+    """Counts distinct non-null value combinations across one or more columns.
+
+    Attributes:
+        type: Always ``'distinct_count'``; used by the metric loader as the config discriminator.
+        columns: Column names whose combined values form the distinct key.
+    """
 
     type: Literal['distinct_count'] = 'distinct_count'
     columns: list[str]

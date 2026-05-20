@@ -11,7 +11,10 @@ from pts.metrics.grouped import GroupedCountExplodeMetric, GroupedCountMetric, G
 
 
 class MetricType(StrEnum):
-    """Supported metric kinds that can be instantiated from config."""
+    """Supported metric kinds recognised by :func:`load_metric`.
+
+    The string value of each member matches the ``type`` field used in YAML config.
+    """
 
     count = 'count'
     distinct_count = 'distinct_count'
