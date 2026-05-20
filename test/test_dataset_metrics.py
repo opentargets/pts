@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import polars as pl
 
-from pts.transformers.dataset_metrics import compute_breakdown, compute_filter_count
+from pts.transformers.dataset_metrics import _dataset_file_stats, compute_breakdown, compute_filter_count
 
 
 def test_compute_breakdown_plain_column_with_null() -> None:
@@ -28,3 +30,17 @@ def test_compute_filter_count_rows() -> None:
 def test_compute_filter_count_distinct() -> None:
     df = pl.DataFrame({'score': [0.9, 0.2, 0.7], 'geneId': ['g1', 'g2', 'g1']})
     assert compute_filter_count(df, 'score > 0.5', distinct='geneId') == 1
+
+
+def test_dataset_file_stats(tmp_path: Path) -> None:
+    dataset_dir = tmp_path / 'study'
+    dataset_dir.mkdir()
+    df = pl.DataFrame({'studyType': ['gwas', 'eqtl']})
+    df.write_parquet(dataset_dir / 'part-0.parquet')
+    df.write_parquet(dataset_dir / 'part-1.parquet')
+    (dataset_dir / '_SUCCESS').write_text('')  # must be ignored
+
+    file_size, n_partitions = _dataset_file_stats(str(dataset_dir))
+
+    assert n_partitions == 2
+    assert file_size > 0
