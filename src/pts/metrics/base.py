@@ -21,9 +21,9 @@ Adding a new built-in metric type
            metric_type: Literal['my_type'] = 'my_type'
            value: int
 
-2. **Register** in :mod:`pts.metrics.loader` — add ``my_type = 'my_type'`` to
-   :class:`~pts.metrics.loader.MetricType` and ``MetricType.my_type: MyMetric``
-   to ``_IMPLEMENTERS``.
+2. **Register** in :mod:`pts.metrics.loader` — add ``my_type = MyMetric`` to
+   :class:`~pts.metrics.loader.MetricType`. The member name must match the
+   ``type`` literal; the value is the implementer class directly.
 
 3. **Export** from :mod:`pts.metrics` (``__init__.py``) if the type is part of
    the public API.
@@ -136,7 +136,7 @@ class MetricResult(BaseModel, ABC):
 
 
 class UnifiedMetricRecord(BaseModel):
-    """Flat JSONL record produced by MetricRunner for each metric computation."""
+    """Flat record produced by MetricRunner for each metric computation; written as a Parquet row."""
 
     name: str
     """Metric name as declared in config."""
@@ -151,6 +151,6 @@ class UnifiedMetricRecord(BaseModel):
     source: str
     """Absolute path to the input parquet directory."""
     destination: str
-    """Absolute path to the output JSONL file."""
+    """Absolute path to the output Parquet file."""
     result: str
     """JSON-serialised metric-specific payload (value, groups, etc.), excluding envelope fields."""

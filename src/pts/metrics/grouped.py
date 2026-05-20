@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import reduce
 from typing import Any, Literal
 
 import polars as pl
@@ -98,9 +99,7 @@ class GroupedCountExplodeMetric(Metric):
         >>> result.groups[0].key, result.groups[0].count
         ({'ta': 'TA1'}, 3)
         """
-        exploded = df
-        for col in self.group_by:
-            exploded = exploded.explode(col)
+        exploded = reduce(lambda acc, col: acc.explode(col), self.group_by, df)
 
         agg = (
             exploded.group_by(self.group_by)

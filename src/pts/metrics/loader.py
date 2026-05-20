@@ -2,20 +2,15 @@
 
 Registering a new built-in metric type
 ----------------------------------------
-1. Add a member to :class:`MetricType`::
+Add a member to :class:`MetricType` whose name matches the ``type:
+Literal['my_type']`` discriminator on the :class:`~pts.metrics.base.Metric`
+subclass and whose value is the implementer class::
 
-       class MetricType(StrEnum):
-           my_type = 'my_type'
+    class MetricType(Enum):
+        ...
+        my_type = MyMetric
 
-2. Add the mapping to ``_IMPLEMENTERS``::
-
-       _IMPLEMENTERS: dict[MetricType, type[Metric]] = {
-           ...
-           MetricType.my_type: MyMetric,
-       }
-
-   The ``MetricType`` member name must match the ``type: Literal['my_type']``
-   discriminator field on the :class:`~pts.metrics.base.Metric` subclass.
+No separate mapping dict is needed — the enum value IS the implementer.
 
 For one-off metrics that do not need registration, use ``type: custom`` in the
 YAML config with a ``class`` dotted-path instead — see
@@ -23,7 +18,7 @@ YAML config with a ``class`` dotted-path instead — see
 """
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from importlib import import_module
 from typing import Any
 
@@ -32,30 +27,25 @@ from pts.metrics.count import CountMetric, DistinctCountMetric
 from pts.metrics.grouped import GroupedCountExplodeMetric, GroupedCountMetric, GroupedSumMetric
 
 
-class MetricType(StrEnum):
+class MetricType(Enum):
     """Supported metric kinds recognised by :func:`load_metric`.
 
-    The string value of each member matches the ``type`` field used in YAML config.
+    Each member's **name** matches the ``type`` field used in YAML config;
+    its **value** is the implementer :class:`~pts.metrics.base.Metric` class
+    (or ``None`` for ``custom``, which uses a dotted class path instead).
     """
 
-    count = 'count'
-    distinct_count = 'distinct_count'
-    grouped_count = 'grouped_count'
-    grouped_count_explode = 'grouped_count_explode'
-    grouped_sum = 'grouped_sum'
-    custom = 'custom'
+    count = CountMetric
+    distinct_count = DistinctCountMetric
+    grouped_count = GroupedCountMetric
+    grouped_count_explode = GroupedCountExplodeMetric
+    grouped_sum = GroupedSumMetric
+    custom = None
 
 
-_IMPLEMENTERS: dict[MetricType, type[Metric]] = {
-    MetricType.count: CountMetric,
-    MetricType.distinct_count: DistinctCountMetric,
-    MetricType.grouped_count: GroupedCountMetric,
-    MetricType.grouped_count_explode: GroupedCountExplodeMetric,
-    MetricType.grouped_sum: GroupedSumMetric,
-}
-
-
-_BUILTIN_CLASSES: frozenset[type[Metric]] = frozenset(_IMPLEMENTERS.values())
+_BUILTIN_CLASSES: frozenset[type[Metric]] = frozenset(
+    m.value for m in MetricType if m.value is not None
+)
 
 
 def load_metric(cfg: dict[str, Any]) -> Metric:
@@ -64,17 +54,18 @@ def load_metric(cfg: dict[str, Any]) -> Metric:
     raw_type = cfg.pop('type', None)
 
     try:
-        metric_type = MetricType(raw_type)
-    except ValueError:
+        metric_type = MetricType[raw_type]
+    except KeyError:
         raise ValueError(f"unknown metric type '{raw_type}'")
 
-    if metric_type is MetricType.custom:
-        class_path = cfg.pop('class')
-        module_path, cls_name = class_path.rsplit('.', 1)
-        cls = getattr(import_module(module_path), cls_name)
-        return cls(**cfg)
-
-    return _IMPLEMENTERS[metric_type](**cfg)
+    match metric_type:
+        case MetricType.custom:
+            class_path = cfg.pop('class')
+            module_path, cls_name = class_path.rsplit('.', 1)
+            cls = getattr(import_module(module_path), cls_name)
+            return cls(**cfg)
+        case _:
+            return metric_type.value(**cfg)
 
 
 def metric_to_dict(m: Metric) -> dict[str, Any]:

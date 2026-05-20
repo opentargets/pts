@@ -17,8 +17,8 @@ def dataset(tmp_path):
     return path
 
 
-def test_runner_writes_jsonl_record_with_expected_envelope(dataset, tmp_path):
-    out = tmp_path / 'metrics' / 'study.jsonl'
+def test_runner_writes_parquet_record_with_expected_envelope(dataset, tmp_path):
+    out = tmp_path / 'metrics' / 'study.parquet'
     MetricRunner().run(
         metrics=[CountMetric(name='total_count')],
         dataset_path=dataset,
@@ -29,7 +29,7 @@ def test_runner_writes_jsonl_record_with_expected_envelope(dataset, tmp_path):
         run='testrun.1',
     )
     assert out.exists()
-    record = json.loads(out.read_text().splitlines()[0])
+    record = pl.read_parquet(out).row(0, named=True)
 
     assert record == {
         'name': 'total_count',
@@ -44,7 +44,7 @@ def test_runner_writes_jsonl_record_with_expected_envelope(dataset, tmp_path):
 
 
 def test_runner_bad_column_raises(dataset, tmp_path):
-    out = tmp_path / 'metrics' / 'study.jsonl'
+    out = tmp_path / 'metrics' / 'study.parquet'
     with pytest.raises(Exception, match='nonexistent'):
         MetricRunner().run(
             metrics=[GroupedCountMetric(name='g', group_by=['nonexistent'])],

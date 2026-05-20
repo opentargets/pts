@@ -36,7 +36,7 @@ def test_collect_metrics_raises_if_scratchpad_key_missing(missing_key):
     spec = CollectMetricsSpec(
         name='collect_metrics test',
         source='/tmp/data',
-        destination='/tmp/metrics/data.jsonl',
+        destination='/tmp/metrics/data.parquet',
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
     with pytest.raises(ValueError, match=missing_key):
@@ -48,7 +48,7 @@ def test_spec_rejects_unknown_metric_type():
         CollectMetricsSpec(
             name='collect_metrics test',
             source='/tmp/data',
-            destination='/tmp/metrics/data.jsonl',
+            destination='/tmp/metrics/data.parquet',
             metrics=cast(Any, [{'type': 'bad_type', 'name': 'x'}]),
         )
 
@@ -58,7 +58,7 @@ def test_spec_rejects_empty_metrics():
         CollectMetricsSpec(
             name='collect_metrics test',
             source='/tmp/data',
-            destination='/tmp/metrics/data.jsonl',
+            destination='/tmp/metrics/data.parquet',
             metrics=cast(Any, []),
         )
 
@@ -83,12 +83,12 @@ def test_checked_in_metric_configs_are_valid(config_name):
 
 # ── Task integration tests ────────────────────────────────────────────────────
 
-def test_collect_metrics_writes_jsonl(tmp_path):
+def test_collect_metrics_writes_parquet(tmp_path):
     data_dir = tmp_path / 'output' / 'target'
     data_dir.mkdir(parents=True)
     pl.DataFrame({'id': ['A', 'B', 'C']}).write_parquet(data_dir / 'part.parquet')
 
-    out = tmp_path / 'metrics' / 'target.jsonl'
+    out = tmp_path / 'metrics' / 'target.parquet'
     spec = CollectMetricsSpec(
         name='collect_metrics target',
         source=str(data_dir),
@@ -97,19 +97,19 @@ def test_collect_metrics_writes_jsonl(tmp_path):
     )
     asyncio.run(CollectMetrics(spec=spec, context=_make_context()).run())
 
-    record = json.loads(out.read_text().splitlines()[0])
+    record = pl.read_parquet(out).row(0, named=True)
     assert json.loads(record['result'])['value'] == 3
     assert record['release'] == '26.06-pub'
     assert record['run'] == 'testrun.1'
 
 
 def test_collect_metrics_destination_is_exact_output_file(tmp_path):
-    """destination is the JSONL file path — no extra subdirectory appended."""
+    """destination is the Parquet file path — no extra subdirectory appended."""
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
     pl.DataFrame({'x': [1]}).write_parquet(data_dir / 'part.parquet')
 
-    out = tmp_path / 'my' / 'exact' / 'path.jsonl'
+    out = tmp_path / 'my' / 'exact' / 'path.parquet'
     spec = CollectMetricsSpec(
         name='collect_metrics data',
         source=str(data_dir),
@@ -119,7 +119,7 @@ def test_collect_metrics_destination_is_exact_output_file(tmp_path):
     asyncio.run(CollectMetrics(spec=spec, context=_make_context()).run())
 
     assert out.exists()
-    assert not (tmp_path / 'my' / 'exact' / 'path' / 'total_count.json').exists()
+    assert not (tmp_path / 'my' / 'exact' / 'path' / 'total_count.parquet').exists()
 
 
 def test_collect_metrics_resolves_relative_paths(tmp_path):
@@ -131,10 +131,10 @@ def test_collect_metrics_resolves_relative_paths(tmp_path):
     spec = CollectMetricsSpec(
         name='collect_metrics my_dataset',
         source='output/my_dataset',
-        destination='metrics/my_dataset.jsonl',
+        destination='metrics/my_dataset.parquet',
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
     asyncio.run(CollectMetrics(spec=spec, context=_make_context(work_path=tmp_path)).run())
 
-    out = tmp_path / 'metrics' / 'my_dataset.jsonl'
-    assert json.loads(json.loads(out.read_text().splitlines()[0])['result'])['value'] == 2
+    out = tmp_path / 'metrics' / 'my_dataset.parquet'
+    assert json.loads(pl.read_parquet(out).row(0, named=True)['result'])['value'] == 2

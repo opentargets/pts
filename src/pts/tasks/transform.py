@@ -93,5 +93,4 @@ class Transform(Task):
         srcs = list(self.srcs.values()) if isinstance(self.srcs, dict) else self.srcs
         dsts = list(self.dsts.values()) if isinstance(self.dsts, dict) else self.dsts
         self.artifacts = [Artifact(source=srcs, destination=dsts)]
-
         return self
