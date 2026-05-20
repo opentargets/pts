@@ -19,17 +19,6 @@ class GroupRow(BaseModel):
     """Aggregated count (or sum) for this group."""
 
 
-class GroupedCountResult(MetricResult):
-    """Result for :class:`GroupedCountMetric`."""
-
-    metric_type: Literal['grouped_count'] = 'grouped_count'
-    """Always ``'grouped_count'``."""
-    group_by: list[str]
-    """Column names used to form groups."""
-    groups: list[GroupRow]
-    """One entry per distinct key combination, sorted descending by count; rows with null keys excluded."""
-
-
 class GroupedCountMetric(Metric):
     """Counts rows per group, sorted descending by count. Null keys excluded."""
 
@@ -76,15 +65,15 @@ class GroupedCountMetric(Metric):
         )
 
 
-class GroupedCountExplodeResult(MetricResult):
-    """Result for :class:`GroupedCountExplodeMetric`."""
+class GroupedCountResult(MetricResult):
+    """Result for :class:`GroupedCountMetric`."""
 
-    metric_type: Literal['grouped_count_explode'] = 'grouped_count_explode'
-    """Always ``'grouped_count_explode'``."""
+    metric_type: Literal['grouped_count'] = 'grouped_count'
+    """Always ``'grouped_count'``."""
     group_by: list[str]
-    """Column names that were exploded then grouped."""
+    """Column names used to form groups."""
     groups: list[GroupRow]
-    """One entry per distinct exploded value, sorted descending by count; null values excluded after exploding."""
+    """One entry per distinct key combination, sorted descending by count; rows with null keys excluded."""
 
 
 class GroupedCountExplodeMetric(Metric):
@@ -146,17 +135,15 @@ class GroupedCountExplodeMetric(Metric):
         )
 
 
-class GroupedSumResult(MetricResult):
-    """Result for :class:`GroupedSumMetric`."""
+class GroupedCountExplodeResult(MetricResult):
+    """Result for :class:`GroupedCountExplodeMetric`."""
 
-    metric_type: Literal['grouped_sum'] = 'grouped_sum'
-    """Always ``'grouped_sum'``."""
-    column: str
-    """Name of the column that was summed."""
+    metric_type: Literal['grouped_count_explode'] = 'grouped_count_explode'
+    """Always ``'grouped_count_explode'``."""
     group_by: list[str]
-    """Column names used to form groups."""
+    """Column names that were exploded then grouped."""
     groups: list[GroupRow]
-    """One entry per distinct key combination, sorted descending by sum; rows with null keys excluded."""
+    """One entry per distinct exploded value, sorted descending by count; null values excluded after exploding."""
 
 
 class GroupedSumMetric(Metric):
@@ -203,3 +190,16 @@ class GroupedSumMetric(Metric):
             group_by=self.group_by,
             groups=groups,
         )
+
+
+class GroupedSumResult(MetricResult):
+    """Result for :class:`GroupedSumMetric`."""
+
+    metric_type: Literal['grouped_sum'] = 'grouped_sum'
+    """Always ``'grouped_sum'``."""
+    column: str
+    """Name of the column that was summed."""
+    group_by: list[str]
+    """Column names used to form groups."""
+    groups: list[GroupRow]
+    """One entry per distinct key combination, sorted descending by sum; rows with null keys excluded."""

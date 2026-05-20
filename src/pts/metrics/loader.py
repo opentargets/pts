@@ -1,4 +1,26 @@
-"""Metric type registry: MetricType enum and load_metric dispatcher."""
+"""Metric type registry: MetricType enum and load_metric dispatcher.
+
+Registering a new built-in metric type
+----------------------------------------
+1. Add a member to :class:`MetricType`::
+
+       class MetricType(StrEnum):
+           my_type = 'my_type'
+
+2. Add the mapping to ``_IMPLEMENTERS``::
+
+       _IMPLEMENTERS: dict[MetricType, type[Metric]] = {
+           ...
+           MetricType.my_type: MyMetric,
+       }
+
+   The ``MetricType`` member name must match the ``type: Literal['my_type']``
+   discriminator field on the :class:`~pts.metrics.base.Metric` subclass.
+
+For one-off metrics that do not need registration, use ``type: custom`` in the
+YAML config with a ``class`` dotted-path instead — see
+:mod:`pts.metrics.base` for details.
+"""
 from __future__ import annotations
 
 from enum import StrEnum
