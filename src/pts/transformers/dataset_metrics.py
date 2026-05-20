@@ -3,6 +3,10 @@
 Sibling of ``release_metrics``: reuses its discovery/count helpers but emits a
 dataset-object profile (id, count, file_size, number_of_partitions, and optional
 config-driven breakdowns and filter counts).
+
+Datasets are assumed to be flat parquet directories with ``part-*.parquet`` files
+at the top level. Hive-partitioned datasets (e.g. ``key=value/part-*.parquet``)
+are not supported and would be skipped (no top-level ``part-*`` files to count).
 """
 
 from __future__ import annotations
@@ -107,7 +111,7 @@ def compute_filter_count(
         1
     """
     filtered = _as_lazy(frame).filter(pl.sql_expr(filter_expr))
-    if distinct:
+    if distinct is not None:
         return int(filtered.select(pl.col(distinct).n_unique()).collect().item())
     return int(filtered.select(pl.len()).collect().item())
 
@@ -116,8 +120,10 @@ def _dataset_file_stats(dataset_path: str) -> tuple[int, int]:
     """Return ``(total bytes, number of part files)`` for a dataset directory.
 
     Storage-agnostic via fsspec (local ``LocalFileSystem`` or ``gs://`` via
-    gcsfs). Only entries whose basename starts with ``part-`` are counted, so
-    ``_SUCCESS`` / checksum files are ignored.
+    gcsfs). Only top-level entries whose basename starts with ``part-`` are
+    counted, so ``_SUCCESS`` / checksum files are ignored. Assumes a flat
+    dataset directory; Hive-partitioned layouts (``key=value/part-*.parquet``)
+    have no top-level ``part-*`` files and would report zero partitions.
 
     Args:
         dataset_path (str): absolute path to the dataset directory.
@@ -169,7 +175,7 @@ def profile_dataset(dataset_path: str, name: str, dataset_config: dict[str, Any]
     try:
         count = _count_parquet_rows(dataset_path)
     except Exception:
-        logger.warning(f'Skipping unreadable dataset `{name}` at {dataset_path}')
+        logger.opt(exception=True).warning(f'Skipping unreadable dataset `{name}` at {dataset_path}')
         return None
 
     file_size, n_partitions = _dataset_file_stats(dataset_path)

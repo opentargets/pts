@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import polars as pl
+import pytest
 
 from pts.transformers.dataset_metrics import (
     OUTPUT_SCHEMA,
@@ -143,7 +144,7 @@ def test_profile_dataset_unreadable_returns_none(tmp_path: Path) -> None:
     assert profile_dataset(str(empty_dir), 'not_parquet', {}) is None
 
 
-def test_dataset_metrics_writes_one_parquet_per_dataset(tmp_path: Path, monkeypatch) -> None:
+def test_dataset_metrics_writes_one_parquet_per_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     study = _write_dataset(tmp_path / 'study', pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas']}))
     biosample = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
     # a discovered dataset whose basename collides with the output dir must be skipped:
