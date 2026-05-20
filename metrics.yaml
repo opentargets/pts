@@ -74,12 +74,7 @@ steps:
           name: total_count
         - type: distinct_count
           name: distinct_studies
-          columns: [studyId]
-        - type: distribution
-          name: log10bf_distribution
-          column: credibleSetlog10BF
-          n_bins: 20
-        - type: grouped_count
+          columns: [studyId]        - type: grouped_count
           name: count_by_study_type
           group_by: [studyType]
         - type: grouped_count
@@ -106,12 +101,7 @@ steps:
           name: total_count
         - type: distinct_count
           name: distinct_genes
-          columns: [geneId]
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: custom
+          columns: [geneId]        - type: custom
           class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
           name: significant_gene_count
           threshold: 0.5
@@ -129,15 +119,6 @@ steps:
         - type: grouped_count
           name: count_by_method
           group_by: [colocalisationMethod]
-        - type: distribution
-          name: h4_distribution
-          column: h4
-          n_bins: 20
-        - type: distribution
-          name: clpp_distribution
-          column: clpp
-          n_bins: 20
-
   association_by_datasource_direct_metrics:
     - name: collect_metrics association_by_datasource_direct
       source: output/association_by_datasource_direct
@@ -145,11 +126,6 @@ steps:
       metrics:
         - type: count
           name: total_count
-        - type: distribution
-          name: association_score_distribution
-          column: associationScore
-          n_bins: 20
-
   association_by_datasource_indirect_metrics:
     - name: collect_metrics association_by_datasource_indirect
       source: output/association_by_datasource_indirect
@@ -157,11 +133,6 @@ steps:
       metrics:
         - type: count
           name: total_count
-        - type: distribution
-          name: association_score_distribution
-          column: associationScore
-          n_bins: 20
-
   association_by_datatype_direct_metrics:
     - name: collect_metrics association_by_datatype_direct
       source: output/association_by_datatype_direct
@@ -192,12 +163,7 @@ steps:
       destination: metrics/evidence_cancer_biomarkers.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -207,12 +173,7 @@ steps:
       destination: metrics/evidence_cancer_gene_census.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -222,12 +183,7 @@ steps:
       destination: metrics/evidence_clingen.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -237,12 +193,7 @@ steps:
       destination: metrics/evidence_clinical_precedence.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -252,12 +203,7 @@ steps:
       destination: metrics/evidence_crispr.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -267,12 +213,7 @@ steps:
       destination: metrics/evidence_crispr_screen.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -282,12 +223,7 @@ steps:
       destination: metrics/evidence_europepmc.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -297,12 +233,7 @@ steps:
       destination: metrics/evidence_eva.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -312,12 +243,7 @@ steps:
       destination: metrics/evidence_eva_somatic.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -327,12 +253,7 @@ steps:
       destination: metrics/evidence_expression_atlas.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -342,12 +263,7 @@ steps:
       destination: metrics/evidence_gene2phenotype.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -357,12 +273,7 @@ steps:
       destination: metrics/evidence_gene_burden.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -372,12 +283,7 @@ steps:
       destination: metrics/evidence_genomics_england.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -387,12 +293,7 @@ steps:
       destination: metrics/evidence_gwas_credible_sets.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -402,12 +303,7 @@ steps:
       destination: metrics/evidence_impc.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -417,12 +313,7 @@ steps:
       destination: metrics/evidence_intogen.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -432,12 +323,7 @@ steps:
       destination: metrics/evidence_orphanet.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -447,12 +333,7 @@ steps:
       destination: metrics/evidence_reactome.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -462,12 +343,7 @@ steps:
       destination: metrics/evidence_uniprot_literature.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
 
@@ -477,11 +353,6 @@ steps:
       destination: metrics/evidence_uniprot_variants.jsonl
       metrics:
         - type: count
-          name: total_count
-        - type: distribution
-          name: score_distribution
-          column: score
-          n_bins: 20
-        - type: grouped_count
+          name: total_count        - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]

@@ -7,14 +7,12 @@ from typing import Any
 
 from pts.metrics.base import Metric
 from pts.metrics.count import CountMetric, DistinctCountMetric
-from pts.metrics.distribution import DistributionMetric
 from pts.metrics.grouped import GroupedCountMetric, GroupedSumMetric
 
 
 class MetricType(str, Enum):
     count = 'count'
     distinct_count = 'distinct_count'
-    distribution = 'distribution'
     grouped_count = 'grouped_count'
     grouped_sum = 'grouped_sum'
     custom = 'custom'
@@ -23,7 +21,6 @@ class MetricType(str, Enum):
 _IMPLEMENTERS: dict[MetricType, type[Metric]] = {
     MetricType.count: CountMetric,
     MetricType.distinct_count: DistinctCountMetric,
-    MetricType.distribution: DistributionMetric,
     MetricType.grouped_count: GroupedCountMetric,
     MetricType.grouped_sum: GroupedSumMetric,
 }
