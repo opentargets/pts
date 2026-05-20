@@ -1,5 +1,6 @@
 """Tests for pts.metrics base module."""
 import pytest
+
 from pts.metrics.base import Metric
 
 

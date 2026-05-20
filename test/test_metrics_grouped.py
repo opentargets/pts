@@ -8,8 +8,8 @@ from pts.metrics.grouped import (
     GroupedSumMetric,
 )
 
-
 # ── GroupedCountMetric ────────────────────────────────────────────────────────
+
 
 def test_grouped_count_groups_and_sorts():
     df = pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas', 'gwas']})

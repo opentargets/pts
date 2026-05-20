@@ -5,7 +5,7 @@ import pytest
 from pts.metrics import CountMetric, DistinctCountMetric
 
 
-@pytest.mark.parametrize('df, expected', [
+@pytest.mark.parametrize(('df', 'expected'), [
     (pl.DataFrame({'id': ['A', 'B', 'C']}), 3),
     (pl.DataFrame({'id': pl.Series([], dtype=pl.String)}), 0),
 ])

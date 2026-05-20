@@ -79,9 +79,11 @@ class GroupedCountExplodeMetric(Metric):
 
     @property
     def required_columns(self) -> list[str]:
+        """Columns needed to explode and group."""
         return list(self.group_by)
 
     def compute(self, df: pl.DataFrame) -> GroupedCountExplodeResult:
+        """Explode list columns then compute grouped row counts."""
         filtered = df.drop_nulls(subset=self.group_by)
 
         if filtered.is_empty():
