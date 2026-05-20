@@ -11,42 +11,32 @@ from pts.metrics.base import Metric, MetricResult
 
 
 class GroupRow(BaseModel):
-    """A single group key and its aggregated value.
-
-    Attributes:
-        key: Mapping of group-by column names to their values for this group.
-        count: Aggregated count (or sum) for this group.
-    """
+    """A single group key and its aggregated value."""
 
     key: dict[str, Any]
+    """Mapping of group-by column names to their values for this group."""
     count: int
+    """Aggregated count (or sum) for this group."""
 
 
 class GroupedCountResult(MetricResult):
-    """Result for :class:`GroupedCountMetric`.
-
-    Attributes:
-        metric_type: Always ``'grouped_count'``.
-        group_by: Column names used to form groups.
-        groups: One entry per distinct key combination, sorted descending by count;
-            rows with null keys are excluded.
-    """
+    """Result for :class:`GroupedCountMetric`."""
 
     metric_type: Literal['grouped_count'] = 'grouped_count'
+    """Always ``'grouped_count'``."""
     group_by: list[str]
+    """Column names used to form groups."""
     groups: list[GroupRow]
+    """One entry per distinct key combination, sorted descending by count; rows with null keys excluded."""
 
 
 class GroupedCountMetric(Metric):
-    """Counts rows per group, sorted descending by count. Null keys excluded.
-
-    Attributes:
-        type: Always ``'grouped_count'``; used by the metric loader as the config discriminator.
-        group_by: Column names to group by.
-    """
+    """Counts rows per group, sorted descending by count. Null keys excluded."""
 
     type: Literal['grouped_count'] = 'grouped_count'
+    """Always ``'grouped_count'``; used by the metric loader as the config discriminator."""
     group_by: list[str]
+    """Column names to group by."""
 
     @property
     def required_columns(self) -> list[str]:
@@ -87,18 +77,14 @@ class GroupedCountMetric(Metric):
 
 
 class GroupedCountExplodeResult(MetricResult):
-    """Result for :class:`GroupedCountExplodeMetric`.
-
-    Attributes:
-        metric_type: Always ``'grouped_count_explode'``.
-        group_by: Column names that were exploded then grouped.
-        groups: One entry per distinct exploded value combination, sorted descending
-            by count; null values are excluded after exploding.
-    """
+    """Result for :class:`GroupedCountExplodeMetric`."""
 
     metric_type: Literal['grouped_count_explode'] = 'grouped_count_explode'
+    """Always ``'grouped_count_explode'``."""
     group_by: list[str]
+    """Column names that were exploded then grouped."""
     groups: list[GroupRow]
+    """One entry per distinct exploded value, sorted descending by count; null values excluded after exploding."""
 
 
 class GroupedCountExplodeMetric(Metric):
@@ -107,15 +93,12 @@ class GroupedCountExplodeMetric(Metric):
     Each column in ``group_by`` is expected to hold list values. All columns are
     exploded before grouping, so a row contributing to multiple groups (e.g. a
     disease mapped to several therapeutic areas) is counted once per group.
-
-    Attributes:
-        type: Always ``'grouped_count_explode'``; used by the metric loader as the
-            config discriminator.
-        group_by: List-typed column names to explode and then group by.
     """
 
     type: Literal['grouped_count_explode'] = 'grouped_count_explode'
+    """Always ``'grouped_count_explode'``; used by the metric loader as the config discriminator."""
     group_by: list[str]
+    """List-typed column names to explode and then group by."""
 
     @property
     def required_columns(self) -> list[str]:
@@ -164,34 +147,27 @@ class GroupedCountExplodeMetric(Metric):
 
 
 class GroupedSumResult(MetricResult):
-    """Result for :class:`GroupedSumMetric`.
-
-    Attributes:
-        metric_type: Always ``'grouped_sum'``.
-        column: Name of the column that was summed.
-        group_by: Column names used to form groups.
-        groups: One entry per distinct key combination, sorted descending by sum;
-            rows with null keys are excluded.
-    """
+    """Result for :class:`GroupedSumMetric`."""
 
     metric_type: Literal['grouped_sum'] = 'grouped_sum'
+    """Always ``'grouped_sum'``."""
     column: str
+    """Name of the column that was summed."""
     group_by: list[str]
+    """Column names used to form groups."""
     groups: list[GroupRow]
+    """One entry per distinct key combination, sorted descending by sum; rows with null keys excluded."""
 
 
 class GroupedSumMetric(Metric):
-    """Sums a numeric column per group, sorted descending by sum. Null keys excluded.
-
-    Attributes:
-        type: Always ``'grouped_sum'``; used by the metric loader as the config discriminator.
-        column: Numeric column whose values are summed within each group.
-        group_by: Column names to group by.
-    """
+    """Sums a numeric column per group, sorted descending by sum. Null keys excluded."""
 
     type: Literal['grouped_sum'] = 'grouped_sum'
+    """Always ``'grouped_sum'``; used by the metric loader as the config discriminator."""
     column: str
+    """Numeric column whose values are summed within each group."""
     group_by: list[str]
+    """Column names to group by."""
 
     @property
     def required_columns(self) -> list[str]:

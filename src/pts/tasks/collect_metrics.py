@@ -17,20 +17,14 @@ from pts.metrics.runner import MetricRunner
 
 
 class CollectMetricsSpec(Spec):
-    """Configuration for the CollectMetrics task.
-
-    Attributes:
-        source: Path to the directory containing parquet files
-            (absolute, or relative to ``config.work_path``).
-        destination: Exact path of the output JSONL file
-            (absolute, or relative to ``config.work_path``).
-        metrics: One or more metric definitions to compute on the dataset.
-            Must not be empty.
-    """
+    """Configuration for the CollectMetrics task."""
 
     source: str
+    """Path to the directory containing parquet files (absolute, or relative to ``config.work_path``)."""
     destination: str
+    """Exact path of the output JSONL file (absolute, or relative to ``config.work_path``)."""
     metrics: list[Metric]
+    """One or more metric definitions to compute on the dataset. Must not be empty."""
 
     @field_validator('metrics', mode='before')
     @classmethod

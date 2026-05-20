@@ -10,41 +10,32 @@ from pts.metrics.base import Metric, MetricResult
 
 
 class CountResult(MetricResult):
-    """Result for :class:`CountMetric`.
-
-    Attributes:
-        metric_type: Always ``'count'``.
-        value: Row count, or non-null value count when ``column`` is specified.
-    """
+    """Result for :class:`CountMetric`."""
 
     metric_type: Literal['count'] = 'count'
+    """Always ``'count'``."""
     value: int
+    """Row count, or non-null value count when ``column`` is specified."""
 
 
 class DistinctCountResult(MetricResult):
-    """Result for :class:`DistinctCountMetric`.
-
-    Attributes:
-        metric_type: Always ``'distinct_count'``.
-        columns: Column names whose combined values were counted.
-        value: Number of distinct non-null value combinations.
-    """
+    """Result for :class:`DistinctCountMetric`."""
 
     metric_type: Literal['distinct_count'] = 'distinct_count'
+    """Always ``'distinct_count'``."""
     columns: list[str]
+    """Column names whose combined values were counted."""
     value: int
+    """Number of distinct non-null value combinations."""
 
 
 class CountMetric(Metric):
-    """Counts rows, or non-null values of a column.
-
-    Attributes:
-        type: Always ``'count'``; used by the metric loader as the config discriminator.
-        column: Column to count non-null values for. When ``None``, counts all rows.
-    """
+    """Counts rows, or non-null values of a column."""
 
     type: Literal['count'] = 'count'
+    """Always ``'count'``; used by the metric loader as the config discriminator."""
     column: str | None = None
+    """Column to count non-null values for. When ``None``, counts all rows."""
 
     @property
     def required_columns(self) -> list[str]:
@@ -67,15 +58,12 @@ class CountMetric(Metric):
 
 
 class DistinctCountMetric(Metric):
-    """Counts distinct non-null value combinations across one or more columns.
-
-    Attributes:
-        type: Always ``'distinct_count'``; used by the metric loader as the config discriminator.
-        columns: Column names whose combined values form the distinct key.
-    """
+    """Counts distinct non-null value combinations across one or more columns."""
 
     type: Literal['distinct_count'] = 'distinct_count'
+    """Always ``'distinct_count'``; used by the metric loader as the config discriminator."""
     columns: list[str]
+    """Column names whose combined values form the distinct key."""
 
     @property
     def required_columns(self) -> list[str]:

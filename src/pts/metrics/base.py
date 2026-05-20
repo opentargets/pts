@@ -13,28 +13,24 @@ _ENVELOPE_FIELDS = frozenset({'name', 'metric_type'})
 
 
 class UnifiedMetricRecord(BaseModel):
-    """Flat JSONL record produced by MetricRunner for each metric computation.
-
-    Attributes:
-        name: Metric name as declared in config.
-        metric_type: Metric kind identifier (e.g. ``'count'``, ``'grouped_count'``).
-        release: Pipeline release string (e.g. ``'26.06-pub'``).
-        run: Pipeline run identifier.
-        dataset: Name of the source dataset directory.
-        source: Absolute path to the input parquet directory.
-        destination: Absolute path to the output JSONL file.
-        result: JSON-serialised metric-specific payload (value, groups, etc.),
-            excluding the envelope fields above.
-    """
+    """Flat JSONL record produced by MetricRunner for each metric computation."""
 
     name: str
+    """Metric name as declared in config."""
     metric_type: str
+    """Metric kind identifier (e.g. ``'count'``, ``'grouped_count'``)."""
     release: str
+    """Pipeline release string (e.g. ``'26.06-pub'``)."""
     run: str
+    """Pipeline run identifier."""
     dataset: str
+    """Name of the source dataset directory."""
     source: str
+    """Absolute path to the input parquet directory."""
     destination: str
+    """Absolute path to the output JSONL file."""
     result: str
+    """JSON-serialised metric-specific payload (value, groups, etc.), excluding envelope fields."""
 
 
 class MetricResult(BaseModel, ABC):
@@ -44,14 +40,12 @@ class MetricResult(BaseModel, ABC):
     Envelope fields (``release``, ``run``, ``dataset``, ``source``,
     ``destination``) are not stored here; they are injected by
     :class:`MetricRunner` via :meth:`to_unified_record`.
-
-    Attributes:
-        name: Metric name, copied from the originating :class:`Metric` definition.
-        metric_type: Kind discriminator; set as a ``Literal`` on each subclass.
     """
 
     name: str
+    """Metric name, copied from the originating :class:`Metric` definition."""
     metric_type: str
+    """Kind discriminator; set as a ``Literal`` on each subclass."""
 
     def to_unified_record(
         self,
@@ -86,12 +80,10 @@ class Metric(BaseModel, ABC):
     Subclasses declare their configuration parameters as Pydantic fields and
     implement :meth:`compute`. Callers (i.e. :class:`MetricRunner`) invoke
     :meth:`run`, which adds debug logging around :meth:`compute`.
-
-    Attributes:
-        name: Unique metric name used to identify the result record in JSONL output.
     """
 
     name: str
+    """Unique metric name used to identify the result record in JSONL output."""
 
     @property
     def required_columns(self) -> list[str] | None:
