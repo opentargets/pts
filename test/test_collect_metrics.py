@@ -72,6 +72,37 @@ def test_collect_metrics_writes_json(tmp_path):
     assert data['run'] == 'testrun.1'
 
 
+def test_collect_metrics_resolves_relative_paths(tmp_path):
+    """dataset_path and metrics_root should resolve relative to config.work_path."""
+    from unittest.mock import MagicMock
+    import polars as pl
+
+    data_dir = tmp_path / 'output' / 'my_dataset'
+    data_dir.mkdir(parents=True)
+    pl.DataFrame({'id': [1, 2]}).write_parquet(data_dir / 'part.parquet')
+
+    config = MagicMock()
+    config.work_path = tmp_path
+    config.release_uri = None
+    scratchpad = Scratchpad(sentinel_dict={'release': '26.06-pub', 'run': 'testrun.1'})
+    context = TaskContext(config=config, scratchpad=scratchpad)
+    context.abort = Event()
+
+    spec = CollectMetricsSpec(
+        name='collect_metrics my_dataset',
+        dataset_path='output/my_dataset',
+        metrics_root='metrics',
+        metrics=[{'type': 'count', 'name': 'total_count'}],
+    )
+    task = CollectMetrics(spec=spec, context=context)
+    asyncio.run(task.run())
+
+    out = tmp_path / 'metrics' / 'my_dataset' / 'total_count.json'
+    assert out.exists()
+    data = json.loads(out.read_text())
+    assert data['value'] == 2
+
+
 def test_collect_metrics_dataset_name_from_path(tmp_path):
     df = pl.DataFrame({'val': [1.0, 2.0, 3.0]})
     data_dir = tmp_path / 'my_dataset'

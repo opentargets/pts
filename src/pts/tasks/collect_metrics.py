@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Self
 
 from loguru import logger
+from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
 from otter.task.task_reporter import report
 from pydantic import field_validator
@@ -40,9 +41,9 @@ class CollectMetrics(Task):
 
     @report
     def run(self) -> Self:
-        dataset_path = Path(self.spec.dataset_path)
+        dataset_path = Path(make_absolute(self.spec.dataset_path, self.context.config))
         dataset_name = dataset_path.name
-        metrics_root = Path(self.spec.metrics_root)
+        metrics_root = Path(make_absolute(self.spec.metrics_root, self.context.config))
         release = self.context.scratchpad.sentinel_dict.get('release', '')
         run = self.context.scratchpad.sentinel_dict.get('run', '')
 

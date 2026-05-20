@@ -238,6 +238,7 @@ steps:
     - name: pyspark target
       pyspark: target
       source:
+
         diseases: output/disease
         ensembl: intermediate/target/ensembl/homo_sapiens.parquet
         gene_code: input/target/gencode/gencode.gff3.gz
@@ -269,6 +270,17 @@ steps:
       destination:
         target: output/target
         gene_essentiality: output/target_essentiality
+    - name: collect_metrics target
+      requires:
+        - pyspark target
+      dataset_path: output/target
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_biotype
+          group_by: [biotype]
   ##################################################################################################
 
   #: TARGET_SAFETY STEP :############### - part of target, pyspark tasks must run standalone for now
@@ -543,6 +555,20 @@ steps:
       destination:
         output: output/drug_molecule
         excluded: excluded/drug_molecule_failed_report
+    - name: collect_metrics drug_molecule
+      requires:
+        - pyspark drug_molecule
+      dataset_path: output/drug_molecule
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_drug_type
+          group_by: [drugType]
+        - type: grouped_count
+          name: count_by_max_clinical_stage
+          group_by: [maximumClinicalStage]
   ##################################################################################################
 
   #: CLINICAL_REPORT STEP :#######################################################################
@@ -641,6 +667,7 @@ steps:
       properties:
         spark.driver.memory: '12g'
       settings:
+
         novelty_scale: 2 # 2 for long tailed slow decays
         novelty_shift: 3 # 3 for long tailed slow decays
         novelty_window: 10
@@ -737,6 +764,54 @@ steps:
             weight: 1.0
             datatypeId: genetic_association
             toPropagate: true
+    - name: collect_metrics association_by_datasource_direct
+      requires:
+        - pyspark association
+      dataset_path: output/association_by_datasource_direct
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: association_score_distribution
+          column: associationScore
+          n_bins: 20
+    - name: collect_metrics association_by_datasource_indirect
+      requires:
+        - pyspark association
+      dataset_path: output/association_by_datasource_indirect
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: association_score_distribution
+          column: associationScore
+          n_bins: 20
+    - name: collect_metrics association_by_datatype_direct
+      requires:
+        - pyspark association
+      dataset_path: output/association_by_datatype_direct
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
+    - name: collect_metrics association_by_datatype_indirect
+      requires:
+        - pyspark association
+      dataset_path: output/association_by_datatype_indirect
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
   ##################################################################################################
 
   #: EVIDENCE POST PROCESS STEP :###################################################################
@@ -1611,6 +1686,246 @@ steps:
           - resourceScore
           - diseaseCellLines
           - primaryProjectId
+    - name: collect_metrics evidence_gwas_credible_sets
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_gwas_credible_sets
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_expression_atlas
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_expression_atlas
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_eva
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_eva
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_eva_somatic
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_eva_somatic
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_uniprot_variants
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_uniprot_variants
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_uniprot_literature
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_uniprot_literature
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_clingen
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_clingen
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_cancer_biomarkers
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_cancer_biomarkers
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_clinical_precedence
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_clinical_precedence
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_reactome
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_reactome
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_impc
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_impc
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_orphanet
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_orphanet
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_gene2phenotype
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_gene2phenotype
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_intogen
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_intogen
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_gene_burden
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_gene_burden
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_crispr_screen
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_crispr_screen
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_europepmc
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_europepmc
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_genomics_england
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_genomics_england
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_crispr
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_crispr
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+    - name: collect_metrics evidence_cancer_gene_census
+      requires:
+        - pyspark evidence_postprocess
+      dataset_path: output/evidence_cancer_gene_census
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
   ##################################################################################################
 
   #: Association on the fly STEP :##################################################################
@@ -1788,4 +2103,94 @@ steps:
         cooccurrences: intermediate/literature_cooccurrence
       destination:
         evidence: intermediate/evidence/literature_epmc
+  ##################################################################################################
+
+  #: ORPHAN DATASET METRICS :#######################################################################
+  # These datasets are produced by steps outside this config (e.g. genetics pipeline).
+  # collect_metrics steps have no requires: and will run against whatever exists at the path.
+  orphan_metrics:
+    - name: collect_metrics study
+      dataset_path: output/study
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_project
+          group_by: [projectId]
+
+    - name: collect_metrics credible_set
+      dataset_path: output/credible_set
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: distribution
+          name: log10bf_distribution
+          column: credibleSetlog10BF
+          n_bins: 20
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_finemapping_method
+          group_by: [finemappingMethod]
+
+    - name: collect_metrics variant
+      dataset_path: output/variant
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_most_severe_consequence
+          group_by: [mostSevereConsequenceId]
+
+    - name: collect_metrics colocalisation
+      dataset_path: output/colocalisation
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: grouped_count
+          name: count_by_right_study_type
+          group_by: [rightStudyType]
+        - type: grouped_count
+          name: count_by_method
+          group_by: [colocalisationMethod]
+        - type: distribution
+          name: h4_distribution
+          column: h4
+          n_bins: 20
+        - type: distribution
+          name: clpp_distribution
+          column: clpp
+          n_bins: 20
+
+    - name: collect_metrics l2g_prediction
+      dataset_path: output/l2g_prediction
+      metrics_root: metrics
+      metrics:
+        - type: count
+          name: total_count
+        - type: distinct_count
+          name: distinct_genes
+          columns: [geneId]
+        - type: distribution
+          name: score_distribution
+          column: score
+          n_bins: 20
+        - type: custom
+          class: pts.metrics.custom.l2g.L2GSignificantGeneMetric
+          name: significant_gene_count
+          threshold: 0.5
   ##################################################################################################
