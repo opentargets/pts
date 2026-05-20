@@ -1,26 +1,12 @@
-"""Tests for pts.metrics base module — written before implementation (TDD)."""
+"""Tests for pts.metrics base module."""
 import pytest
+from pts.metrics.base import Metric
 
 
-def test_metric_is_abstract():
-    from pts.metrics.base import Metric
+@pytest.mark.parametrize('cls', [
+    Metric,
+    type('IncompleteMetric', (Metric,), {}),
+])
+def test_metric_requires_compute_implementation(cls):
     with pytest.raises(TypeError):
-        Metric(name='x')
-
-
-def test_metric_subclasses_must_implement_compute():
-    from pts.metrics.base import Metric
-
-    class IncompleteMetric(Metric):
-        pass
-
-    with pytest.raises(TypeError):
-        IncompleteMetric(name='x')
-
-
-def test_metric_result_has_release_run_fields():
-    from pts.metrics.count import CountResult
-
-    r = CountResult(name='n', release='26.06-pub', run='testrun.1', value=1)
-    assert r.release == '26.06-pub'
-    assert r.run == 'testrun.1'
+        cls(name='x')

@@ -22,28 +22,14 @@ def _make_context(work_path=None, release='26.06-pub', run='testrun.1'):
     config.release_uri = None
     if work_path is not None:
         config.work_path = work_path
-    scratchpad = Scratchpad(sentinel_dict={'release': release, 'run': run})
-    context = TaskContext(config=config, scratchpad=scratchpad)
-    context.abort = Event()
-    return context
-
-
-async def _run_task(task: CollectMetrics) -> None:
-    await task.run()
-
-
-# ── Spec field tests ──────────────────────────────────────────────────────────
-
-def _make_context_without(key: str):
-    sentinel = {'release': '26.06-pub', 'run': 'testrun.1'}
-    del sentinel[key]
-    config = MagicMock()
-    config.release_uri = None
+    sentinel = {k: v for k, v in {'release': release, 'run': run}.items() if v is not None}
     scratchpad = Scratchpad(sentinel_dict=sentinel)
     context = TaskContext(config=config, scratchpad=scratchpad)
     context.abort = Event()
     return context
 
+
+# ── Validation tests ──────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('missing_key', ['release', 'run'])
 def test_collect_metrics_raises_if_scratchpad_key_missing(missing_key):
@@ -54,7 +40,7 @@ def test_collect_metrics_raises_if_scratchpad_key_missing(missing_key):
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
     with pytest.raises(ValueError, match=missing_key):
-        CollectMetrics(spec=spec, context=_make_context_without(missing_key))
+        CollectMetrics(spec=spec, context=_make_context(**{missing_key: None}))
 
 
 def test_spec_rejects_unknown_metric_type():
@@ -99,9 +85,8 @@ def test_collect_metrics_writes_jsonl(tmp_path):
         destination=str(out),
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
-    asyncio.run(_run_task(CollectMetrics(spec=spec, context=_make_context())))
+    asyncio.run(CollectMetrics(spec=spec, context=_make_context()).run())
 
-    assert out.exists()
     record = json.loads(out.read_text().splitlines()[0])
     assert json.loads(record['result'])['value'] == 3
     assert record['release'] == '26.06-pub'
@@ -121,7 +106,7 @@ def test_collect_metrics_destination_is_exact_output_file(tmp_path):
         destination=str(out),
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
-    asyncio.run(_run_task(CollectMetrics(spec=spec, context=_make_context())))
+    asyncio.run(CollectMetrics(spec=spec, context=_make_context()).run())
 
     assert out.exists()
     assert not (tmp_path / 'my' / 'exact' / 'path' / 'total_count.json').exists()
@@ -139,8 +124,7 @@ def test_collect_metrics_resolves_relative_paths(tmp_path):
         destination='metrics/my_dataset.jsonl',
         metrics=cast(Any, [{'type': 'count', 'name': 'total_count'}]),
     )
-    asyncio.run(_run_task(CollectMetrics(spec=spec, context=_make_context(work_path=tmp_path))))
+    asyncio.run(CollectMetrics(spec=spec, context=_make_context(work_path=tmp_path)).run())
 
     out = tmp_path / 'metrics' / 'my_dataset.jsonl'
-    assert out.exists()
     assert json.loads(json.loads(out.read_text().splitlines()[0])['result'])['value'] == 2
