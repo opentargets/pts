@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Self
 
 from loguru import logger
@@ -10,8 +11,38 @@ from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
 from otter.task.task_reporter import report
 from otter.util.fs import check_destination
+from pydantic import field_validator
+
+from pts.metrics.base import Metric
+from pts.metrics.count import CountMetric, DistinctCountMetric
+from pts.metrics.distribution import DistributionMetric
+from pts.metrics.grouped import GroupedCountMetric, GroupedSumMetric
+from pts.metrics.runner import MetricRunner
 
 TRANSFORMER_PACKAGE = 'pts.transformers'
+
+_STANDARD_METRIC_TYPES: dict[str, type[Metric]] = {
+    'count': CountMetric,
+    'distinct_count': DistinctCountMetric,
+    'distribution': DistributionMetric,
+    'grouped_count': GroupedCountMetric,
+    'grouped_sum': GroupedSumMetric,
+}
+
+
+def _load_metric(cfg: dict[str, Any]) -> Metric:
+    cfg = dict(cfg)
+    metric_type = cfg.pop('type', None)
+    if metric_type in _STANDARD_METRIC_TYPES:
+        return _STANDARD_METRIC_TYPES[metric_type](**cfg)
+    elif metric_type == 'custom':
+        class_path = cfg.pop('class')
+        module_path, cls_name = class_path.rsplit('.', 1)
+        module = import_module(module_path)
+        cls = getattr(module, cls_name)
+        return cls(**cfg)
+    else:
+        raise ValueError(f"unknown metric type '{metric_type}'")
 
 path_or_paths = str | dict[str, str]
 transformer_type = Callable[[str | dict[str, str], str | dict[str, str], dict[str, Any] | None], None]
@@ -40,6 +71,13 @@ class TransformSpec(Spec):
     """A string or a dictionary with the destination paths."""
     settings: dict[str, Any] | None = None
     """A dictionary with settings to pass to the transformer."""
+    metrics: list[Metric] = []
+    """Metric definitions to compute after the transform step completes."""
+
+    @field_validator('metrics', mode='before')
+    @classmethod
+    def _parse_metrics(cls, v: list[dict[str, Any]]) -> list[Metric]:
+        return [_load_metric(cfg) for cfg in v]
 
 
 class Transform(Task):
@@ -93,4 +131,21 @@ class Transform(Task):
         srcs = list(self.srcs.values()) if isinstance(self.srcs, dict) else self.srcs
         dsts = list(self.dsts.values()) if isinstance(self.dsts, dict) else self.dsts
         self.artifacts = [Artifact(source=srcs, destination=dsts)]
+
+        if self.spec.metrics:
+            destination = self.dsts if isinstance(self.dsts, str) else next(iter(self.dsts.values()))
+            dst_path = Path(destination)
+            dataset_path = dst_path.parent if dst_path.suffix else dst_path
+            dataset_name = dataset_path.name
+            release = self.context.scratchpad.sentinel_dict.get('release', '')
+            run = self.context.scratchpad.sentinel_dict.get('run', '')
+            MetricRunner().run(
+                metrics=self.spec.metrics,
+                dataset_path=dataset_path,
+                metrics_root=dataset_path.parent.parent / 'metrics',
+                dataset_name=dataset_name,
+                release=release,
+                run=run,
+            )
+
         return self
