@@ -11,6 +11,7 @@ from pts.transformers.dataset_metrics import (
     _filter_counts_to_struct,
     compute_breakdown,
     compute_filter_count,
+    profile_dataset,
 )
 
 
@@ -87,3 +88,53 @@ def test_output_schema_builds_and_roundtrips(tmp_path: Path) -> None:
     assert back.filter(pl.col('id') == 'study')['breakdowns'].to_list() == [
         [{'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 1}, {'value': 'eqtl', 'count': 1}]}]
     ]
+
+
+def _write_dataset(directory: Path, df: pl.DataFrame, n_files: int = 1) -> str:
+    directory.mkdir(parents=True, exist_ok=True)
+    rows_per = max(1, df.height // n_files)
+    for i in range(n_files):
+        chunk = df.slice(i * rows_per, rows_per if i < n_files - 1 else df.height - i * rows_per)
+        chunk.write_parquet(directory / f'part-{i}.parquet')
+    return str(directory)
+
+
+def test_profile_dataset_with_grouping_and_filter(tmp_path: Path) -> None:
+    df = pl.DataFrame({
+        'studyType': ['gwas', 'eqtl', 'gwas'],
+        'score': [0.9, 0.2, 0.7],
+        'geneId': ['g1', 'g2', 'g1'],
+    })
+    path = _write_dataset(tmp_path / 'l2g_like', df)
+    config = {
+        'groupings': {'studyType': 'studyType'},
+        'filter_counts': [{'name': 'high', 'filter': 'score > 0.5', 'distinct': 'geneId'}],
+    }
+
+    row = profile_dataset(path, 'l2g_like', config)
+
+    assert row is not None
+    assert row['id'] == 'l2g_like'
+    assert row['count'] == 3
+    assert row['number_of_partitions'] == 1
+    assert row['file_size'] > 0
+    assert row['breakdowns'] == [
+        {'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}
+    ]
+    assert row['filter_counts'] == [{'name': 'high', 'count': 1}]
+
+
+def test_profile_dataset_base_stats_only(tmp_path: Path) -> None:
+    path = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
+    row = profile_dataset(path, 'biosample', {})
+    assert row == {
+        'id': 'biosample', 'count': 2, 'file_size': row['file_size'],
+        'number_of_partitions': 1, 'breakdowns': [], 'filter_counts': [],
+    }
+
+
+def test_profile_dataset_unreadable_returns_none(tmp_path: Path) -> None:
+    empty_dir = tmp_path / 'not_parquet'
+    empty_dir.mkdir()
+    (empty_dir / 'readme.txt').write_text('not parquet')
+    assert profile_dataset(str(empty_dir), 'not_parquet', {}) is None
