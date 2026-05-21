@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Any, Self, cast
 
 import polars as pl
@@ -18,9 +17,9 @@ from pts.metrics.count import CountMetric
 from pts.metrics.loader import MetricType
 
 
-def _read(dataset_path: Path, columns: list[str] | None) -> pl.DataFrame:
+def _read(dataset_path: str, columns: list[str] | None) -> pl.DataFrame:
     """Load parquet files with optional column projection to minimise memory use."""
-    lf = pl.scan_parquet(dataset_path / '**' / '*.parquet')
+    lf = pl.scan_parquet(f'{dataset_path}/**/*.parquet')
     if columns is None:
         return cast(pl.DataFrame, lf.collect())
     if columns:
@@ -77,10 +76,11 @@ class CollectMetrics(Task):
 
     @report
     def run(self) -> Self:
-        dataset_path = Path(cast(str, make_absolute(self.spec.source, self.context.config)))
-        out_file = Path(cast(str, make_absolute(self.spec.destination, self.context.config)))
+        dataset_path = cast(str, make_absolute(self.spec.source, self.context.config))
+        out_file = cast(str, make_absolute(self.spec.destination, self.context.config))
+        dataset_name = dataset_path.rstrip('/').rsplit('/', 1)[-1]
 
-        logger.info(f'collecting {len(self.spec.metrics)} metrics for {out_file.stem}')
+        logger.info(f'collecting {len(self.spec.metrics)} metrics for {dataset_name}')
 
         def _compute(metric: Metric) -> dict:
             try:
@@ -89,16 +89,16 @@ class CollectMetrics(Task):
                 return result.to_unified_record(
                     release=self._release,
                     run=self._run,
-                    dataset=dataset_path.name,
-                    source=str(dataset_path),
-                    destination=str(out_file),
+                    dataset=dataset_name,
+                    source=dataset_path,
+                    destination=out_file,
                 ).model_dump()
             except Exception:
-                logger.error('metric {} failed on dataset {}', metric.name, dataset_path.name)
+                logger.error('metric {} failed on dataset {}', metric.name, dataset_name)
                 raise
 
         with ThreadPoolExecutor() as executor:
             records = list(executor.map(_compute, self.spec.metrics))
 
-        pl.DataFrame(records).write_parquet(str(out_file), mkdir=True)
+        pl.DataFrame(records).write_parquet(out_file, mkdir=True)
         return self
