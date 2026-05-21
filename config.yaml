@@ -20,8 +20,6 @@ steps:
       source: output/disease
       destination: metrics/disease.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count_explode
           name: count_by_therapeutic_area
           group_by: [therapeuticAreas]
@@ -281,8 +279,6 @@ steps:
       source: output/target
       destination: metrics/target.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_biotype
           group_by: [biotype]
@@ -566,8 +562,6 @@ steps:
       source: output/drug_molecule
       destination: metrics/drug_molecule.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_drug_type
           group_by: [drugType]
@@ -774,25 +768,17 @@ steps:
         - pyspark association
       source: output/association_by_datasource_direct
       destination: metrics/association_by_datasource_direct.parquet
-      metrics:
-        - type: count
-          name: total_count
     - name: collect_metrics association_by_datasource_indirect
       requires:
         - pyspark association
       source: output/association_by_datasource_indirect
       destination: metrics/association_by_datasource_indirect.parquet
-      metrics:
-        - type: count
-          name: total_count
     - name: collect_metrics association_by_datatype_direct
       requires:
         - pyspark association
       source: output/association_by_datatype_direct
       destination: metrics/association_by_datatype_direct.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_sum
           name: evidence_count_by_datatype
           column: evidenceCount
@@ -803,8 +789,6 @@ steps:
       source: output/association_by_datatype_indirect
       destination: metrics/association_by_datatype_indirect.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_sum
           name: evidence_count_by_datatype
           column: evidenceCount
@@ -1694,8 +1678,6 @@ steps:
       source: output/evidence_gwas_credible_sets
       destination: metrics/evidence_gwas_credible_sets.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1705,8 +1687,6 @@ steps:
       source: output/evidence_expression_atlas
       destination: metrics/evidence_expression_atlas.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1716,8 +1696,6 @@ steps:
       source: output/evidence_eva
       destination: metrics/evidence_eva.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1727,8 +1705,6 @@ steps:
       source: output/evidence_eva_somatic
       destination: metrics/evidence_eva_somatic.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1738,8 +1714,6 @@ steps:
       source: output/evidence_uniprot_variants
       destination: metrics/evidence_uniprot_variants.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1749,8 +1723,6 @@ steps:
       source: output/evidence_uniprot_literature
       destination: metrics/evidence_uniprot_literature.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1760,8 +1732,6 @@ steps:
       source: output/evidence_clingen
       destination: metrics/evidence_clingen.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1771,8 +1741,6 @@ steps:
       source: output/evidence_cancer_biomarkers
       destination: metrics/evidence_cancer_biomarkers.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1782,8 +1750,6 @@ steps:
       source: output/evidence_clinical_precedence
       destination: metrics/evidence_clinical_precedence.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1793,8 +1759,6 @@ steps:
       source: output/evidence_reactome
       destination: metrics/evidence_reactome.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1804,8 +1768,6 @@ steps:
       source: output/evidence_impc
       destination: metrics/evidence_impc.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1815,8 +1777,6 @@ steps:
       source: output/evidence_orphanet
       destination: metrics/evidence_orphanet.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1826,8 +1786,6 @@ steps:
       source: output/evidence_gene2phenotype
       destination: metrics/evidence_gene2phenotype.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1837,8 +1795,6 @@ steps:
       source: output/evidence_intogen
       destination: metrics/evidence_intogen.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1848,8 +1804,6 @@ steps:
       source: output/evidence_gene_burden
       destination: metrics/evidence_gene_burden.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1859,8 +1813,6 @@ steps:
       source: output/evidence_crispr_screen
       destination: metrics/evidence_crispr_screen.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1870,8 +1822,6 @@ steps:
       source: output/evidence_europepmc
       destination: metrics/evidence_europepmc.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1881,8 +1831,6 @@ steps:
       source: output/evidence_genomics_england
       destination: metrics/evidence_genomics_england.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1892,8 +1840,6 @@ steps:
       source: output/evidence_crispr
       destination: metrics/evidence_crispr.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -1903,8 +1849,6 @@ steps:
       source: output/evidence_cancer_gene_census
       destination: metrics/evidence_cancer_gene_census.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_datasource
           group_by: [datasourceId]
@@ -2095,8 +2039,6 @@ steps:
       source: output/study
       destination: metrics/study.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: distinct_count
           name: distinct_studies
           columns: [studyId]
@@ -2111,8 +2053,6 @@ steps:
       source: output/credible_set
       destination: metrics/credible_set.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: distinct_count
           name: distinct_studies
           columns: [studyId]
@@ -2127,8 +2067,6 @@ steps:
       source: output/variant
       destination: metrics/variant.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_most_severe_consequence
           group_by: [mostSevereConsequenceId]
@@ -2137,8 +2075,6 @@ steps:
       source: output/colocalisation
       destination: metrics/colocalisation.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: grouped_count
           name: count_by_right_study_type
           group_by: [rightStudyType]
@@ -2149,8 +2085,6 @@ steps:
       source: output/l2g_prediction
       destination: metrics/l2g_prediction.parquet
       metrics:
-        - type: count
-          name: total_count
         - type: distinct_count
           name: distinct_genes
           columns: [geneId]

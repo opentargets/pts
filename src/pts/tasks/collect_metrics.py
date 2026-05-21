@@ -11,9 +11,10 @@ from loguru import logger
 from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
 from otter.task.task_reporter import report
-from pydantic import field_serializer, field_validator
+from pydantic import field_serializer, field_validator, model_validator
 
 from pts.metrics.base import Metric
+from pts.metrics.count import CountMetric
 from pts.metrics.loader import MetricType
 
 
@@ -36,15 +37,19 @@ class CollectMetricsSpec(Spec):
     """Path to the directory containing parquet files (absolute, or relative to ``config.work_path``)."""
     destination: str
     """Exact path of the output Parquet file (absolute, or relative to ``config.work_path``)."""
-    metrics: list[Metric]
-    """One or more metric definitions to compute on the dataset. Must not be empty."""
+    metrics: list[Metric] = []
+    """Additional metric definitions beyond the automatic total row count. May be empty."""
 
     @field_validator('metrics', mode='before')
     @classmethod
     def _parse_metrics(cls, v: list[Any]) -> list[Metric]:
-        if not v:
-            raise ValueError("'metrics' must contain at least one metric")
         return [cfg if isinstance(cfg, Metric) else MetricType.load(cfg) for cfg in v]
+
+    @model_validator(mode='after')
+    def _inject_total_count(self) -> CollectMetricsSpec:
+        if not any(isinstance(m, CountMetric) and m.column is None for m in self.metrics):
+            self.metrics = [CountMetric(name='total_count'), *self.metrics]
+        return self
 
     @field_serializer('metrics')
     def _serialize_metrics(self, v: list[Metric]) -> list[dict[str, Any]]:

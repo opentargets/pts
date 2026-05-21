@@ -53,14 +53,36 @@ def test_spec_rejects_unknown_metric_type():
         )
 
 
-def test_spec_rejects_empty_metrics():
-    with pytest.raises(ValueError, match='metrics'):
-        CollectMetricsSpec(
-            name='collect_metrics test',
-            source='/tmp/data',
-            destination='/tmp/metrics/data.parquet',
-            metrics=cast(Any, []),
-        )
+def test_spec_auto_adds_total_count_when_metrics_empty():
+    spec = CollectMetricsSpec(
+        name='collect_metrics test',
+        source='/tmp/data',
+        destination='/tmp/metrics/data.parquet',
+    )
+    assert len(spec.metrics) == 1
+    assert spec.metrics[0].name == 'total_count'
+
+
+def test_spec_auto_adds_total_count_before_other_metrics():
+    spec = CollectMetricsSpec(
+        name='collect_metrics test',
+        source='/tmp/data',
+        destination='/tmp/metrics/data.parquet',
+        metrics=cast(Any, [{'type': 'distinct_count', 'name': 'x', 'columns': ['id']}]),
+    )
+    assert spec.metrics[0].name == 'total_count'
+    assert spec.metrics[1].name == 'x'
+
+
+def test_spec_does_not_duplicate_explicit_count():
+    spec = CollectMetricsSpec(
+        name='collect_metrics test',
+        source='/tmp/data',
+        destination='/tmp/metrics/data.parquet',
+        metrics=cast(Any, [{'type': 'count', 'name': 'my_count'}]),
+    )
+    assert sum(1 for m in spec.metrics if m.name == 'my_count') == 1
+    assert len(spec.metrics) == 1
 
 
 @pytest.mark.parametrize('config_name', ['config.yaml', 'metrics.yaml'])
@@ -78,7 +100,7 @@ def test_checked_in_metric_configs_are_valid(config_name):
     assert collect_metric_specs
     for spec in collect_metric_specs:
         parsed = CollectMetricsSpec(**spec)
-        assert parsed.metrics
+        assert any(m.name == 'total_count' for m in parsed.metrics)
 
 
 # ── Task integration tests ────────────────────────────────────────────────────
