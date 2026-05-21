@@ -40,8 +40,18 @@ class MetricType(Enum):
         """Instantiate a :class:`~pts.metrics.base.Metric` from a config dict.
 
         The ``type`` key selects the :class:`MetricType` member by name;
-        remaining keys are forwarded to the implementer class as keyword
-        arguments.
+        remaining keys are forwarded to the implementer class as keyword arguments.
+
+        >>> MetricType.load({'type': 'count', 'name': 'n'}).name
+        'n'
+        >>> MetricType.load({'type': 'bad', 'name': 'n'})
+        Traceback (most recent call last):
+            ...
+        ValueError: unknown metric type 'bad'
+        >>> MetricType.load({'name': 'n'})
+        Traceback (most recent call last):
+            ...
+        ValueError: metric entry is missing required 'type' field
         """
         cfg = dict(cfg)
         raw_type = cfg.pop('type', None)

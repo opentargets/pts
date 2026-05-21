@@ -76,6 +76,18 @@ class Metric(BaseModel, ABC):
 
         Applies :attr:`filter_expr` (if set) before calling :meth:`compute`.
         Raises :class:`EmptyDatasetError` if ``df`` has no rows.
+
+        >>> from pts.metrics.count import CountMetric, DistinctCountMetric
+        >>> import polars as pl
+        >>> CountMetric(name='x').run(pl.DataFrame({'a': pl.Series([], dtype=pl.Int64)}))
+        Traceback (most recent call last):
+            ...
+        pts.metrics.base.EmptyDatasetError: metric 'x': input DataFrame is empty
+        >>> CountMetric(name='n', filter_expr='score >= 0.5').run(pl.DataFrame({'score': [0.8, 0.3, 0.9]})).value
+        2
+        >>> m = DistinctCountMetric(name='g', columns=['id'], filter_expr='score >= 0.5')
+        >>> m.run(pl.DataFrame({'id': ['A', 'A', 'B'], 'score': [0.9, 0.3, 0.8]})).value
+        2
         """
         if df.is_empty():
             raise EmptyDatasetError(f"metric '{self.name}': input DataFrame is empty")
@@ -125,6 +137,16 @@ class MetricResult(BaseModel, ABC):
 
         Metric-specific fields (everything except ``name`` and ``metric_type``)
         are JSON-serialised into the ``result`` field.
+
+        >>> from pts.metrics.count import CountMetric
+        >>> import polars as pl
+        >>> r = CountMetric(name='n').run(pl.DataFrame({'x': [1]}))
+        >>> r.to_unified_record(release='r', run='1', dataset='d', source='/s', destination='/d').filter_expr is None
+        True
+        >>> r.to_unified_record(
+        ...     release='r', run='1', dataset='d', source='/s', destination='/d', filter_expr='x>0',
+        ... ).filter_expr
+        'x>0'
         """
         payload = {k: v for k, v in self.model_dump().items() if k not in _ENVELOPE_FIELDS}
         return UnifiedMetricRecord(

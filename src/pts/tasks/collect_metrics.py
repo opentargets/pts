@@ -30,7 +30,24 @@ def _read(dataset_path: str, columns: list[str] | None) -> pl.DataFrame:
 
 
 class CollectMetricsSpec(Spec):
-    """Configuration for the CollectMetrics task."""
+    """Configuration for the CollectMetrics task.
+
+    ``total_count`` is automatically prepended if no row-count metric is present:
+
+    >>> CollectMetricsSpec(name='collect_metrics ds', source='/s', destination='/d').metrics[0].name
+    'total_count'
+    >>> spec = CollectMetricsSpec(
+    ...     name='collect_metrics ds', source='/s', destination='/d',
+    ...     metrics=[{'type': 'distinct_count', 'name': 'dc', 'columns': ['id']}],
+    ... )
+    >>> [m.name for m in spec.metrics]
+    ['total_count', 'dc']
+    >>> CollectMetricsSpec(
+    ...     name='collect_metrics ds', source='/s', destination='/d',
+    ...     metrics=[{'type': 'count', 'name': 'my_count'}],
+    ... ).metrics[0].name
+    'my_count'
+    """
 
     source: str
     """Path to the directory containing parquet files (absolute, or relative to ``config.work_path``)."""
