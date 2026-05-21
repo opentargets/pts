@@ -717,6 +717,10 @@ steps:
             weight: 0.5
             datatypeId: ot_validation_lab
             toPropagate: true
+          - datasourceId: pride_proteomics
+            weight: 0.2
+            datatypeId: proteomics_differential
+            toPropagate: false
           - datasourceId: reactome
             weight: 1.0
             datatypeId: affected_pathway
@@ -768,6 +772,62 @@ steps:
       settings:
         evidence_format: json
         datasource_id: expression_atlas
+        score_expression: 'array_min(array(1.0, pvalue_linear_score(resourceScore) * (abs(log2FoldChangeValue) / 10) * (log2FoldChangePercentileRank / 100)))'
+        unique_fields:
+          - targetId
+          - targetFromSourceId
+          - diseaseId
+          - datasourceId
+          - contrast
+          - studyId
+        excluded_biotypes:
+          - 'IG_C_pseudogene'
+          - 'IG_J_pseudogene'
+          - 'IG_pseudogene'
+          - 'IG_V_pseudogene'
+          - 'polymorphic_pseudogene'
+          - 'processed_pseudogene'
+          - 'pseudogene'
+          - 'rRNA'
+          - 'rRNA_pseudogene'
+          - 'snoRNA'
+          - 'snRNA'
+          - 'transcribed_processed_pseudogene'
+          - 'transcribed_unitary_pseudogene'
+          - 'transcribed_unprocessed_pseudogene'
+          - 'TR_J_pseudogene'
+          - 'TR_V_pseudogene'
+          - 'unitary_pseudogene'
+          - 'unprocessed_pseudogene'
+
+  # PRIDE re-analysed differential proteomics — harmoniser stage that turns the
+  # raw FC.txt + sdrf.json inputs into the pride_proteomics evidence schema.
+  evidence_pride_proteomics:
+    - name: pyspark evidence_pride_proteomics
+      pyspark: evidence_pride_proteomics
+      source:
+        fc_files: input/evidence/pride_proteomics/*/PXD*_FC.txt
+        sdrf_files: input/evidence/pride_proteomics/*/PXD*sdrf.json
+        disease_mapping: input/evidence/pride_proteomics/pride_disease_mapping.tsv
+      destination: intermediate/evidence/pride_proteomics.parquet
+      settings:
+        adj_pval_cutoff: 0.05
+        confidence_high_cutoff: 0.01
+
+  evidence_postprocess_pride_proteomics:
+    - name: pyspark evidence_postprocess
+      pyspark: evidence_postprocess
+      source:
+        evidence_path: intermediate/evidence/pride_proteomics.parquet
+        target_path: output/target
+        disease_path: output/disease
+        publication_date_lut: input/literature/literature_export
+      destination:
+        failed_evidence: excluded/evidence/pride_proteomics
+        evidence: output/evidence_pride_proteomics
+      settings:
+        evidence_format: parquet
+        datasource_id: pride_proteomics
         score_expression: 'array_min(array(1.0, pvalue_linear_score(resourceScore) * (abs(log2FoldChangeValue) / 10) * (log2FoldChangePercentileRank / 100)))'
         unique_fields:
           - targetId
