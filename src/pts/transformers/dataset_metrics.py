@@ -1,12 +1,18 @@
-"""Config-driven dataset profiler (one row per output dataset).
+"""Config-driven dataset profiler emitting one tidy row per measurement.
 
-Sibling of ``release_metrics``: reuses its discovery/count helpers but emits a
-dataset-object profile (id, count, file_size, number_of_partitions, and optional
-config-driven breakdowns and filter counts).
+Sibling of ``release_metrics``: reuses the shared discovery/count helpers but
+emits a long/tidy table — one row per (dataset, metric) measurement — and
+combines every discovered dataset into a single parquet for easy querying.
 
-Datasets are assumed to be flat parquet directories with ``part-*.parquet`` files
-at the top level. Hive-partitioned datasets (e.g. ``key=value/part-*.parquet``)
-are not supported and would be skipped (no top-level ``part-*`` files to count).
+Each row carries the ``run`` identifier (derived from the release/work root),
+the ``dataset`` id, the metric ``kind`` (``scalar``/``grouping``/``filter``),
+the metric name, the ``expression`` describing how it was computed (NULL for
+scalars), the ``group_value`` bucket (NULL for scalar/filter rows), and the
+integer ``value``.
+
+Datasets are assumed to be flat parquet directories with ``*.parquet`` files at
+the top level. Hive-partitioned datasets (e.g. ``key=value/part-*.parquet``)
+are not supported and would be skipped (no top-level parquet files to count).
 """
 
 from __future__ import annotations
@@ -20,26 +26,18 @@ import polars as pl
 from loguru import logger
 from otter.config.model import Config
 
-from pts.transformers.release_metrics import (
-    _count_parquet_rows,
-    _discover_dataset_paths,
-    _to_parquet_glob,
-)
+from pts.transformers.parquet_helpers import count_parquet_rows, discover_dataset_paths, to_parquet_glob
 
 NULL_KEY = 'null'
 
 OUTPUT_SCHEMA: dict[str, pl.DataType] = {
-    'id': pl.String(),
-    'count': pl.Int64(),
-    'file_size': pl.Int64(),
-    'number_of_partitions': pl.Int32(),
-    'breakdowns': pl.List(
-        pl.Struct({
-            'grouping': pl.String(),
-            'groups': pl.List(pl.Struct({'value': pl.String(), 'count': pl.Int64()})),
-        })
-    ),
-    'filter_counts': pl.List(pl.Struct({'name': pl.String(), 'count': pl.Int64()})),
+    'run': pl.String(),
+    'dataset': pl.String(),
+    'kind': pl.String(),
+    'metric': pl.String(),
+    'expression': pl.String(),
+    'group_value': pl.String(),
+    'value': pl.Int64(),
 }
 
 
@@ -48,7 +46,9 @@ def _as_lazy(frame: pl.DataFrame | pl.LazyFrame) -> pl.LazyFrame:
     return frame if isinstance(frame, pl.LazyFrame) else frame.lazy()
 
 
-def compute_breakdown(frame: pl.DataFrame | pl.LazyFrame, expression: str) -> dict[str, int]:
+def compute_breakdown(
+    frame: pl.DataFrame | pl.LazyFrame, expression: str, schema: pl.Schema | None = None
+) -> dict[str, int]:
     """Group a frame by a SQL expression and count rows per group.
 
     The expression is evaluated with ``pl.sql_expr``. A plain column, a derived
@@ -59,6 +59,9 @@ def compute_breakdown(frame: pl.DataFrame | pl.LazyFrame, expression: str) -> di
     Args:
         frame (pl.DataFrame | pl.LazyFrame): dataset to group.
         expression (str): SQL expression producing the group key.
+        schema (pl.Schema | None): the frame's schema; when given and the
+            expression is a bare column, list-detection avoids an extra metadata
+            read (useful for remote storage).
 
     Returns:
         dict[str, int]: count per group value.
@@ -76,7 +79,11 @@ def compute_breakdown(frame: pl.DataFrame | pl.LazyFrame, expression: str) -> di
         {'a': 2, 'b': 1}
     """
     selected = _as_lazy(frame).select(pl.sql_expr(expression).alias('k'))
-    if isinstance(selected.collect_schema()['k'], pl.List):
+    if schema is not None and expression in schema:
+        is_list = isinstance(schema[expression], pl.List)
+    else:
+        is_list = isinstance(selected.collect_schema()['k'], pl.List)
+    if is_list:
         selected = selected.explode('k')
     counts = (
         selected
@@ -89,9 +96,7 @@ def compute_breakdown(frame: pl.DataFrame | pl.LazyFrame, expression: str) -> di
     return {key: int(count) for key, count in ordered}
 
 
-def compute_filter_count(
-    frame: pl.DataFrame | pl.LazyFrame, filter_expr: str, distinct: str | None = None
-) -> int:
+def compute_filter_count(frame: pl.DataFrame | pl.LazyFrame, filter_expr: str, distinct: str | None = None) -> int:
     """Count rows (or distinct values) matching a SQL filter expression.
 
     Args:
@@ -143,67 +148,93 @@ def _dataset_file_stats(dataset_path: str) -> tuple[int, int]:
     return file_size, len(parts)
 
 
-def _breakdowns_to_struct(breakdowns: dict[str, dict[str, int]]) -> list[dict[str, Any]]:
-    """Shape ``{grouping: {value: count}}`` into the output ``list[struct]``."""
-    return [
-        {
-            'grouping': grouping,
-            'groups': [{'value': value, 'count': count} for value, count in groups.items()],
-        }
-        for grouping, groups in breakdowns.items()
-    ]
+def _metric_row(
+    run: str,
+    dataset: str,
+    kind: str,
+    metric: str,
+    value: int,
+    expression: str | None = None,
+    group_value: str | None = None,
+) -> dict[str, Any]:
+    """Build one tidy metric row matching ``OUTPUT_SCHEMA``."""
+    return {
+        'run': run,
+        'dataset': dataset,
+        'kind': kind,
+        'metric': metric,
+        'expression': expression,
+        'group_value': group_value,
+        'value': int(value),
+    }
 
 
-def _filter_counts_to_struct(filter_counts: dict[str, int]) -> list[dict[str, Any]]:
-    """Shape ``{name: count}`` into the output ``list[struct]``."""
-    return [{'name': name, 'count': count} for name, count in filter_counts.items()]
+def profile_dataset(
+    dataset_path: str, name: str, dataset_config: dict[str, Any], run: str
+) -> list[dict[str, Any]] | None:
+    """Profile one dataset into tidy rows, or ``None`` if it cannot be read.
 
+    Emits scalar rows (``count``, ``file_size``, ``number_of_partitions``), one
+    row per grouping bucket, and one row per filter. ``count`` is read from
+    parquet footers; ``file_size`` / partitions from a storage listing.
 
-def profile_dataset(dataset_path: str, name: str, dataset_config: dict[str, Any]) -> dict[str, Any] | None:
-    """Profile one dataset into an output row, or ``None`` if unreadable.
-
-    ``count`` is read from parquet footers; ``file_size`` / partitions from
-    storage listing. Breakdowns/filters scan only their columns (lazy). A
-    dataset that cannot be read as parquet is skipped (logged), returning None.
+    A dataset that cannot be read or listed is skipped (logged), returning None.
+    A malformed grouping/filter expression in config raises ``ValueError`` (fail
+    loud — it's an author error to fix).
 
     Args:
         dataset_path (str): absolute path to the dataset directory.
         name (str): dataset id (basename).
         dataset_config (dict): optional ``{groupings, filter_counts}`` overlay.
+        run (str): run identifier stamped on every row.
 
     Returns:
-        dict | None: one output row, or None when the dataset cannot be read.
+        list[dict] | None: tidy rows, or None when the dataset cannot be read.
     """
     try:
-        count = _count_parquet_rows(dataset_path)
+        count = count_parquet_rows(dataset_path)
+        file_size, n_partitions = _dataset_file_stats(dataset_path)
     except Exception:
         logger.opt(exception=True).warning(f'Skipping unreadable dataset `{name}` at {dataset_path}')
         return None
 
-    file_size, n_partitions = _dataset_file_stats(dataset_path)
+    rows: list[dict[str, Any]] = [
+        _metric_row(run, name, 'scalar', 'count', count),
+        _metric_row(run, name, 'scalar', 'file_size', file_size),
+        _metric_row(run, name, 'scalar', 'number_of_partitions', n_partitions),
+    ]
 
-    breakdowns: dict[str, dict[str, int]] = {}
-    filter_counts: dict[str, int] = {}
     groupings = dataset_config.get('groupings', {})
     filters = dataset_config.get('filter_counts', [])
+    if not groupings and not filters:
+        return rows
 
-    if groupings or filters:
-        lazy_frame = pl.scan_parquet(_to_parquet_glob(dataset_path))
-        for grouping_name, expression in groupings.items():
-            breakdowns[grouping_name] = compute_breakdown(lazy_frame, expression)
-        for spec in filters:
-            filter_counts[spec['name']] = compute_filter_count(
-                lazy_frame, spec['filter'], spec.get('distinct')
-            )
+    lazy_frame = pl.scan_parquet(to_parquet_glob(dataset_path))
+    schema = lazy_frame.collect_schema()
 
-    return {
-        'id': name,
-        'count': count,
-        'file_size': file_size,
-        'number_of_partitions': n_partitions,
-        'breakdowns': _breakdowns_to_struct(breakdowns),
-        'filter_counts': _filter_counts_to_struct(filter_counts),
-    }
+    for grouping_name, expression in groupings.items():
+        try:
+            counts = compute_breakdown(lazy_frame, expression, schema=schema)
+        except Exception as e:
+            msg = f"Failed to compute grouping '{grouping_name}' (expression '{expression}') for dataset '{name}'"
+            raise ValueError(msg) from e
+        rows.extend(
+            _metric_row(run, name, 'grouping', grouping_name, count, expression=expression, group_value=bucket)
+            for bucket, count in counts.items()
+        )
+
+    for spec in filters:
+        filter_expr = spec['filter']
+        distinct = spec.get('distinct')
+        try:
+            match_count = compute_filter_count(lazy_frame, filter_expr, distinct)
+        except Exception as e:
+            msg = f"Failed to compute filter '{spec['name']}' (filter '{filter_expr}') for dataset '{name}'"
+            raise ValueError(msg) from e
+        definition = f'distinct {distinct} where {filter_expr}' if distinct else filter_expr
+        rows.append(_metric_row(run, name, 'filter', spec['name'], match_count, expression=definition))
+
+    return rows
 
 
 def _config_for_dataset(name: str, datasets_config: dict[str, Any]) -> dict[str, Any]:
@@ -233,10 +264,10 @@ def dataset_metrics(
     settings: dict[str, Any],
     config: Config,
 ) -> None:
-    """Profile every discovered dataset, writing one parquet per dataset.
+    """Profile every discovered dataset into one combined tidy parquet.
 
-    Writes ``{destination['directory']}/{dataset}.parquet`` (a single-row
-    profile) for each discovered dataset.
+    Writes a single ``{destination['directory']}/dataset_metrics.parquet`` table
+    containing one row per measurement across all datasets.
 
     Args:
         source: unused.
@@ -245,28 +276,33 @@ def dataset_metrics(
         settings: ``metric_scopes`` (default ``['/output/*']``) and a
             ``datasets`` overlay keyed by dataset basename / fnmatch pattern
             (``{groupings, filter_counts}``).
-        config: injected; discovery reads ``release_uri`` or ``work_path``.
+        config: injected; discovery reads ``release_uri`` or ``work_path``, and
+            the ``run`` identifier is the last path segment of that root.
     """
     del source
 
     data_root_uri = config.release_uri or str(config.work_path)
+    run = data_root_uri.rstrip('/').rsplit('/', maxsplit=1)[-1]
     scope_globs = list(settings.get('metric_scopes', ['/output/*']))
     datasets_config = settings.get('datasets', {})
 
     destination_dir = str(destination['directory']).rstrip('/')
     destination_name = Path(destination_dir).name
 
-    discovered = _discover_dataset_paths(data_root_uri, scope_globs, config)
+    discovered = discover_dataset_paths(data_root_uri, scope_globs, config)
 
-    written = 0
+    all_rows: list[dict[str, Any]] = []
+    profiled = 0
     for rel_path in sorted(discovered):
         name = Path(rel_path).name
         if name == destination_name:
             continue
-        row = profile_dataset(discovered[rel_path], name, _config_for_dataset(name, datasets_config))
-        if row is None:
+        rows = profile_dataset(discovered[rel_path], name, _config_for_dataset(name, datasets_config), run)
+        if rows is None:
             continue
-        pl.DataFrame([row], schema=OUTPUT_SCHEMA).write_parquet(f'{destination_dir}/{name}.parquet', mkdir=True)
-        written += 1
+        all_rows.extend(rows)
+        profiled += 1
 
-    logger.info(f'Profiled {written} datasets (of {len(discovered)} discovered) under {scope_globs}')
+    out_file = f'{destination_dir}/dataset_metrics.parquet'
+    pl.DataFrame(all_rows, schema=OUTPUT_SCHEMA).write_parquet(out_file, mkdir=True)
+    logger.info(f'Profiled {profiled} datasets (of {len(discovered)} discovered) into {out_file}')

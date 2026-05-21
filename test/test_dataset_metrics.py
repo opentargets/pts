@@ -8,15 +8,28 @@ import pytest
 
 from pts.transformers.dataset_metrics import (
     OUTPUT_SCHEMA,
-    _breakdowns_to_struct,
     _config_for_dataset,
     _dataset_file_stats,
-    _filter_counts_to_struct,
     compute_breakdown,
     compute_filter_count,
     dataset_metrics,
     profile_dataset,
 )
+
+
+def _write_dataset(directory: Path, df: pl.DataFrame, n_files: int = 1) -> str:
+    directory.mkdir(parents=True, exist_ok=True)
+    rows_per = max(1, df.height // n_files)
+    for i in range(n_files):
+        chunk = df.slice(i * rows_per, rows_per if i < n_files - 1 else df.height - i * rows_per)
+        chunk.write_parquet(directory / f'part-{i}.parquet')
+    return str(directory)
+
+
+def _row(rows: list[dict], kind: str, metric: str, group_value: str | None = None) -> dict:
+    matches = [r for r in rows if r['kind'] == kind and r['metric'] == metric and r['group_value'] == group_value]
+    assert len(matches) == 1, f'expected one {kind}/{metric}/{group_value} row, got {matches}'
+    return matches[0]
 
 
 def test_compute_breakdown_plain_column_with_null() -> None:
@@ -59,52 +72,21 @@ def test_dataset_file_stats(tmp_path: Path) -> None:
     assert file_size > 0
 
 
-def test_breakdowns_to_struct() -> None:
-    out = _breakdowns_to_struct({'studyType': {'gwas': 2, 'eqtl': 1}})
-    assert out == [
-        {'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}
-    ]
-
-
-def test_filter_counts_to_struct() -> None:
-    assert _filter_counts_to_struct({'prioritised_genes': 18422}) == [
-        {'name': 'prioritised_genes', 'count': 18422}
-    ]
-
-
-def test_output_schema_builds_and_roundtrips(tmp_path: Path) -> None:
+def test_output_schema_roundtrips(tmp_path: Path) -> None:
     rows = [
-        {
-            'id': 'study', 'count': 2, 'file_size': 10, 'number_of_partitions': 1,
-            'breakdowns': _breakdowns_to_struct({'studyType': {'gwas': 1, 'eqtl': 1}}),
-            'filter_counts': [],
-        },
-        {
-            'id': 'biosample', 'count': 5, 'file_size': 7, 'number_of_partitions': 1,
-            'breakdowns': [], 'filter_counts': [],
-        },
+        {'run': 'r1', 'dataset': 'study', 'kind': 'scalar', 'metric': 'count',
+         'expression': None, 'group_value': None, 'value': 3},
+        {'run': 'r1', 'dataset': 'study', 'kind': 'grouping', 'metric': 'studyType',
+         'expression': 'studyType', 'group_value': 'gwas', 'value': 2},
     ]
-    out = tmp_path / 'metrics'
-    pl.DataFrame(rows, schema=OUTPUT_SCHEMA).write_parquet(out, mkdir=True)
+    out = tmp_path / 'dataset_metrics.parquet'
+    pl.DataFrame(rows, schema=OUTPUT_SCHEMA).write_parquet(out)
     back = pl.read_parquet(out)
-
-    assert back.height == 2
     assert back.schema == pl.Schema(OUTPUT_SCHEMA)
-    assert back.filter(pl.col('id') == 'study')['breakdowns'].to_list() == [
-        [{'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 1}, {'value': 'eqtl', 'count': 1}]}]
-    ]
+    assert back.height == 2
 
 
-def _write_dataset(directory: Path, df: pl.DataFrame, n_files: int = 1) -> str:
-    directory.mkdir(parents=True, exist_ok=True)
-    rows_per = max(1, df.height // n_files)
-    for i in range(n_files):
-        chunk = df.slice(i * rows_per, rows_per if i < n_files - 1 else df.height - i * rows_per)
-        chunk.write_parquet(directory / f'part-{i}.parquet')
-    return str(directory)
-
-
-def test_profile_dataset_with_grouping_and_filter(tmp_path: Path) -> None:
+def test_profile_dataset_emits_long_rows(tmp_path: Path) -> None:
     df = pl.DataFrame({
         'studyType': ['gwas', 'eqtl', 'gwas'],
         'score': [0.9, 0.2, 0.7],
@@ -116,36 +98,62 @@ def test_profile_dataset_with_grouping_and_filter(tmp_path: Path) -> None:
         'filter_counts': [{'name': 'high', 'filter': 'score > 0.5', 'distinct': 'geneId'}],
     }
 
-    row = profile_dataset(path, 'l2g_like', config)
+    rows = profile_dataset(path, 'l2g_like', config, run='26.03-test5')
 
-    assert row is not None
-    assert row['id'] == 'l2g_like'
-    assert row['count'] == 3
-    assert row['number_of_partitions'] == 1
-    assert row['file_size'] > 0
-    assert row['breakdowns'] == [
-        {'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}
-    ]
-    assert row['filter_counts'] == [{'name': 'high', 'count': 1}]
+    assert rows is not None
+    assert all(r['run'] == '26.03-test5' and r['dataset'] == 'l2g_like' for r in rows)
+
+    count_row = _row(rows, 'scalar', 'count')
+    assert count_row['value'] == 3
+    assert count_row['expression'] is None
+    assert _row(rows, 'scalar', 'number_of_partitions')['value'] == 1
+    assert _row(rows, 'scalar', 'file_size')['value'] > 0
+
+    gwas = _row(rows, 'grouping', 'studyType', 'gwas')
+    assert gwas['value'] == 2
+    assert gwas['expression'] == 'studyType'
+    assert _row(rows, 'grouping', 'studyType', 'eqtl')['value'] == 1
+
+    high = _row(rows, 'filter', 'high')
+    assert high['value'] == 1
+    assert high['expression'] == 'distinct geneId where score > 0.5'
+    assert high['group_value'] is None
 
 
 def test_profile_dataset_base_stats_only(tmp_path: Path) -> None:
     path = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
-    row = profile_dataset(path, 'biosample', {})
-    assert row == {
-        'id': 'biosample', 'count': 2, 'file_size': row['file_size'],
-        'number_of_partitions': 1, 'breakdowns': [], 'filter_counts': [],
-    }
+    rows = profile_dataset(path, 'biosample', {}, run='r1')
+    assert sorted((r['kind'], r['metric']) for r in rows) == [
+        ('scalar', 'count'), ('scalar', 'file_size'), ('scalar', 'number_of_partitions')
+    ]
+    assert _row(rows, 'scalar', 'count')['value'] == 2
 
 
 def test_profile_dataset_unreadable_returns_none(tmp_path: Path) -> None:
     empty_dir = tmp_path / 'not_parquet'
     empty_dir.mkdir()
     (empty_dir / 'readme.txt').write_text('not parquet')
-    assert profile_dataset(str(empty_dir), 'not_parquet', {}) is None
+    assert profile_dataset(str(empty_dir), 'not_parquet', {}, run='r1') is None
 
 
-def test_dataset_metrics_writes_one_parquet_per_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_profile_dataset_bad_expression_fails_loud(tmp_path: Path) -> None:
+    path = _write_dataset(tmp_path / 'study', pl.DataFrame({'studyType': ['gwas']}))
+    config = {'groupings': {'oops': 'nonexistent_column'}}
+    with pytest.raises(ValueError, match='oops'):
+        profile_dataset(path, 'study', config, run='r1')
+
+
+def test_profile_dataset_listing_failure_skips(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _write_dataset(tmp_path / 'study', pl.DataFrame({'studyType': ['gwas']}))
+
+    def boom(_path: str) -> tuple[int, int]:
+        raise OSError('listing failed')
+
+    monkeypatch.setattr('pts.transformers.dataset_metrics._dataset_file_stats', boom)
+    assert profile_dataset(path, 'study', {}, run='r1') is None
+
+
+def test_dataset_metrics_writes_combined_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     study = _write_dataset(tmp_path / 'study', pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas']}))
     biosample = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
     # a discovered dataset whose basename collides with the output dir must be skipped:
@@ -155,27 +163,34 @@ def test_dataset_metrics_writes_one_parquet_per_dataset(tmp_path: Path, monkeypa
         '/output/metrics': str(tmp_path / 'ignored'),
     }
     monkeypatch.setattr(
-        'pts.transformers.dataset_metrics._discover_dataset_paths',
+        'pts.transformers.dataset_metrics.discover_dataset_paths',
         lambda root, scopes, config: discovered,
     )
 
     out_dir = tmp_path / 'metrics'
-    config = SimpleNamespace(release_uri=str(tmp_path), work_path=tmp_path)
+    config = SimpleNamespace(release_uri='gs://bucket/26.03-test5', work_path=tmp_path)
     settings = {'datasets': {'study': {'groupings': {'studyType': 'studyType'}}}}
 
     dataset_metrics({}, {'directory': str(out_dir)}, settings, config)
 
+    # only the single combined table is written (no per-dataset files):
     files = sorted(p.name for p in out_dir.glob('*.parquet'))
-    assert files == ['biosample.parquet', 'study.parquet']  # 'metrics' skipped
+    assert files == ['dataset_metrics.parquet']
 
-    study_df = pl.read_parquet(out_dir / 'study.parquet')
-    assert study_df.height == 1
-    assert study_df['id'].item() == 'study'
-    assert study_df['count'].item() == 3
-    assert study_df['breakdowns'].to_list() == [
-        [{'grouping': 'studyType', 'groups': [{'value': 'gwas', 'count': 2}, {'value': 'eqtl', 'count': 1}]}]
-    ]
-    assert pl.read_parquet(out_dir / 'biosample.parquet')['breakdowns'].to_list() == [[]]
+    df = pl.read_parquet(out_dir / 'dataset_metrics.parquet')
+    assert df.schema == pl.Schema(OUTPUT_SCHEMA)
+    assert df['run'].unique().to_list() == ['26.03-test5']  # derived from release_uri basename
+    assert set(df['dataset'].unique().to_list()) == {'study', 'biosample'}  # 'metrics' skipped
+
+    study_count = df.filter(
+        (pl.col('dataset') == 'study') & (pl.col('kind') == 'scalar') & (pl.col('metric') == 'count')
+    )
+    assert study_count['value'].item() == 3
+    gwas = df.filter(
+        (pl.col('dataset') == 'study') & (pl.col('kind') == 'grouping')
+        & (pl.col('metric') == 'studyType') & (pl.col('group_value') == 'gwas')
+    )
+    assert gwas['value'].item() == 2
 
 
 def test_config_for_dataset_pattern_match() -> None:
