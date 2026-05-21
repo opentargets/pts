@@ -1,11 +1,12 @@
 [project]
 name = "PTS"
-version = "26.06.18"
+version = "26.06.19.dev0"
 description = "Open Targets Pipeline Transformation Stage"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "loguru==0.7.3",
+  "pydantic>=2.0.0",
   "opentargets-otter==26.3.4",
   "pandas>=2.3.2",
   "polars==1.38.1",
@@ -72,7 +73,8 @@ DEP002 = ['openpyxl', 'coverage', 'setuptools', 'gcsfs']
 DEP004 = ['pytest']
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
+testpaths = ["test", "src/pts/metrics"]
+addopts = ["--doctest-modules"]
 markers = ["slow: mark a test as slow (deselect with '-m \"not slow\"')"]
 
 [tool.ruff]

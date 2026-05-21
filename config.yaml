@@ -3,7 +3,9 @@ work_path: ../pipeline_work
 log_level: DEBUG
 pool_size: 4
 
-scratchpad: {}
+scratchpad:
+  release: '26.06'
+  run: '1'
 
 steps:
   #: DISEASE STEP :#################################################################################
@@ -12,6 +14,15 @@ steps:
       source: input/disease/efo_otar_slim.json
       destination: output/disease/disease.parquet
       transformer: disease
+    - name: collect_metrics disease
+      requires:
+        - transform disease_efo
+      source: output/disease
+      destination: metrics/disease.parquet
+      metrics:
+        - type: grouped_count_explode
+          name: count_by_therapeutic_area
+          group_by: [therapeuticAreas]
 
     - name: transform disease_hpo
       source: input/disease/hp-full.json
@@ -230,6 +241,7 @@ steps:
     - name: pyspark target
       pyspark: target
       source:
+
         diseases: output/disease
         ensembl: intermediate/target/ensembl/homo_sapiens.parquet
         gene_code: input/target/gencode/gencode.gff3.gz
@@ -261,6 +273,15 @@ steps:
       destination:
         target: output/target
         gene_essentiality: output/target_essentiality
+    - name: collect_metrics target
+      requires:
+        - pyspark target
+      source: output/target
+      destination: metrics/target.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_biotype
+          group_by: [biotype]
   ##################################################################################################
 
   #: TARGET_SAFETY STEP :############### - part of target, pyspark tasks must run standalone for now
@@ -535,6 +556,18 @@ steps:
       destination:
         output: output/drug_molecule
         excluded: excluded/drug_molecule_failed_report
+    - name: collect_metrics drug_molecule
+      requires:
+        - pyspark drug_molecule
+      source: output/drug_molecule
+      destination: metrics/drug_molecule.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_drug_type
+          group_by: [drugType]
+        - type: grouped_count
+          name: count_by_max_clinical_stage
+          group_by: [maximumClinicalStage]
   ##################################################################################################
 
   #: CLINICAL_REPORT STEP :#######################################################################
@@ -633,6 +666,7 @@ steps:
       properties:
         spark.driver.memory: '12g'
       settings:
+
         novelty_scale: 2 # 2 for long tailed slow decays
         novelty_shift: 3 # 3 for long tailed slow decays
         novelty_window: 10
@@ -729,6 +763,36 @@ steps:
             weight: 1.0
             datatypeId: genetic_association
             toPropagate: true
+    - name: collect_metrics association_by_datasource_direct
+      requires:
+        - pyspark association
+      source: output/association_by_datasource_direct
+      destination: metrics/association_by_datasource_direct.parquet
+    - name: collect_metrics association_by_datasource_indirect
+      requires:
+        - pyspark association
+      source: output/association_by_datasource_indirect
+      destination: metrics/association_by_datasource_indirect.parquet
+    - name: collect_metrics association_by_datatype_direct
+      requires:
+        - pyspark association
+      source: output/association_by_datatype_direct
+      destination: metrics/association_by_datatype_direct.parquet
+      metrics:
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
+    - name: collect_metrics association_by_datatype_indirect
+      requires:
+        - pyspark association
+      source: output/association_by_datatype_indirect
+      destination: metrics/association_by_datatype_indirect.parquet
+      metrics:
+        - type: grouped_sum
+          name: evidence_count_by_datatype
+          column: evidenceCount
+          group_by: [aggregationValue]
   ##################################################################################################
 
   #: EVIDENCE POST PROCESS STEP :###################################################################
@@ -1605,6 +1669,191 @@ steps:
           - primaryProjectId
   ##################################################################################################
 
+  #: EVIDENCE METRICS STEP :########################################################################
+  # Runs after all evidence_postprocess steps; depends on any step named 'pyspark evidence_postprocess'.
+  evidence_metrics:
+    - name: collect_metrics evidence_gwas_credible_sets
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_gwas_credible_sets
+      destination: metrics/evidence_gwas_credible_sets.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_expression_atlas
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_expression_atlas
+      destination: metrics/evidence_expression_atlas.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_eva
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_eva
+      destination: metrics/evidence_eva.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_eva_somatic
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_eva_somatic
+      destination: metrics/evidence_eva_somatic.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_uniprot_variants
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_uniprot_variants
+      destination: metrics/evidence_uniprot_variants.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_uniprot_literature
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_uniprot_literature
+      destination: metrics/evidence_uniprot_literature.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_clingen
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_clingen
+      destination: metrics/evidence_clingen.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_cancer_biomarkers
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_cancer_biomarkers
+      destination: metrics/evidence_cancer_biomarkers.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_clinical_precedence
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_clinical_precedence
+      destination: metrics/evidence_clinical_precedence.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_reactome
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_reactome
+      destination: metrics/evidence_reactome.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_impc
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_impc
+      destination: metrics/evidence_impc.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_orphanet
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_orphanet
+      destination: metrics/evidence_orphanet.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_gene2phenotype
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_gene2phenotype
+      destination: metrics/evidence_gene2phenotype.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_intogen
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_intogen
+      destination: metrics/evidence_intogen.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_gene_burden
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_gene_burden
+      destination: metrics/evidence_gene_burden.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_crispr_screen
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_crispr_screen
+      destination: metrics/evidence_crispr_screen.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_europepmc
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_europepmc
+      destination: metrics/evidence_europepmc.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_genomics_england
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_genomics_england
+      destination: metrics/evidence_genomics_england.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_crispr
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_crispr
+      destination: metrics/evidence_crispr.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+    - name: collect_metrics evidence_cancer_gene_census
+      requires:
+        - pyspark evidence_postprocess
+      source: output/evidence_cancer_gene_census
+      destination: metrics/evidence_cancer_gene_census.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_datasource
+          group_by: [datasourceId]
+  ##################################################################################################
+
   #: Association on the fly STEP :##################################################################
   association_otf:
     - name: pyspark association_otf
@@ -1780,4 +2029,67 @@ steps:
         cooccurrences: intermediate/literature_cooccurrence
       destination:
         evidence: intermediate/evidence/literature_epmc
+  ##################################################################################################
+
+  #: ORPHAN DATASET METRICS :#######################################################################
+  # These datasets are produced by steps outside this config (e.g. genetics pipeline).
+  # collect_metrics steps have no requires: and will run against whatever exists at the path.
+  orphan_metrics:
+    - name: collect_metrics study
+      source: output/study
+      destination: metrics/study.parquet
+      metrics:
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_project
+          group_by: [projectId]
+
+    - name: collect_metrics credible_set
+      source: output/credible_set
+      destination: metrics/credible_set.parquet
+      metrics:
+        - type: distinct_count
+          name: distinct_studies
+          columns: [studyId]
+        - type: grouped_count
+          name: count_by_study_type
+          group_by: [studyType]
+        - type: grouped_count
+          name: count_by_finemapping_method
+          group_by: [finemappingMethod]
+
+    - name: collect_metrics variant
+      source: output/variant
+      destination: metrics/variant.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_most_severe_consequence
+          group_by: [mostSevereConsequenceId]
+
+    - name: collect_metrics colocalisation
+      source: output/colocalisation
+      destination: metrics/colocalisation.parquet
+      metrics:
+        - type: grouped_count
+          name: count_by_right_study_type
+          group_by: [rightStudyType]
+        - type: grouped_count
+          name: count_by_method
+          group_by: [colocalisationMethod]
+    - name: collect_metrics l2g_prediction
+      source: output/l2g_prediction
+      destination: metrics/l2g_prediction.parquet
+      metrics:
+        - type: distinct_count
+          name: distinct_genes
+          columns: [geneId]
+        - type: distinct_count
+          name: significant_gene_count
+          columns: [geneId]
+          filter_expr: "score >= 0.5"
   ##################################################################################################
