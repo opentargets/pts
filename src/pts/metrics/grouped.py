@@ -11,36 +11,6 @@ from pydantic import BaseModel
 from pts.metrics.base import Metric, MetricResult
 
 
-def _resolve_group_by(entries: list[str]) -> tuple[list[str], list[pl.Expr]]:
-    """Parse group_by entries into resolved column names and derived-column expressions.
-
-    Plain column names are kept as-is. Entries containing ``AS`` (case-insensitive)
-    are treated as SQL expressions that produce a derived column before grouping.
-
-    Returns a tuple of ``(resolved_names, expressions_to_materialise)``.
-
-    >>> _resolve_group_by(['studyType'])
-    (['studyType'], [])
-    >>> names, exprs = _resolve_group_by(["upper(studyType) as study_upper"])
-    >>> names
-    ['study_upper']
-    >>> len(exprs)
-    1
-    """
-    names: list[str] = []
-    exprs: list[pl.Expr] = []
-    for entry in entries:
-        low = entry.strip().lower()
-        if ' as ' in low:
-            as_idx = low.rfind(' as ')
-            alias = entry[as_idx + 4:].strip()
-            names.append(alias)
-            exprs.append(pl.sql_expr(entry[:as_idx].strip()).alias(alias))
-        else:
-            names.append(entry.strip())
-    return names, exprs
-
-
 class GroupRow(BaseModel):
     """A single group key and its aggregated value."""
 
@@ -53,14 +23,14 @@ class GroupRow(BaseModel):
 class GroupedCountMetric(Metric):
     """Counts rows per group, sorted descending by count. Null keys form their own group.
 
-    ``group_by`` entries may be plain column names or SQL expressions with an alias,
-    e.g. ``"concat('gwas-', studyType) as study_prefixed"``.
+    ``group_by`` entries are passed directly as SQL expressions, so both plain
+    column names and expressions (e.g. ``"upper(studyType)"``) are accepted.
     """
 
     type: Literal['grouped_count'] = 'grouped_count'
     """Always ``'grouped_count'``; used by the metric loader as the config discriminator."""
     group_by: list[str]
-    """Column names or SQL expressions (with ``AS`` alias) to group by."""
+    """SQL expressions to group by (plain column names or SQL function calls)."""
 
     def compute(self, df: pl.DataFrame) -> GroupedCountResult:
         """Compute grouped row counts.
@@ -77,20 +47,15 @@ class GroupedCountMetric(Metric):
         >>> result3.groups[0].key, result3.groups[0].value
         ({'type': 'gwas', 'pop': 'EUR'}, 2)
         >>> df4 = pl.DataFrame({'studyType': ['gwas', 'eqtl', 'gwas']})
-        >>> r4 = GroupedCountMetric(name='g', group_by=["upper(studyType) as st"]).compute(df4)
+        >>> r4 = GroupedCountMetric(name='g', group_by=["upper(studyType)"]).compute(df4)
         >>> r4.groups[0].key
-        {'st': 'GWAS'}
+        {'studyType': 'GWAS'}
         """
-        names, exprs = _resolve_group_by(self.group_by)
-        if exprs:
-            df = df.with_columns(exprs)
-        agg = (
-            df.group_by(names)
-            .agg(pl.len().alias('count'))
-            .sort('count', descending=True)
-        )
+        exprs = [pl.sql_expr(e) for e in self.group_by]
+        agg = df.group_by(exprs).agg(pl.len().alias('count')).sort('count', descending=True)
+        names = [c for c in agg.columns if c != 'count']
         groups = [
-            GroupRow(key={col: row[col] for col in names}, value=row['count'])
+            GroupRow(key={c: row[c] for c in names}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
         return GroupedCountResult(name=self.name, group_by=names, groups=groups)
@@ -114,14 +79,12 @@ class GroupedCountExplodeMetric(Metric):
     exploded before grouping, so a row contributing to multiple groups (e.g. a
     disease mapped to several therapeutic areas) is counted once per group.
     Null values after exploding form their own group.
-
-    ``group_by`` entries may be plain column names or SQL expressions with an alias.
     """
 
     type: Literal['grouped_count_explode'] = 'grouped_count_explode'
     """Always ``'grouped_count_explode'``; used by the metric loader as the config discriminator."""
     group_by: list[str]
-    """List-typed column names (or SQL expressions producing list columns) to explode and group by."""
+    """SQL expressions (typically plain list-typed column names) to explode and group by."""
 
     def compute(self, df: pl.DataFrame) -> GroupedCountExplodeResult:
         """Explode list columns then compute grouped row counts.
@@ -135,17 +98,13 @@ class GroupedCountExplodeMetric(Metric):
         >>> result2.groups[0].key, result2.groups[0].value
         ({'ta': 'TA1', 'ds': 'D1'}, 2)
         """
-        names, exprs = _resolve_group_by(self.group_by)
-        if exprs:
-            df = df.with_columns(exprs)
+        exprs = [pl.sql_expr(e) for e in self.group_by]
+        names = df.select(exprs).columns
+        df = df.with_columns(exprs)
         exploded = reduce(lambda acc, col: acc.explode(col), names, df)
-        agg = (
-            exploded.group_by(names)
-            .agg(pl.len().alias('count'))
-            .sort('count', descending=True)
-        )
+        agg = exploded.group_by(names).agg(pl.len().alias('count')).sort('count', descending=True)
         groups = [
-            GroupRow(key={col: row[col] for col in names}, value=row['count'])
+            GroupRow(key={c: row[c] for c in names}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
         return GroupedCountExplodeResult(name=self.name, group_by=names, groups=groups)
@@ -163,17 +122,14 @@ class GroupedCountExplodeResult(MetricResult):
 
 
 class GroupedSumMetric(Metric):
-    """Sums a numeric column per group, sorted descending by sum. Null keys form their own group.
-
-    ``group_by`` entries may be plain column names or SQL expressions with an alias.
-    """
+    """Sums a numeric column per group, sorted descending by sum. Null keys form their own group."""
 
     type: Literal['grouped_sum'] = 'grouped_sum'
     """Always ``'grouped_sum'``; used by the metric loader as the config discriminator."""
     column: str
     """Numeric column whose values are summed within each group."""
     group_by: list[str]
-    """Column names or SQL expressions (with ``AS`` alias) to group by."""
+    """SQL expressions to group by (plain column names or SQL function calls)."""
 
     def compute(self, df: pl.DataFrame) -> GroupedSumResult:
         """Compute grouped sums.
@@ -183,16 +139,11 @@ class GroupedSumMetric(Metric):
         >>> result.groups[0].value
         300
         """
-        names, exprs = _resolve_group_by(self.group_by)
-        if exprs:
-            df = df.with_columns(exprs)
-        agg = (
-            df.group_by(names)
-            .agg(pl.sum(self.column).alias('count'))
-            .sort('count', descending=True)
-        )
+        exprs = [pl.sql_expr(e) for e in self.group_by]
+        agg = df.group_by(exprs).agg(pl.sum(self.column).alias('count')).sort('count', descending=True)
+        names = [c for c in agg.columns if c != 'count']
         groups = [
-            GroupRow(key={col: row[col] for col in names}, value=row['count'])
+            GroupRow(key={c: row[c] for c in names}, value=row['count'])
             for row in agg.iter_rows(named=True)
         ]
         return GroupedSumResult(name=self.name, column=self.column, group_by=names, groups=groups)
