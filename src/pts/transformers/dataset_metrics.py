@@ -102,7 +102,7 @@ def compute_filter_count(frame: pl.DataFrame | pl.LazyFrame, filter_expr: str, d
     Args:
         frame (pl.DataFrame | pl.LazyFrame): dataset to filter.
         filter_expr (str): SQL boolean expression.
-        distinct (str | None): when given, count distinct values of this column.
+        distinct (str | None): when given, count distinct non-null values of this column.
 
     Returns:
         int: matching row count, or distinct count of ``distinct``.
@@ -117,7 +117,7 @@ def compute_filter_count(frame: pl.DataFrame | pl.LazyFrame, filter_expr: str, d
     """
     filtered = _as_lazy(frame).filter(pl.sql_expr(filter_expr))
     if distinct is not None:
-        return int(filtered.select(pl.col(distinct).n_unique()).collect().item())
+        return int(filtered.select(pl.col(distinct).drop_nulls().n_unique()).collect().item())
     return int(filtered.select(pl.len()).collect().item())
 
 
@@ -138,6 +138,9 @@ def _dataset_file_stats(dataset_path: str) -> tuple[int, int]:
     Returns:
         tuple[int, int]: total bytes and number of parquet files.
     """
+    # Otter's storage backend and fsspec/gcsfs both authenticate via ambient
+    # ADC, so this bare fsspec listing uses the same credentials as discovery;
+    # it deliberately fetches counts and sizes in a single listing call.
     fs, root = fsspec.core.url_to_fs(dataset_path)
     parts = [
         entry
@@ -240,8 +243,9 @@ def profile_dataset(
 def _config_for_dataset(name: str, datasets_config: dict[str, Any]) -> dict[str, Any]:
     """Return the config overlay for a dataset, supporting fnmatch pattern keys.
 
-    Exact-name keys take precedence; otherwise the first matching glob pattern
-    key (sorted for determinism) applies. Returns ``{}`` when nothing matches.
+    Exact-name keys take precedence; otherwise the most specific matching glob
+    pattern wins (longest pattern first, then alphabetical for determinism).
+    Returns ``{}`` when nothing matches.
 
     Args:
         name (str): dataset basename.
@@ -252,7 +256,7 @@ def _config_for_dataset(name: str, datasets_config: dict[str, Any]) -> dict[str,
     """
     if name in datasets_config:
         return datasets_config[name]
-    for pattern in sorted(datasets_config):
+    for pattern in sorted(datasets_config, key=lambda p: (-len(p), p)):
         if fnmatch(name, pattern):
             return datasets_config[pattern]
     return {}

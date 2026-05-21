@@ -74,10 +74,24 @@ def test_dataset_file_stats(tmp_path: Path) -> None:
 
 def test_output_schema_roundtrips(tmp_path: Path) -> None:
     rows = [
-        {'run': 'r1', 'dataset': 'study', 'kind': 'scalar', 'metric': 'count',
-         'expression': None, 'group_value': None, 'value': 3},
-        {'run': 'r1', 'dataset': 'study', 'kind': 'grouping', 'metric': 'studyType',
-         'expression': 'studyType', 'group_value': 'gwas', 'value': 2},
+        {
+            'run': 'r1',
+            'dataset': 'study',
+            'kind': 'scalar',
+            'metric': 'count',
+            'expression': None,
+            'group_value': None,
+            'value': 3,
+        },
+        {
+            'run': 'r1',
+            'dataset': 'study',
+            'kind': 'grouping',
+            'metric': 'studyType',
+            'expression': 'studyType',
+            'group_value': 'gwas',
+            'value': 2,
+        },
     ]
     out = tmp_path / 'dataset_metrics.parquet'
     pl.DataFrame(rows, schema=OUTPUT_SCHEMA).write_parquet(out)
@@ -124,7 +138,9 @@ def test_profile_dataset_base_stats_only(tmp_path: Path) -> None:
     path = _write_dataset(tmp_path / 'biosample', pl.DataFrame({'id': ['b1', 'b2']}))
     rows = profile_dataset(path, 'biosample', {}, run='r1')
     assert sorted((r['kind'], r['metric']) for r in rows) == [
-        ('scalar', 'count'), ('scalar', 'file_size'), ('scalar', 'number_of_partitions')
+        ('scalar', 'count'),
+        ('scalar', 'file_size'),
+        ('scalar', 'number_of_partitions'),
     ]
     assert _row(rows, 'scalar', 'count')['value'] == 2
 
@@ -187,8 +203,10 @@ def test_dataset_metrics_writes_combined_table(tmp_path: Path, monkeypatch: pyte
     )
     assert study_count['value'].item() == 3
     gwas = df.filter(
-        (pl.col('dataset') == 'study') & (pl.col('kind') == 'grouping')
-        & (pl.col('metric') == 'studyType') & (pl.col('group_value') == 'gwas')
+        (pl.col('dataset') == 'study')
+        & (pl.col('kind') == 'grouping')
+        & (pl.col('metric') == 'studyType')
+        & (pl.col('group_value') == 'gwas')
     )
     assert gwas['value'].item() == 2
 
@@ -201,3 +219,19 @@ def test_config_for_dataset_pattern_match() -> None:
     assert _config_for_dataset('study', cfg) == {'groupings': {'a': 'a'}}
     assert _config_for_dataset('evidence_eva', cfg) == {'groupings': {'datatype': 'datatypeId'}}
     assert _config_for_dataset('biosample', cfg) == {}
+
+
+def test_config_for_dataset_specificity_precedence() -> None:
+    cfg = {
+        '*': {'groupings': {'all': 'all'}},
+        'evidence_*': {'groupings': {'datatype': 'datatypeId'}},
+    }
+    # the more specific (longer) pattern wins over the catch-all
+    assert _config_for_dataset('evidence_eva', cfg) == {'groupings': {'datatype': 'datatypeId'}}
+    assert _config_for_dataset('study', cfg) == {'groupings': {'all': 'all'}}
+
+
+def test_compute_filter_count_distinct_excludes_null() -> None:
+    df = pl.DataFrame({'score': [0.9, 0.7, 0.8], 'geneId': ['g1', None, 'g1']})
+    # all three rows pass score > 0.5; geneId is {g1, null} -> a null is not a gene
+    assert compute_filter_count(df, 'score > 0.5', distinct='geneId') == 1
