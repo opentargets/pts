@@ -84,7 +84,9 @@ class CollectMetrics(Task):
 
         def _compute(metric: Metric) -> dict:
             try:
-                df = _read(dataset_path, metric.required_columns)
+                # when filter_expr is set we must load all columns so the expression can reference any of them
+                columns = None if metric.filter_expr else metric.required_columns
+                df = _read(dataset_path, columns)
                 result = metric.run(df)
                 return result.to_unified_record(
                     release=self._release,
@@ -92,6 +94,7 @@ class CollectMetrics(Task):
                     dataset=dataset_name,
                     source=dataset_path,
                     destination=out_file,
+                    filter_expr=metric.filter_expr,
                 ).model_dump()
             except Exception:
                 logger.error('metric {} failed on dataset {}', metric.name, dataset_name)

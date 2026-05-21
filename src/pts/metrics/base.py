@@ -50,7 +50,7 @@ class Metric(BaseModel, ABC):
 
     Subclasses declare their configuration parameters as Pydantic fields and
     implement :meth:`compute`. Callers invoke :meth:`run`, which wraps
-    :meth:`compute` with debug logging.
+    :meth:`compute` with debug logging and optional pre-filtering.
 
     Each subclass must carry a ``type: Literal['<kind>'] = '<kind>'``
     discriminator field so that :meth:`~pts.metrics.loader.MetricType.load`
@@ -59,6 +59,12 @@ class Metric(BaseModel, ABC):
 
     name: str
     """Unique metric name used to identify the result row in Parquet output."""
+    filter_expr: str | None = None
+    """Optional SQL WHERE-clause expression applied to the dataset before :meth:`compute` is called.
+
+    When set, all dataset columns are loaded regardless of :attr:`required_columns`
+    so the expression can reference any column.
+    """
 
     @property
     def required_columns(self) -> list[str] | None:
@@ -68,11 +74,16 @@ class Metric(BaseModel, ABC):
     def run(self, df: pl.DataFrame) -> MetricResult:
         """Invoke :meth:`compute` with debug logging.
 
+        Applies :attr:`filter_expr` (if set) before calling :meth:`compute`.
         Raises :class:`EmptyDatasetError` if ``df`` has no rows.
         """
         if df.is_empty():
             raise EmptyDatasetError(f"metric '{self.name}': input DataFrame is empty")
-        logger.debug('metric {} | {} rows', self.name, df.height)
+        if self.filter_expr is not None:
+            df = df.filter(pl.sql_expr(self.filter_expr))
+            logger.debug('metric {} | {} rows after filter', self.name, df.height)
+        else:
+            logger.debug('metric {} | {} rows', self.name, df.height)
         result = self.compute(df)
         logger.debug('metric {} | done ({})', self.name, result.metric_type)
         return result
@@ -108,6 +119,7 @@ class MetricResult(BaseModel, ABC):
         dataset: str,
         source: str,
         destination: str,
+        filter_expr: str | None = None,
     ) -> UnifiedMetricRecord:
         """Produce a :class:`UnifiedMetricRecord` from this result and envelope data.
 
@@ -123,6 +135,7 @@ class MetricResult(BaseModel, ABC):
             dataset=dataset,
             source=source,
             destination=destination,
+            filter_expr=filter_expr,
             result=json.dumps(payload),
         )
 
@@ -144,5 +157,7 @@ class UnifiedMetricRecord(BaseModel):
     """Absolute path to the input parquet directory."""
     destination: str
     """Absolute path to the output Parquet file."""
+    filter_expr: str | None = None
+    """SQL WHERE-clause expression used to pre-filter the dataset, or ``None`` if no filter was applied."""
     result: str
     """JSON-serialised metric-specific payload (value, groups, etc.), excluding envelope fields."""

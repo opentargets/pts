@@ -19,7 +19,6 @@ from typing import Any
 
 from pts.metrics.base import Metric
 from pts.metrics.count import CountMetric, DistinctCountMetric
-from pts.metrics.custom.l2g import L2GSignificantGeneMetric
 from pts.metrics.grouped import GroupedCountExplodeMetric, GroupedCountMetric, GroupedSumMetric
 
 
@@ -35,7 +34,6 @@ class MetricType(Enum):
     grouped_count = GroupedCountMetric
     grouped_count_explode = GroupedCountExplodeMetric
     grouped_sum = GroupedSumMetric
-    l2g_significant_gene = L2GSignificantGeneMetric
 
     @classmethod
     def load(cls, cfg: dict[str, Any]) -> Metric:

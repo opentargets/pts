@@ -2088,7 +2088,8 @@ steps:
         - type: distinct_count
           name: distinct_genes
           columns: [geneId]
-        - type: l2g_significant_gene
+        - type: distinct_count
           name: significant_gene_count
-          threshold: 0.5
+          columns: [geneId]
+          filter_expr: "score >= 0.5"
   ##################################################################################################
