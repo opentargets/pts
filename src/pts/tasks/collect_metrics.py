@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Self, cast
 
+import polars as pl
 from loguru import logger
 from otter.storage.util import make_absolute
 from otter.task.model import Spec, Task, TaskContext
@@ -13,7 +15,18 @@ from pydantic import field_serializer, field_validator
 
 from pts.metrics.base import Metric
 from pts.metrics.loader import MetricType
-from pts.metrics.runner import MetricRunner
+
+
+def _read(dataset_path: Path, columns: list[str] | None) -> pl.DataFrame:
+    """Load parquet files with optional column projection to minimise memory use."""
+    lf = pl.scan_parquet(dataset_path / '**' / '*.parquet')
+    if columns is None:
+        return cast(pl.DataFrame, lf.collect())
+    if columns:
+        return cast(pl.DataFrame, lf.select(columns).collect())
+    # empty list → just need row count; read the first column only
+    first = lf.collect_schema().names()[0]
+    return cast(pl.DataFrame, lf.select(first).collect())
 
 
 class CollectMetricsSpec(Spec):
@@ -39,7 +52,7 @@ class CollectMetricsSpec(Spec):
 
 
 class CollectMetrics(Task):
-    """Reads ``release`` and ``run`` from the scratchpad and runs all configured metrics.
+    """Reads ``release`` and ``run`` from the scratchpad and runs all configured metrics concurrently.
 
     Raises ``ValueError`` at construction time if either scratchpad key is absent,
     so misconfiguration is caught before the pipeline starts.
@@ -63,13 +76,24 @@ class CollectMetrics(Task):
         out_file = Path(cast(str, make_absolute(self.spec.destination, self.context.config)))
 
         logger.info(f'collecting {len(self.spec.metrics)} metrics for {out_file.stem}')
-        MetricRunner().run(
-            metrics=self.spec.metrics,
-            dataset_path=dataset_path,
-            out_file=out_file,
-            release=self._release,
-            run=self._run,
-            source=str(dataset_path),
-            destination=str(out_file),
-        )
+
+        def _compute(metric: Metric) -> dict:
+            try:
+                df = _read(dataset_path, metric.required_columns)
+                result = metric.run(df)
+                return result.to_unified_record(
+                    release=self._release,
+                    run=self._run,
+                    dataset=dataset_path.name,
+                    source=str(dataset_path),
+                    destination=str(out_file),
+                ).model_dump()
+            except Exception:
+                logger.error('metric {} failed on dataset {}', metric.name, dataset_path.name)
+                raise
+
+        with ThreadPoolExecutor() as executor:
+            records = list(executor.map(_compute, self.spec.metrics))
+
+        pl.DataFrame(records).write_parquet(str(out_file), mkdir=True)
         return self

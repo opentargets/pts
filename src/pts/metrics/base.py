@@ -49,8 +49,8 @@ class Metric(BaseModel, ABC):
     """Abstract base for all metric definitions.
 
     Subclasses declare their configuration parameters as Pydantic fields and
-    implement :meth:`compute`. Callers (i.e. :class:`MetricRunner`) invoke
-    :meth:`run`, which wraps :meth:`compute` with debug logging.
+    implement :meth:`compute`. Callers invoke :meth:`run`, which wraps
+    :meth:`compute` with debug logging.
 
     Each subclass must carry a ``type: Literal['<kind>'] = '<kind>'``
     discriminator field so that :meth:`~pts.metrics.loader.MetricType.load`
@@ -66,7 +66,7 @@ class Metric(BaseModel, ABC):
         return None
 
     def run(self, df: pl.DataFrame) -> MetricResult:
-        """Invoke :meth:`compute` with debug logging; entry point for :class:`MetricRunner`.
+        """Invoke :meth:`compute` with debug logging.
 
         Raises :class:`EmptyDatasetError` if ``df`` has no rows.
         """
@@ -87,8 +87,8 @@ class MetricResult(BaseModel, ABC):
 
     Subclasses add metric-specific fields (e.g. ``value``, ``groups``).
     Envelope fields (``release``, ``run``, ``dataset``, ``source``,
-    ``destination``) are not stored here; they are injected by
-    :class:`MetricRunner` via :meth:`to_unified_record`.
+    ``destination``) are not stored here; they are injected via
+    :meth:`to_unified_record`.
 
     Each subclass must carry a ``metric_type: Literal['<kind>'] = '<kind>'``
     discriminator field that matches the ``type`` value of its companion
@@ -128,7 +128,7 @@ class MetricResult(BaseModel, ABC):
 
 
 class UnifiedMetricRecord(BaseModel):
-    """Flat record produced by MetricRunner for each metric computation; written as a Parquet row."""
+    """Flat record produced for each metric computation; written as a Parquet row."""
 
     name: str
     """Metric name as declared in config."""

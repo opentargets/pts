@@ -122,6 +122,15 @@ def test_collect_metrics_destination_is_exact_output_file(tmp_path):
     assert not (tmp_path / 'my' / 'exact' / 'path' / 'total_count.parquet').exists()
 
 
+def test_bad_column_raises(tmp_path):
+    from pts.tasks.collect_metrics import _read
+    data_dir = tmp_path / 'data'
+    data_dir.mkdir()
+    pl.DataFrame({'x': [1]}).write_parquet(data_dir / 'part.parquet')
+    with pytest.raises(Exception, match='nonexistent'):
+        _read(data_dir, ['nonexistent'])
+
+
 def test_collect_metrics_resolves_relative_paths(tmp_path):
     """source and destination resolve relative to config.work_path."""
     data_dir = tmp_path / 'output' / 'my_dataset'
