@@ -20,7 +20,7 @@ _MATCH_SCHEMA = t.StructType([
     t.StructField('pubDate', t.StringType()),
     t.StructField('text', t.StringType()),
     t.StructField('traceSource', t.StringType()),
-    t.StructField('label', t.StringType()),
+    t.StructField('entityLabelNormalised', t.StringType()),
 ])
 
 
@@ -89,7 +89,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='test',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
             Row(
                 pmid='1',
@@ -106,7 +106,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='test2',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
         ]
         df = spark.createDataFrame(data, schema=_MATCH_SCHEMA)
@@ -135,7 +135,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='t1',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
             Row(
                 pmid='1',
@@ -152,7 +152,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='t2',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
         ]
         df = spark.createDataFrame(data, schema=_MATCH_SCHEMA)
@@ -182,7 +182,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='t',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
         ]
         df = spark.createDataFrame(data, schema=_MATCH_SCHEMA)
@@ -210,7 +210,7 @@ class TestLiteratureEntityLutTransform:
                 pubDate=None,
                 text='t',
                 traceSource=None,
-                label=None,
+                entityLabelNormalised=None,
             ),
         ]
         df = spark.createDataFrame(data, schema=_MATCH_SCHEMA)
