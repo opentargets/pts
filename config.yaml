@@ -1770,6 +1770,8 @@ steps:
         matches: intermediate/literature/match
       destination:
         literature_entity_lut: output/literature_entity_lut
+      properties:
+        spark.sql.shuffle.partitions: '10000'
     - name: pyspark literature_embedding
       pyspark: literature_embedding
       source:
@@ -1777,7 +1779,7 @@ steps:
       destination:
         model: etc/model/w2v_model
       properties:
-        spark.sql.shuffle.partitions: '800'
+        spark.sql.shuffle.partitions: '15000'
     - name: pyspark literature_vector
       pyspark: literature_vector
       source:
@@ -1803,6 +1805,21 @@ steps:
       destination:
         match_valid: intermediate/literature/match
         match_failed: excluded/literature/match
+      settings:
+        date_prefix: ''
+        repartition: 25000
+        match_valid_coalesce: 600
+        match_failed_coalesce: 530
+      properties:
+        spark.sql.shuffle.partitions: '15000'
+        spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
+        spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
+        spark.sql.adaptive.advisoryPartitionSizeInBytes: '268435456'
+        spark.sql.adaptive.coalescePartitions.parallelismFirst: 'false'
+        spark.sql.files.maxPartitionBytes: '33554432'
+        spark.dynamicAllocation.executorIdleTimeout: '7200s'
+        spark.dynamicAllocation.shuffleTracking.enabled: 'true'
+        spark.dynamicAllocation.shuffleTracking.timeout: '7200s'
   ##################################################################################################
 
   #: LITERATURE_COOCCURRENCE_EVIDENCE STEP (collapsed cooccurrence + evidence) :####################
@@ -1814,4 +1831,11 @@ steps:
       destination:
         cooccurrence: intermediate/literature/cooccurrence
         evidence: intermediate/evidence/literature_epmc
+      settings:
+        cooccurrence_coalesce: 40
+        evidence_coalesce: 32
+      properties:
+        spark.sql.shuffle.partitions: '15000'
+        spark.sql.adaptive.skewJoin.skewedPartitionFactor: '2'
+        spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes: '64MB'
   ##################################################################################################
