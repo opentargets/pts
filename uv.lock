@@ -1657,13 +1657,17 @@ wheels = [
 
 [[package]]
 name = "ontoma"
-version = "2.4.0"
-source = { git = "https://github.com/opentargets/OnToma?branch=perf%2Favoid-distinct-collect-in-mapping-compatibility#4199b1c67bcbd5427b9d9bb59f306907b8990655" }
+version = "2.4.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru" },
     { name = "numpy" },
     { name = "pyspark" },
     { name = "spark-nlp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/f5/67377d94d1f31fbb88dffc4eabac67bb645175755b7ca1aa607cf1c84982/ontoma-2.4.1.tar.gz", hash = "sha256:0b1a843d5514c0dff96cf7afe55d88b8e6350804699684200d22d1ad57b3f96c", size = 27330, upload-time = "2026-05-22T13:43:10.86Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a9/98/c7cd1cbab085a08951142f3605fca32c53fca1b4712d361cde6fff97575d/ontoma-2.4.1-py3-none-any.whl", hash = "sha256:68b2b48c94eb0ef753f50e2107b6c45ba7f0f917c93368b71e98e46847a71637", size = 39084, upload-time = "2026-05-22T13:43:12.241Z" },
 ]
 
 [[package]]
@@ -2169,7 +2173,7 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.6.1" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "obonet", specifier = ">=0.3.1" },
-    { name = "ontoma", git = "https://github.com/opentargets/OnToma?branch=perf%2Favoid-distinct-collect-in-mapping-compatibility" },
+    { name = "ontoma", specifier = ">=2.4.1" },
     { name = "openai", specifier = ">=2.7.2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "opentargets-otter", specifier = "==26.3.4" },

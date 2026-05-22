@@ -18,7 +18,7 @@ dependencies = [
   "obonet>=0.3.1",
   "polars-hash>=0.5.6",
   "torch>=2.10.0",
-  "ontoma==2.4.0",
+  "ontoma>=2.4.1",
   "transformers>=4.40.0,<5.0.0",
   "gcsfs>=2026.2.0",
   "pdfplumber>=0.11.9",
@@ -40,9 +40,6 @@ clinical-mining = { git = "https://github.com/opentargets/clinical_mining" }
 # Temporary override: opentargets/ot-literature perf/salt-disambig-join (PR TBD).
 # Revert to dev once the PR is merged.
 ot-literature = { git = "https://github.com/opentargets/ot-literature", branch = "perf/salt-disambig-join" }
-# Temporary override: opentargets/OnToma PR #51 (perf fix for _check_mapping_compatibility).
-# Revert to PyPI once the PR is merged and released.
-ontoma = { git = "https://github.com/opentargets/OnToma", branch = "perf/avoid-distinct-collect-in-mapping-compatibility" }
 
 [dependency-groups]
 dev = ["ruff==0.15.2", "ty==0.0.17", "deptry==0.24.0", "pre-commit>=4.3.0"]
