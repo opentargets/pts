@@ -1786,12 +1786,6 @@ steps:
         model: etc/model/w2v_model
       destination:
         vectors: output/literature_vector
-    - name: pyspark evidence_epmc
-      pyspark: evidence_epmc
-      source:
-        cooccurrences: intermediate/literature/cooccurrence
-      destination:
-        evidence: intermediate/evidence/literature_epmc
   ##################################################################################################
 
   #: LITERATURE_PUBLICATION_MATCH STEP (collapsed publication + match) :###########################
