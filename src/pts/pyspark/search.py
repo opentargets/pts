@@ -332,6 +332,12 @@ def _build_target_index(
     # Variant labels per target
     variant_labels_df = (
         variants
+        # gnomad dbXrefs ids (e.g. 1-14677-G-A) are the dash-delimited variantId,
+        # 100% redundant with variantId once OpenSearch normalises delimiters.
+        .withColumn(
+            'dbXrefs',
+            f.filter(f.col('dbXrefs'), lambda x: ~x.getField('source').eqNullSafe('gnomad')),
+        )
         .withColumn('transcriptConsequences', f.explode(f.col('transcriptConsequences')))
         .withColumn(
             'consequenceScore',
@@ -346,10 +352,12 @@ def _build_target_index(
             (f.col('transcriptConsequences.consequenceScore') + f.lit(1))
             * f.col('transcriptConsequences.distanceFromFootprint'),
         )
+        .withColumn('chrVariantId', f.concat(f.lit('chr'), f.col('variantId')))
         .withColumn(
             'variant_labels',
             _flatten_cat(
                 'array(variantId)',
+                'array(chrVariantId)',
                 'array(hgvsId)',
                 'dbXrefs.id',
                 'rsIds',
@@ -543,11 +551,13 @@ def _build_drug_index(
         entity_col=f.lit('drug'),
         category_col=f.array(f.col('drugType')),
         keywords_col=_flatten_cat(
-            'synonyms', 'tradeNames', 'array(name)', 'array(drugId)', 'childChemblIds', 'crossReferences', 'nctIds'
+            'synonyms', 'tradeNames', 'array(name)', 'array(drugId)', 'crossReferences', 'nctIds'
         ),
         prefixes_col=_flatten_cat('synonyms', 'tradeNames', 'array(name)', 'descriptions'),
         ngrams_col=_flatten_cat('array(name)', 'synonyms', 'tradeNames', 'descriptions'),
-        terms_col=_flatten_cat('disease_labels', 'target_labels', 'indicationLabels', 'therapeutic_labels'),
+        terms_col=_flatten_cat(
+            'disease_labels', 'target_labels', 'indicationLabels', 'therapeutic_labels', 'childChemblIds'
+        ),
         multiplier_col=f.when(
             f.col('drug_relevance').isNotNull(),
             f.log1p(f.col('drug_relevance')) + f.lit(1.0),
@@ -569,9 +579,18 @@ def _build_variant_index(variants: DataFrame) -> DataFrame:
     """
     variant_df = (
         variants
-        .withColumn('locationUnderscore', f.concat(f.col('chromosome'), f.lit('_'), f.col('position'), f.lit('_')))
-        .withColumn('locationDash', f.concat(f.col('chromosome'), f.lit('-'), f.col('position'), f.lit('-')))
-        .withColumn('locationColon', f.concat(f.col('chromosome'), f.lit(':'), f.col('position'), f.lit(':')))
+        # gnomad dbXrefs ids (e.g. 1-14677-G-A) are the dash-delimited variantId,
+        # 100% redundant with variantId once OpenSearch normalises delimiters.
+        .withColumn(
+            'dbXrefs',
+            f.filter(f.col('dbXrefs'), lambda x: ~x.getField('source').eqNullSafe('gnomad')),
+        )
+        .withColumn('chrVariantId', f.concat(f.lit('chr'), f.col('variantId')))
+        .withColumn(
+            'locationUnderscore',
+            f.concat(f.col('chromosome'), f.lit('_'), f.col('position'), f.lit('_')),
+        )
+        .withColumn('chrLocationUnderscore', f.concat(f.lit('chr'), f.col('locationUnderscore')))
     )
     return _search_index(
         variant_df,
@@ -585,15 +604,17 @@ def _build_variant_index(variants: DataFrame) -> DataFrame:
             'dbXrefs.id',
             'rsIds',
             'array(locationUnderscore)',
-            'array(locationDash)',
-            'array(locationColon)',
+            'array(chrVariantId)',
+            'array(chrLocationUnderscore)',
         ),
         prefixes_col=_flatten_cat(
             'array(variantId)',
             'array(hgvsId)',
             'dbXrefs.id',
             'rsIds',
-            'array(locationColon)',
+            'array(locationUnderscore)',
+            'array(chrVariantId)',
+            'array(chrLocationUnderscore)',
         ),
         ngrams_col=_flatten_cat('array(variantId)', 'dbXrefs.id'),
         multiplier_col=f.lit(1.0),

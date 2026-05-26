@@ -151,7 +151,10 @@ _VARIANT_SCHEMA = StructType([
     StructField('position', StringType()),
     StructField('rsIds', ArrayType(StringType())),
     StructField('hgvsId', StringType()),
-    StructField('dbXrefs', ArrayType(StructType([StructField('id', StringType())]))),
+    StructField(
+        'dbXrefs',
+        ArrayType(StructType([StructField('id', StringType()), StructField('source', StringType())])),
+    ),
     StructField(
         'transcriptConsequences',
         ArrayType(
@@ -221,6 +224,109 @@ def test_build_target_index_entity_is_target(spark):
     assert row.entity == 'target'
 
 
+def test_build_target_index_terms_include_chr_prefixed_variant(spark):
+    """_build_target_index includes both bare and chr-prefixed variant IDs in target terms."""
+    targets = spark.createDataFrame(
+        [
+            Row(
+                targetId='ENSG001',
+                approvedSymbol='BRCA1',
+                approvedName='Breast cancer 1',
+                biotype='protein_coding',
+                synonyms=[],
+                proteinIds=[],
+                dbXRefs=[],
+            )
+        ],
+        _TARGET_SCHEMA,
+    )
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[],
+                transcriptConsequences=[
+                    Row(targetId='ENSG001', consequenceScore=1.0, distanceFromFootprint=1.0)
+                ],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    assocs = spark.createDataFrame(
+        [Row(associationId='EFO_001-ENSG001', targetId='ENSG001', diseaseId='EFO_001', score=0.5)],
+        _ASSOC_SCHEMA,
+    )
+    d_lut = spark.createDataFrame(
+        [Row(diseaseId='EFO_001', disease_labels=[], disease_name='Cancer', therapeutic_labels=[])],
+        _DISEASE_LUT_SCHEMA,
+    )
+    dr_lut = spark.createDataFrame([], _DRUG_LUT_SCHEMA)
+
+    result = _build_target_index(targets, assocs, d_lut, dr_lut, variants)
+    row = result.collect()[0]
+    assert 'chr1_100_A_G' in row.terms
+    assert '1_100_A_G' in row.terms
+    assert 'chr1_100_A_G' in row.terms25
+    assert 'chr1_100_A_G' in row.terms5
+
+
+def test_build_target_index_drops_gnomad_dbxrefs_from_variant_labels(spark):
+    """_build_target_index drops gnomad dbXrefs from variant labels but keeps other sources."""
+    targets = spark.createDataFrame(
+        [
+            Row(
+                targetId='ENSG001',
+                approvedSymbol='BRCA1',
+                approvedName='Breast cancer 1',
+                biotype='protein_coding',
+                synonyms=[],
+                proteinIds=[],
+                dbXRefs=[],
+            )
+        ],
+        _TARGET_SCHEMA,
+    )
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[
+                    Row(id='1-100-A-G', source='gnomad'),
+                    Row(id='RCV000123', source='clinvar'),
+                ],
+                transcriptConsequences=[
+                    Row(targetId='ENSG001', consequenceScore=1.0, distanceFromFootprint=1.0)
+                ],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    assocs = spark.createDataFrame(
+        [Row(associationId='EFO_001-ENSG001', targetId='ENSG001', diseaseId='EFO_001', score=0.5)],
+        _ASSOC_SCHEMA,
+    )
+    d_lut = spark.createDataFrame(
+        [Row(diseaseId='EFO_001', disease_labels=[], disease_name='Cancer', therapeutic_labels=[])],
+        _DISEASE_LUT_SCHEMA,
+    )
+    dr_lut = spark.createDataFrame([], _DRUG_LUT_SCHEMA)
+
+    result = _build_target_index(targets, assocs, d_lut, dr_lut, variants)
+    row = result.collect()[0]
+    assert '1-100-A-G' not in row.terms
+    assert '1-100-A-G' not in row.terms25
+    assert '1-100-A-G' not in row.terms5
+    assert 'RCV000123' in row.terms
+
+
 # ---------------------------------------------------------------------------
 # 4. _build_variant_index
 # ---------------------------------------------------------------------------
@@ -236,7 +342,7 @@ def test_build_variant_index_output_schema(spark):
                 position='100',
                 rsIds=['rs123'],
                 hgvsId='1:100:A:G',
-                dbXrefs=[Row(id='rs123')],
+                dbXrefs=[Row(id='rs123', source='ensembl_variation')],
                 transcriptConsequences=[],
             )
         ],
@@ -268,6 +374,106 @@ def test_build_variant_index_entity_is_variant(spark):
     result = _build_variant_index(variants)
     row = result.collect()[0]
     assert row.entity == 'variant'
+
+
+def test_build_variant_index_keywords_include_chr_prefixed_forms(spark):
+    """_build_variant_index adds chr-prefixed variant ID and location to keywords."""
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[],
+                transcriptConsequences=[],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    row = _build_variant_index(variants).collect()[0]
+    assert '1_100_A_G' in row.keywords
+    assert 'chr1_100_A_G' in row.keywords
+    assert 'chr1_100_' in row.keywords
+    assert '1_100_' in row.keywords
+
+
+def test_build_variant_index_prefixes_include_chr_prefixed_forms(spark):
+    """_build_variant_index adds chr-prefixed variant ID and location to prefixes."""
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[],
+                transcriptConsequences=[],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    row = _build_variant_index(variants).collect()[0]
+    assert '1_100_A_G' in row.prefixes
+    assert 'chr1_100_A_G' in row.prefixes
+    assert 'chr1_100_' in row.prefixes
+    assert '1_100_' in row.prefixes
+
+
+def test_build_variant_index_drops_dash_and_colon_location_forms(spark):
+    """_build_variant_index no longer emits dash/colon variant location forms."""
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[],
+                transcriptConsequences=[],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    row = _build_variant_index(variants).collect()[0]
+    assert '1-100-' not in row.keywords
+    assert '1:100:' not in row.keywords
+    assert '1-100-' not in row.prefixes
+    assert '1:100:' not in row.prefixes
+
+
+def test_build_variant_index_drops_gnomad_dbxrefs(spark):
+    """_build_variant_index drops gnomad dbXrefs but keeps other sources."""
+    variants = spark.createDataFrame(
+        [
+            Row(
+                variantId='1_100_A_G',
+                chromosome='1',
+                position='100',
+                rsIds=[],
+                hgvsId=None,
+                dbXrefs=[
+                    Row(id='1-100-A-G', source='gnomad'),
+                    Row(id='RCV000123', source='clinvar'),
+                    Row(id='UNKNOWN999', source=None),
+                ],
+                transcriptConsequences=[],
+            )
+        ],
+        _VARIANT_SCHEMA,
+    )
+    row = _build_variant_index(variants).collect()[0]
+    assert '1-100-A-G' not in row.keywords
+    assert '1-100-A-G' not in row.prefixes
+    assert '1-100-A-G' not in row.ngrams
+    assert 'RCV000123' in row.keywords
+    assert 'RCV000123' in row.prefixes
+    assert 'RCV000123' in row.ngrams
+    # null-source entries are kept (only gnomad is dropped)
+    assert 'UNKNOWN999' in row.keywords
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +734,38 @@ def test_build_drug_index_nct_ids_appear_in_keywords(spark):
     keywords = result.collect()[0].keywords
     assert 'nct00001234' in keywords
     assert 'nct00005678' in keywords
+
+
+def test_build_drug_index_child_chembl_ids_appear_in_terms_not_keywords(spark):
+    """childChemblIds belong in terms (low-priority) not keywords (top-hit ranked)."""
+    drugs = spark.createDataFrame(
+        [
+            Row(
+                drugId='CHEMBL2010601',
+                name='Ivacaftor',
+                description=None,
+                drugType='Small molecule',
+                synonyms=[],
+                tradeNames=[],
+                childChemblIds=['CHEMBL4297603'],
+                crossReferences=[],
+                rows=[],
+                indications=[],
+            )
+        ],
+        _DRUG_SCHEMA,
+    )
+
+    result = _build_drug_index(
+        drugs,
+        spark.createDataFrame([], _ASSOC_DRUG_SCHEMA),
+        spark.createDataFrame([], _TARGET_LUT_SCHEMA),
+        spark.createDataFrame([], _DISEASE_LUT2_SCHEMA),
+        spark.createDataFrame([], _NCT_BY_DRUG_SCHEMA),
+    )
+    row = result.collect()[0]
+    assert 'CHEMBL4297603' not in row.keywords
+    assert 'CHEMBL4297603' in row.terms
 
 
 def test_build_drug_index_missing_nct_ids_yields_no_crash(spark):
