@@ -1926,8 +1926,8 @@ steps:
         hf_data_dir: metrics
   ##################################################################################################
 
-  #: LITERATURE STEP :#################################################################################
-  literature:
+#: LITERATURE_ENTITY_LUT STEP :#####################################################################
+  literature_entity_lut:
     - name: pyspark literature_entity_lut
       pyspark: literature_entity_lut
       source:
@@ -1936,6 +1936,10 @@ steps:
         literature_entity_lut: output/literature_entity_lut
       properties:
         spark.sql.shuffle.partitions: '10000'
+  ##################################################################################################
+
+#: LITERATURE_EMBEDDING STEP :######################################################################
+  literature_embedding:
     - name: pyspark literature_embedding
       pyspark: literature_embedding
       source:
@@ -1944,6 +1948,10 @@ steps:
         model: etc/model/w2v_model
       properties:
         spark.sql.shuffle.partitions: '15000'
+  ##################################################################################################
+
+#: LITERATURE_VECTOR STEP :#########################################################################
+  literature_vector:
     - name: pyspark literature_vector
       pyspark: literature_vector
       source:
@@ -1952,7 +1960,7 @@ steps:
         vectors: output/literature_vector
   ##################################################################################################
 
-  #: LITERATURE_PUBLICATION_MATCH STEP (collapsed publication + match) :###########################
+  #: LITERATURE_PUBLICATION_MATCH STEP (collapsed publication + match) :############################
   literature_publication_match:
     - name: pyspark literature publication match
       pyspark: literature_publication_match
