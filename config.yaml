@@ -387,6 +387,40 @@ steps:
       destination: intermediate/target/uniprot/uniprot.parquet
   ##################################################################################################
 
+  #: UNIPROT EVIDENCE PARSE STEP :##################################################################
+  uniprot_evidence_parse:
+    - name: transform uniprot evidence
+      transformer: uniprot_evidence
+      source: input/target/uniprot/uniprot.txt.gz
+      destination: intermediate/evidence/uniprot/uniprot_evidence.parquet
+  ##################################################################################################
+
+  #: UNIPROT LITERATURE STEP :######################################################################
+  uniprot_literature:
+    - name: pyspark uniprot_literature
+      pyspark: uniprot_literature
+      source:
+        uniprot_evidence: intermediate/evidence/uniprot/uniprot_evidence.parquet
+        ontoma_disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
+        ontoma_disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
+      destination: intermediate/evidence/uniprot_literature.parquet
+      properties:
+        'spark.jars.packages': 'com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3'
+  ##################################################################################################
+
+  #: UNIPROT VARIANTS STEP :########################################################################
+  uniprot_variants:
+    - name: pyspark uniprot_variants
+      pyspark: uniprot_variants
+      source:
+        uniprot_evidence: intermediate/evidence/uniprot/uniprot_evidence.parquet
+        ontoma_disease_label_lut: intermediate/ontoma/disease_label_lookup_table.parquet
+        ontoma_disease_id_lut: intermediate/ontoma/disease_id_lookup_table.parquet
+      destination: intermediate/evidence/uniprot_variants.parquet
+      properties:
+        'spark.jars.packages': 'com.johnsnowlabs.nlp:spark-nlp_2.12:6.1.3'
+  ##################################################################################################
+
   #: TARGET STEP (pyspark) :#######################################################################
   target:
     - name: pyspark target
@@ -1167,7 +1201,7 @@ steps:
     - name: pyspark evidence_postprocess
       pyspark: evidence_postprocess
       source:
-        evidence_path: input/evidence/uniprot_variants.json.gz
+        evidence_path: intermediate/evidence/uniprot_variants.parquet
         target_path: output/target
         disease_path: output/disease
         publication_date_lut: input/literature/literature_export
@@ -1175,7 +1209,7 @@ steps:
         failed_evidence: excluded/evidence/uniprot_variants
         evidence: output/evidence_uniprot_variants
       settings:
-        evidence_format: json
+        evidence_format: parquet
         datasource_id: uniprot_variants
         score_expression: |
           element_at(
@@ -1199,7 +1233,7 @@ steps:
     - name: pyspark evidence_postprocess
       pyspark: evidence_postprocess
       source:
-        evidence_path: input/evidence/uniprot_literature.json.gz
+        evidence_path: intermediate/evidence/uniprot_literature.parquet
         target_path: output/target
         disease_path: output/disease
         publication_date_lut: input/literature/literature_export
@@ -1207,7 +1241,7 @@ steps:
         failed_evidence: excluded/evidence/uniprot_literature
         evidence: output/evidence_uniprot_literature
       settings:
-        evidence_format: json
+        evidence_format: parquet
         datasource_id: uniprot_literature
         score_expression: |
           element_at(
