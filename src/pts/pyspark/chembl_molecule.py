@@ -36,6 +36,68 @@ def _normalize_name(col):
     return f.lower(collapsed)
 
 
+_DRUG_LIST_SCHEMA = ArrayType(StructType([
+    StructField('drug', StringType()),
+    StructField('synonyms', ArrayType(StringType())),
+]))
+
+BATCH_INNER_SCHEMA = StructType([
+    StructField('investigated_drugs', _DRUG_LIST_SCHEMA),
+    StructField('comparator_drugs', _DRUG_LIST_SCHEMA),
+    StructField('supportive_drugs', _DRUG_LIST_SCHEMA),
+])
+
+
+def _parse_aact_batch(batch_raw):
+    """Parse OpenAI batch output into one row per drug entry with a normalized member set.
+
+    Returns DataFrame[nct_id, members: array<string>] (normalized, deduped, non-empty).
+    """
+    messages = (
+        batch_raw
+        .select(
+            f.col('custom_id').alias('nct_id'),
+            f.explode('response.body.output').alias('out'),
+        )
+        .filter(f.col('out.type') == 'message')
+        .select('nct_id', f.explode('out.content').alias('content'))
+        # content.text is itself a JSON string (OpenAI structured output is double-encoded);
+        # decode it into BATCH_INNER_SCHEMA.
+        .select('nct_id', f.from_json(f.col('content.text'), BATCH_INNER_SCHEMA).alias('parsed'))
+    )
+
+    roles = f.array_union(
+        f.array_union(
+            f.coalesce(f.col('parsed.investigated_drugs'), f.array().cast(_DRUG_LIST_SCHEMA)),
+            f.coalesce(f.col('parsed.comparator_drugs'), f.array().cast(_DRUG_LIST_SCHEMA)),
+        ),
+        f.coalesce(f.col('parsed.supportive_drugs'), f.array().cast(_DRUG_LIST_SCHEMA)),
+    )
+
+    return (
+        messages
+        .withColumn('entry', f.explode(roles))
+        .withColumn(
+            'members',
+            f.array_union(
+                f.array(f.col('entry.drug')),
+                f.coalesce(f.col('entry.synonyms'), f.array().cast('array<string>')),
+            ),
+        )
+        .withColumn(
+            'members',
+            f.array_distinct(
+                f.filter(
+                    f.transform(f.col('members'), _normalize_name),
+                    lambda m: (m.isNotNull()) & (f.length(m) > 0),
+                )
+            ),
+        )
+        .filter(f.size('members') > 0)
+        .select('nct_id', 'members')
+    )
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,

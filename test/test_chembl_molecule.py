@@ -1,5 +1,7 @@
 """Tests for the chembl_molecule module."""
 
+import json
+
 import pyspark.sql.functions as f
 import pytest
 from pyspark.sql import Row
@@ -245,3 +247,46 @@ class TestNormalizeName:
         assert out['  Revlimid®  '] == 'revlimid'
         assert out['G  CSF'] == 'g csf'
         assert out['Aspirin™'] == 'aspirin'
+
+
+class TestParseAactBatch:
+    def _batch_df(self, spark, text_payload, custom_id='NCT01'):
+        outer_schema = StructType([
+            StructField('custom_id', StringType()),
+            StructField('response', StructType([
+                StructField('body', StructType([
+                    StructField('output', ArrayType(StructType([
+                        StructField('type', StringType()),
+                        StructField('content', ArrayType(StructType([
+                            StructField('text', StringType()),
+                        ]))),
+                    ]))),
+                ])),
+            ])),
+        ])
+        data = [Row(
+            custom_id=custom_id,
+            response=Row(body=Row(output=[
+                Row(type='message', content=[Row(text=text_payload)]),
+            ])),
+        )]
+        return spark.createDataFrame(data, outer_schema)
+
+    def test_parse_extracts_all_roles(self, spark):
+        from pts.pyspark.chembl_molecule import _parse_aact_batch
+        payload = json.dumps({
+            'investigated_drugs': [{'drug': 'Lenalidomide', 'synonyms': ['Revlimid', 'CC-5013']}],
+            'comparator_drugs': [{'drug': 'Dexamethasone', 'synonyms': []}],
+            'supportive_drugs': [{'drug': 'Filgrastim', 'synonyms': ['G-CSF']}],
+        })
+        out = _parse_aact_batch(self._batch_df(spark, payload)).collect()
+        member_sets = [set(r['members']) for r in out]
+        assert {'cc-5013', 'lenalidomide', 'revlimid'} in member_sets
+        assert {'filgrastim', 'g-csf'} in member_sets
+        assert {'dexamethasone'} in member_sets
+        assert all(r['nct_id'] == 'NCT01' for r in out)
+
+    def test_malformed_json_dropped(self, spark):
+        from pts.pyspark.chembl_molecule import _parse_aact_batch
+        out = _parse_aact_batch(self._batch_df(spark, 'not-valid-json')).collect()
+        assert out == []
