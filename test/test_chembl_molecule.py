@@ -566,3 +566,70 @@ class TestMineAactSynonyms:
         )
         out = {(r['id'], r['label']) for r in _mine_aact_synonyms(mol, entries).collect()}
         assert ('CHEMBL1', 'g-csf') not in out  # only 1 distinct trial -> below MIN_TRIALS
+
+
+class TestMergeAndTwoSource:
+    def test_two_source_molecule(self, spark, raw_drugbank_df):
+        import json
+
+        from pts.pyspark.chembl_molecule import process_molecules
+        mol = [Row(
+            molecule_chembl_id='CHEMBL1',
+            molecule_structures=Row(canonical_smiles=None, standard_inchi_key=None, molfile=None),
+            molecule_type='Protein', pref_name='Filgrastim', cross_references=[],
+            molecule_hierarchy=Row(parent_chembl_id='CHEMBL1'),
+            molecule_synonyms=[Row(molecule_synonym='Neupogen', syn_type='TRADE_NAME')],
+        )]
+        mol_df = spark.createDataFrame(mol, schema=RAW_MOLECULE_SCHEMA)
+
+        outer_schema = StructType([
+            StructField('custom_id', StringType()),
+            StructField('response', StructType([StructField('body', StructType([
+                StructField('output', ArrayType(StructType([
+                    StructField('type', StringType()),
+                    StructField('content', ArrayType(StructType([StructField('text', StringType())]))),
+                ]))),
+            ]))])),
+        ])
+        payload = json.dumps({
+            'investigated_drugs': [{'drug': 'Filgrastim', 'synonyms': ['G-CSF']}],
+            'comparator_drugs': [], 'supportive_drugs': [],
+        })
+        content = [Row(text=payload)]
+        output = [Row(type='message', content=content)]
+        batch = spark.createDataFrame(
+            [
+                Row(custom_id='NCT1', response=Row(body=Row(output=output))),
+                Row(custom_id='NCT2', response=Row(body=Row(output=output))),
+            ],
+            outer_schema,
+        )
+
+        row = {r['id']: r for r in process_molecules(mol_df, raw_drugbank_df, batch).collect()}['CHEMBL1']
+        sources = {s['source'] for s in row['synonyms']}
+        labels = {s['label'] for s in row['synonyms']}
+        assert 'AACT' in sources
+        assert 'g-csf' in labels
+        assert row['name'] == 'Filgrastim'  # AACT label never becomes name
+
+    def test_existing_two_arg_call_still_works(self, raw_molecule_df, raw_drugbank_df):
+        """process_molecules without a batch arg behaves as before (no AACT)."""
+        from pts.pyspark.chembl_molecule import process_molecules
+        result = process_molecules(raw_molecule_df, raw_drugbank_df)
+        assert result.count() == raw_molecule_df.count()
+
+    def test_aact_label_already_in_chembl_synonyms_not_duplicated(self, spark):
+        """An AACT label matching an existing ChEMBL synonym (case-insensitively) is not added again."""
+        from pts.pyspark.chembl_molecule import _merge_aact_synonyms
+        mol_combined = spark.createDataFrame(
+            [Row(id='CHEMBL1', synonyms=[Row(label='G-CSF', source='ChEMBL')])],
+            StructType([StructField('id', StringType()), StructField('synonyms', LABEL_SOURCE_SCHEMA_T)]),
+        )
+        aact_df = spark.createDataFrame(
+            [Row(id='CHEMBL1', label='g-csf')],
+            StructType([StructField('id', StringType()), StructField('label', StringType())]),
+        )
+        row = _merge_aact_synonyms(mol_combined, aact_df).collect()[0]
+        aact_labels = {s['label'] for s in row['synonyms'] if s['source'] == 'AACT'}
+        assert aact_labels == set()  # 'g-csf' suppressed by existing 'G-CSF'
+        assert any(s['label'] == 'G-CSF' and s['source'] == 'ChEMBL' for s in row['synonyms'])

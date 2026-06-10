@@ -360,6 +360,31 @@ def _mine_aact_synonyms(mol_df, entries):
     )
 
 
+def _merge_aact_synonyms(mol_combined, aact_df):
+    """Append AACT labels (deduped vs existing ChEMBL labels) as {label,'AACT'} structs."""
+    aact_grouped = aact_df.groupBy('id').agg(f.collect_set('label').alias('aact_labels'))
+
+    merged = mol_combined.join(aact_grouped, on='id', how='left')
+
+    existing_lc = f.transform(
+        f.coalesce(f.col('synonyms'), f.array().cast(LABEL_SOURCE_SCHEMA)),
+        lambda s: f.lower(s['label']),
+    )
+    fresh = f.filter(
+        f.coalesce(f.col('aact_labels'), f.array().cast('array<string>')),
+        lambda c: ~f.array_contains(existing_lc, f.lower(c)),
+    )
+    new_structs = f.transform(fresh, lambda c: _as_label_source(c, AACT_SOURCE))
+
+    return merged.withColumn(
+        'synonyms',
+        # array_sort for deterministic output; array_union already dedups identical structs.
+        f.array_sort(
+            f.array_union(f.coalesce(f.col('synonyms'), f.array().cast(LABEL_SOURCE_SCHEMA)), new_structs)
+        ).cast(LABEL_SOURCE_SCHEMA),
+    ).drop('aact_labels')
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,
@@ -372,6 +397,9 @@ def chembl_molecule(
         source: Dictionary with paths to:
             - chembl_molecule: ChEMBL molecule JSONL
             - drugbank: Drugbank to ChEMBL ID mapping CSV
+            - aact_extraction_batch_results: (optional) OpenAI batch output for
+              clinical-trial synonym mining; when present, AACT synonyms are
+              appended to the molecules.
         destination: Path to write the output parquet file.
         _settings: Custom settings (not used).
         properties: Spark configuration options.
@@ -387,8 +415,12 @@ def chembl_molecule(
         sep='\t',
     )
 
+    aact_batch_df = None
+    if 'aact_extraction_batch_results' in source:
+        aact_batch_df = spark.load_data(source['aact_extraction_batch_results'], format='json')
+
     logger.info('Processing molecules')
-    output_df = process_molecules(molecule_df, drugbank_df)
+    output_df = process_molecules(molecule_df, drugbank_df, aact_batch_df)
 
     logger.info(f'Writing molecules to {destination}')
     output_df.write.parquet(destination, mode='overwrite')
@@ -397,12 +429,17 @@ def chembl_molecule(
 def process_molecules(
     molecule_raw: DataFrame,
     drugbank_lookup: DataFrame,
+    aact_batch: DataFrame | None = None,
 ) -> DataFrame:
     """Process raw ChEMBL molecule data.
 
     Args:
         molecule_raw: Raw ChEMBL molecule data.
         drugbank_lookup: Drugbank to ChEMBL ID mapping.
+        aact_batch: (optional) OpenAI batch output for clinical-trial synonym
+            mining.  When provided, AACT synonyms are appended (deduped
+            case-insensitively vs existing ChEMBL labels) before the final
+            name-coalesce so that AACT labels never become the molecule name.
 
     Returns:
         Processed molecule DataFrame.
@@ -429,6 +466,23 @@ def process_molecules(
         .join(cross_references, on='id', how='left_outer')
         .join(hierarchy, on='id', how='left_outer')
     )
+
+    # Optionally mine and merge AACT synonyms BEFORE the name-coalesce so that
+    # AACT labels are never selected as the molecule name.
+    if aact_batch is not None:
+        entries = _parse_aact_batch(aact_batch)
+        empty_ls = f.array().cast(LABEL_SOURCE_SCHEMA)
+        empty_str_arr = f.array().cast('array<string>')
+        # _mine_aact_synonyms / _build_chembl_indexes expect non-null arrays; coalesce here.
+        mol_for_index = mol_combined.select(
+            'id', 'name',
+            f.coalesce(f.col('synonyms'), empty_ls).alias('synonyms'),
+            f.coalesce(f.col('tradeNames'), empty_ls).alias('tradeNames'),
+            'parentId',
+            f.coalesce(f.col('childChemblIds'), empty_str_arr).alias('childChemblIds'),
+        )
+        aact_df = _mine_aact_synonyms(mol_for_index, entries)
+        mol_combined = _merge_aact_synonyms(mol_combined, aact_df)
 
     empty_label_source = f.array().cast(LABEL_SOURCE_SCHEMA)
 
