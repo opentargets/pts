@@ -156,6 +156,90 @@ def _build_chembl_indexes(mol_df):
     return name_index, regimen_index, parent_child
 
 
+AMBIGUITY_CAP = 10
+
+
+def _anchor_candidates(entries, name_index, parent_child):
+    """Anchor member sets to molecules and emit (id, candidate, nct_id, status).
+
+    For each trial drug entry (a normalized member set), resolve members against
+    name_index to find which ChEMBL molecule(s) the entry anchors to, then emit
+    each member that is NOT already on an anchored molecule as a candidate
+    synonym, classified by status.
+
+    Entries where any single member resolves to more than AMBIGUITY_CAP molecules
+    are dropped entirely.
+
+    Args:
+        entries: DataFrame[nct_id, members: array<string>]
+        name_index: DataFrame[name_norm, ids: array<string>]
+        parent_child: DataFrame[id, related: array<string>]
+
+    Returns:
+        DataFrame[id, candidate, nct_id, status] where id is an anchored
+        molecule, candidate is a member not already on id, and status is one of
+        NOVEL / PARENT_CHILD / CONFLICT.
+    """
+    entries = entries.withColumn('entry_id', f.monotonically_increasing_id())
+
+    members = entries.select('entry_id', 'nct_id', f.explode('members').alias('member'))
+
+    # resolve each member against name_index; unresolved -> empty ids array
+    resolved = members.join(name_index, members['member'] == name_index['name_norm'], 'left').select(
+        'entry_id',
+        'nct_id',
+        'member',
+        f.coalesce(f.col('ids'), f.array().cast('array<string>')).alias('ids'),
+    )
+
+    # poison: drop any entry where a single member resolves to > AMBIGUITY_CAP molecules
+    poisoned = (
+        resolved
+        .groupBy('entry_id')
+        .agg(f.max(f.size('ids')).alias('max_ids'))
+        .filter(f.col('max_ids') > AMBIGUITY_CAP)
+        .select('entry_id')
+    )
+    resolved = resolved.join(poisoned, on='entry_id', how='left_anti')
+
+    # collect the union of all resolved molecule ids per entry (anchor set)
+    anchors = (
+        resolved
+        .select('entry_id', f.explode('ids').alias('anchor_id'))
+        .groupBy('entry_id')
+        .agg(f.collect_set('anchor_id').alias('anchor_ids'))
+    )
+
+    # cross each member with each anchored molecule of its entry
+    cand = resolved.join(anchors, on='entry_id', how='inner')
+    cand = cand.withColumn('anchor_id', f.explode('anchor_ids'))
+
+    # drop members already belonging to the anchor molecule (not candidates for it)
+    cand = cand.filter(~f.array_contains(f.col('ids'), f.col('anchor_id')))
+
+    # join parent_child info for the anchor to determine status
+    pc = parent_child.withColumnRenamed('id', 'anchor_id').withColumnRenamed('related', 'pc_related')
+    cand = cand.join(pc, on='anchor_id', how='left')
+
+    empty_str_arr = f.array().cast('array<string>')
+    cand = cand.withColumn(
+        'status',
+        f.when(f.size('ids') == 0, f.lit('NOVEL'))
+        .when(
+            f.arrays_overlap(f.col('ids'), f.coalesce(f.col('pc_related'), empty_str_arr)),
+            f.lit('PARENT_CHILD'),
+        )
+        .otherwise(f.lit('CONFLICT')),
+    )
+
+    return cand.select(
+        f.col('anchor_id').alias('id'),
+        f.col('member').alias('candidate'),
+        'nct_id',
+        'status',
+    ).distinct()
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,

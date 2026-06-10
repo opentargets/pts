@@ -340,3 +340,93 @@ class TestChemblIndexes:
         got = {r['id']: set(r['related']) for r in pc.collect()}
         assert 'CHEMBL2' in got['CHEMBL1']
         assert 'CHEMBL1' in got['CHEMBL2']
+
+
+class TestAnchorCandidates:
+    def test_synonym_anchors_novel_candidate(self, spark):
+        from pts.pyspark.chembl_molecule import _anchor_candidates
+        entries = spark.createDataFrame(
+            [Row(nct_id='NCT1', members=['filgrastim', 'g-csf'])],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        name_index = spark.createDataFrame(
+            [Row(name_norm='filgrastim', ids=['CHEMBL1'])],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        pc = spark.createDataFrame(
+            [Row(id='CHEMBL1', related=[])],
+            StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
+        )
+        out = _anchor_candidates(entries, name_index, pc).collect()
+        rows = {(r['id'], r['candidate'], r['status']) for r in out}
+        assert ('CHEMBL1', 'g-csf', 'NOVEL') in rows
+
+    def test_over_ambiguous_member_skipped(self, spark):
+        from pts.pyspark.chembl_molecule import _anchor_candidates
+        entries = spark.createDataFrame(
+            [Row(nct_id='NCT1', members=['ssri', 'fluoxetine'])],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        # 'ssri' resolves to 11 molecules -> entry must not anchor through it
+        name_index = spark.createDataFrame(
+            [Row(name_norm='ssri', ids=[f'CHEMBL{i}' for i in range(11)])],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        pc = spark.createDataFrame(
+            [], StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
+        )
+        out = _anchor_candidates(entries, name_index, pc).collect()
+        assert out == []
+
+    def test_conflict_status(self, spark):
+        from pts.pyspark.chembl_molecule import _anchor_candidates
+        # entry anchors CHEMBL1 (via 'filgrastim'); 'aspirin' resolves to unrelated CHEMBL5 -> CONFLICT for CHEMBL1
+        entries = spark.createDataFrame(
+            [Row(nct_id='NCT1', members=['filgrastim', 'aspirin'])],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        name_index = spark.createDataFrame(
+            [Row(name_norm='filgrastim', ids=['CHEMBL1']), Row(name_norm='aspirin', ids=['CHEMBL5'])],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        pc = spark.createDataFrame(
+            [Row(id='CHEMBL1', related=[])],
+            StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
+        )
+        out = {(r['id'], r['candidate'], r['status']) for r in _anchor_candidates(entries, name_index, pc).collect()}
+        assert ('CHEMBL1', 'aspirin', 'CONFLICT') in out
+
+    def test_parent_child_status(self, spark):
+        from pts.pyspark.chembl_molecule import _anchor_candidates
+        # entry anchors CHEMBL1; 'pegfilgrastim' resolves to CHEMBL2 which is a child of CHEMBL1 -> PARENT_CHILD
+        entries = spark.createDataFrame(
+            [Row(nct_id='NCT1', members=['filgrastim', 'pegfilgrastim'])],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        name_index = spark.createDataFrame(
+            [Row(name_norm='filgrastim', ids=['CHEMBL1']), Row(name_norm='pegfilgrastim', ids=['CHEMBL2'])],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        pc = spark.createDataFrame(
+            [Row(id='CHEMBL1', related=['CHEMBL2'])],
+            StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
+        )
+        out = {(r['id'], r['candidate'], r['status']) for r in _anchor_candidates(entries, name_index, pc).collect()}
+        assert ('CHEMBL1', 'pegfilgrastim', 'PARENT_CHILD') in out
+
+    def test_exactly_cap_is_allowed(self, spark):
+        from pts.pyspark.chembl_molecule import _anchor_candidates
+        entries = spark.createDataFrame(
+            [Row(nct_id='NCT1', members=['generic', 'g-csf'])],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        name_index = spark.createDataFrame(
+            [Row(name_norm='generic', ids=[f'CHEMBL{i}' for i in range(10)])],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        pc = spark.createDataFrame(
+            [], StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
+        )
+        # 10 == cap -> entry NOT poisoned; 'g-csf' (unresolved) is a NOVEL candidate for each of the 10
+        out = _anchor_candidates(entries, name_index, pc).collect()
+        assert out != []
