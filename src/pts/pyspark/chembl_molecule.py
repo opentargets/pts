@@ -29,6 +29,13 @@ def _as_label_source(label_col, source_val):
     return f.struct(label_col.alias('label'), f.lit(source_val).alias('source'))
 
 
+def _normalize_name(col):
+    """Lowercase, strip trademark symbols, trim, collapse internal whitespace."""
+    stripped = f.regexp_replace(col, r'[®™©℠]', '')
+    collapsed = f.regexp_replace(f.trim(stripped), r'\s+', ' ')
+    return f.lower(collapsed)
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,

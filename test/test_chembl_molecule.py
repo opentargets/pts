@@ -1,5 +1,6 @@
 """Tests for the chembl_molecule module."""
 
+import pyspark.sql.functions as f
 import pytest
 from pyspark.sql import Row
 from pyspark.sql.types import (
@@ -229,3 +230,18 @@ class TestSynonymStructs:
         field = result.schema['synonyms'].dataType
         assert isinstance(field, ArrayType)
         assert {f.name for f in field.elementType.fields} == {'label', 'source'}
+
+
+class TestNormalizeName:
+    def test_normalization(self, spark):
+        from pts.pyspark.chembl_molecule import _normalize_name
+        data = [
+            Row(raw='  Revlimid®  '),
+            Row(raw='G  CSF'),
+            Row(raw='Aspirin™'),
+        ]
+        df = spark.createDataFrame(data, StructType([StructField('raw', StringType())]))
+        out = {r['raw']: r['norm'] for r in df.withColumn('norm', _normalize_name(f.col('raw'))).collect()}
+        assert out['  Revlimid®  '] == 'revlimid'
+        assert out['G  CSF'] == 'g csf'
+        assert out['Aspirin™'] == 'aspirin'
