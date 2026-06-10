@@ -430,3 +430,95 @@ class TestAnchorCandidates:
         # 10 == cap -> entry NOT poisoned; 'g-csf' (unresolved) is a NOVEL candidate for each of the 10
         out = _anchor_candidates(entries, name_index, pc).collect()
         assert out != []
+
+
+class TestCleanupRules:
+    def _df(self, spark, rows):
+        schema = StructType([
+            StructField('id', StringType()),
+            StructField('candidate', StringType()),
+            StructField('nct_id', StringType()),
+            StructField('status', StringType()),
+        ])
+        return spark.createDataFrame([Row(**r) for r in rows], schema)
+
+    def test_drops_parent_child_and_noise(self, spark):
+        from pts.pyspark.chembl_molecule import _apply_cleanup_rules
+        regimen = spark.createDataFrame(
+            [Row(regimen_norm='folfox', ids=['CHEMBLX'])],
+            StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        existing = spark.createDataFrame(
+            [Row(id='CHEMBL1', existing=['cyclosporin'])],
+            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+        )
+        rows = [
+            {'id': 'CHEMBL1', 'candidate': 'placebo', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'dpp4 inhibitor', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': '1% lidocaine', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'r', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'folfox', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'cyclosporins', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'mtx', 'nct_id': 'N1', 'status': 'PARENT_CHILD'},
+            {'id': 'CHEMBL1', 'candidate': 'g-csf', 'nct_id': 'N1', 'status': 'NOVEL'},
+        ]
+        out = _apply_cleanup_rules(self._df(spark, rows), regimen, existing)
+        kept = {r['candidate'] for r in out.collect()}
+        assert kept == {'g-csf'}
+
+    def test_descriptor_code_extraction(self, spark):
+        from pts.pyspark.chembl_molecule import _apply_cleanup_rules
+        regimen = spark.createDataFrame(
+            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        existing = spark.createDataFrame(
+            [Row(id='CHEMBL1', existing=[])],
+            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+        )
+        rows = [{'id': 'CHEMBL1', 'candidate': 'akt inhibitor mk2206', 'nct_id': 'N1', 'status': 'NOVEL'}]
+        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
+        assert out == {'mk2206'}
+
+    def test_conflict_kept(self, spark):
+        from pts.pyspark.chembl_molecule import _apply_cleanup_rules
+        regimen = spark.createDataFrame(
+            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        existing = spark.createDataFrame(
+            [Row(id='CHEMBL1', existing=[])],
+            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+        )
+        rows = [{'id': 'CHEMBL1', 'candidate': 'aspirin', 'nct_id': 'N1', 'status': 'CONFLICT'}]
+        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
+        assert out == {'aspirin'}
+
+    def test_word_boundary_not_substring(self, spark):
+        from pts.pyspark.chembl_molecule import _apply_cleanup_rules
+        regimen = spark.createDataFrame(
+            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        existing = spark.createDataFrame(
+            [Row(id='CHEMBL1', existing=[])],
+            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+        )
+        # 'nystatin' contains 'statin' and 'cellcept' contains 'cell' as SUBSTRINGS, not whole words -> kept
+        rows = [
+            {'id': 'CHEMBL1', 'candidate': 'nystatin', 'nct_id': 'N1', 'status': 'NOVEL'},
+            {'id': 'CHEMBL1', 'candidate': 'cellcept', 'nct_id': 'N1', 'status': 'NOVEL'},
+        ]
+        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
+        assert out == {'nystatin', 'cellcept'}
+
+    def test_class_keyword_with_code_kept(self, spark):
+        from pts.pyspark.chembl_molecule import _apply_cleanup_rules
+        regimen = spark.createDataFrame(
+            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+        )
+        existing = spark.createDataFrame(
+            [Row(id='CHEMBL1', existing=[])],
+            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+        )
+        # #8 rewrites to the bare code; #6 must NOT then drop it
+        rows = [{'id': 'CHEMBL1', 'candidate': 'mek inhibitor pd0325901', 'nct_id': 'N1', 'status': 'NOVEL'}]
+        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
+        assert out == {'pd0325901'}

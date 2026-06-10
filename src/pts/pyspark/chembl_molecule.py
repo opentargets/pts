@@ -158,6 +158,88 @@ def _build_chembl_indexes(mol_df):
 
 AMBIGUITY_CAP = 10
 
+# v1 port of the experiment's cleanup blacklists — expected to grow with corpus coverage.
+CODE_REGEX = r'\b[a-z]{1,6}-?\d{3,}[a-z0-9]*\b'
+
+# v1 port of the experiment's cleanup blacklists — expected to grow with corpus coverage.
+CONTROL_TERMS = {
+    'placebo', 'vehicle', 'saline', 'sham', 'soc', 'standard of care', 'study drug',
+    'sodium chloride', 'water', 'air', 'normal saline',
+}
+# v1 port of the experiment's cleanup blacklists — expected to grow with corpus coverage.
+CLASS_KEYWORDS = [
+    'inhibitor', 'agonist', 'antagonist', 'antibody', 'analogue', 'analog', 'therapy',
+    'statin', 'steroid', 'nsaid', 'cell', 'cells', 'lymphocyte', 'lymphocytes',
+    'mesenchymal', 'stromal', 'progenitor', 'fibroblast',
+]
+_CLASS_PATTERN = r'\b(' + '|'.join(CLASS_KEYWORDS) + r')\b'
+
+
+def _has_class_keyword(col):
+    """True when the candidate text contains any drug-class / cell-therapy keyword as a whole word."""
+    return col.rlike(_CLASS_PATTERN)
+
+
+def _apply_cleanup_rules(cand, regimen_index, existing_per_id):
+    """Apply rules #5-#11 + drop PARENT_CHILD. Returns DataFrame[id, candidate, nct_id].
+
+    Args:
+        cand: DataFrame[id, candidate, nct_id, status]
+        regimen_index: DataFrame[regimen_norm, ids: array<string>]
+        existing_per_id: DataFrame[id, existing: array<string>]
+
+    Returns:
+        DataFrame[id, candidate, nct_id] with noise filtered out.
+    """
+    # drop PARENT_CHILD (keep NOVEL + CONFLICT)
+    cand = cand.filter(f.col('status') != 'PARENT_CHILD')
+
+    # #8: descriptor-wrapped code -> bare code (when phrase has a class word AND a code)
+    cand = cand.withColumn('code', f.regexp_extract(f.col('candidate'), CODE_REGEX, 0))
+    cand = cand.withColumn(
+        'candidate',
+        f.when(
+            (f.length('code') > 0) & _has_class_keyword(f.col('candidate')),
+            f.col('code'),
+        ).otherwise(f.col('candidate')),
+    ).drop('code')
+
+    # #10: single-character
+    cand = cand.filter(f.length('candidate') > 1)
+
+    # #9: insulin units + any '%'
+    cand = cand.filter(~f.col('candidate').rlike(r'^(u|gla)[- ]?\d{2,3}$'))
+    cand = cand.filter(~f.col('candidate').contains('%'))
+
+    # #5: control noise
+    control_array = f.array([f.lit(t) for t in sorted(CONTROL_TERMS)])
+    cand = cand.filter(~f.array_contains(control_array, f.col('candidate')))
+
+    # #6: drug-class / cell-therapy keyword present, UNLESS a code survived (#8 kept the code)
+    cand = cand.filter(~_has_class_keyword(f.col('candidate')) | f.col('candidate').rlike(CODE_REGEX))
+
+    # #7: regimen suppression (candidate equals a known regimen token)
+    regimen_keys = regimen_index.select(f.col('regimen_norm').alias('candidate')).distinct()
+    cand = cand.join(regimen_keys.withColumn('_is_regimen', f.lit(True)), on='candidate', how='left')
+    cand = cand.filter(f.col('_is_regimen').isNull()).drop('_is_regimen')
+
+    # #11: plural suppression (singular already on M)
+    cand = cand.withColumn(
+        'singular',
+        f.when(f.col('candidate').endswith('ies'),
+               f.concat(f.expr('left(candidate, length(candidate) - 3)'), f.lit('y')))
+        .when(f.col('candidate').endswith('es'), f.expr('left(candidate, length(candidate) - 2)'))
+        .when(f.col('candidate').endswith('s'), f.expr('left(candidate, length(candidate) - 1)'))
+        .otherwise(f.col('candidate')),
+    )
+    cand = cand.join(existing_per_id, on='id', how='left')
+    cand = cand.filter(
+        (f.col('singular') == f.col('candidate'))
+        | ~f.array_contains(f.coalesce(f.col('existing'), f.array().cast('array<string>')), f.col('singular'))
+    ).drop('singular', 'existing')
+
+    return cand.select('id', 'candidate', 'nct_id').distinct()
+
 
 def _anchor_candidates(entries, name_index, parent_child):
     """Anchor member sets to molecules and emit (id, candidate, nct_id, status).
