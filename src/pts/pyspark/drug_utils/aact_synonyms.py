@@ -277,6 +277,67 @@ def _has_class_keyword(col):
     return col.rlike(_CLASS_PATTERN)
 
 
+def _rewrite_and_reclassify_codes(cand, name_index, parent_child):
+    """Rule #8: rewrite descriptor phrases to their bare R&D code, then re-resolve.
+
+    Rewriting e.g. ``akt inhibitor mk2206`` -> ``mk2206`` changes the candidate's
+    identity, so its anchor-time status is stale. We re-resolve the rewritten
+    candidate against ``name_index`` and reclassify:
+
+    - drop it if it is now already a label of the anchor molecule (redundant)
+    - drop it if the rewritten code is now over-ambiguous (> AMBIGUITY_CAP)
+    - recompute NOVEL / PARENT_CHILD / CONFLICT so a code belonging to the
+      anchor's parent/child family is marked PARENT_CHILD and dropped downstream
+
+    Idempotent for candidates that are not rewritten (their resolution is
+    unchanged from anchoring time).
+
+    Args:
+        cand: DataFrame[id, candidate, nct_id, status]
+        name_index: DataFrame[name_norm, ids: array<string>]
+        parent_child: DataFrame[id, related: array<string>]
+
+    Returns:
+        DataFrame[id, candidate, nct_id, status] with rewritten, reclassified candidates.
+    """
+    # rule #8: descriptor-wrapped code -> bare code (phrase has a class word AND a code)
+    cand = cand.withColumn('code', f.regexp_extract(f.col('candidate'), CODE_REGEX, 0))
+    cand = cand.withColumn(
+        'candidate',
+        f.when(
+            (f.length('code') > 0) & _has_class_keyword(f.col('candidate')),
+            f.col('code'),
+        ).otherwise(f.col('candidate')),
+    ).drop('code', 'status')
+
+    # re-resolve the (possibly rewritten) candidate against the ChEMBL name index
+    resolved = cand.join(name_index, cand['candidate'] == name_index['name_norm'], 'left').select(
+        'id',
+        'candidate',
+        'nct_id',
+        f.coalesce(f.col('ids'), f.array().cast('array<string>')).alias('ids'),
+    )
+
+    # a rewritten code that is now over-ambiguous or already on the anchor molecule
+    # is not a candidate for it
+    resolved = resolved.filter(f.size('ids') <= AMBIGUITY_CAP)
+    resolved = resolved.filter(~f.array_contains(f.col('ids'), f.col('id')))
+
+    # reclassify status against the anchor molecule's parent/child family
+    pc = parent_child.withColumnRenamed('related', 'pc_related')
+    resolved = resolved.join(pc, on='id', how='left')
+    empty_str_arr = f.array().cast('array<string>')
+    return resolved.withColumn(
+        'status',
+        f.when(f.size('ids') == 0, f.lit('NOVEL'))
+        .when(
+            f.arrays_overlap(f.col('ids'), f.coalesce(f.col('pc_related'), empty_str_arr)),
+            f.lit('PARENT_CHILD'),
+        )
+        .otherwise(f.lit('CONFLICT')),
+    ).select('id', 'candidate', 'nct_id', 'status').distinct()
+
+
 def _apply_cleanup_rules(cand, regimen_index, existing_per_id):
     """Apply rules #5-#11 + drop PARENT_CHILD. Returns DataFrame[id, candidate, nct_id].
 
@@ -288,18 +349,10 @@ def _apply_cleanup_rules(cand, regimen_index, existing_per_id):
     Returns:
         DataFrame[id, candidate, nct_id] with noise filtered out.
     """
-    # drop PARENT_CHILD (keep NOVEL + CONFLICT)
+    # drop PARENT_CHILD (keep NOVEL + CONFLICT). Descriptor-code extraction (#8)
+    # already happened upstream in _rewrite_and_reclassify_codes, which also
+    # re-resolved the rewritten code so PARENT_CHILD here reflects the bare code.
     cand = cand.filter(f.col('status') != 'PARENT_CHILD')
-
-    # #8: descriptor-wrapped code -> bare code (when phrase has a class word AND a code)
-    cand = cand.withColumn('code', f.regexp_extract(f.col('candidate'), CODE_REGEX, 0))
-    cand = cand.withColumn(
-        'candidate',
-        f.when(
-            (f.length('code') > 0) & _has_class_keyword(f.col('candidate')),
-            f.col('code'),
-        ).otherwise(f.col('candidate')),
-    ).drop('code')
 
     # #10: single-character
     cand = cand.filter(f.length('candidate') > 1)
@@ -312,7 +365,8 @@ def _apply_cleanup_rules(cand, regimen_index, existing_per_id):
     control_array = f.array([f.lit(t) for t in sorted(CONTROL_TERMS)])
     cand = cand.filter(~f.array_contains(control_array, f.col('candidate')))
 
-    # #6: drug-class / cell-therapy keyword present, UNLESS a code survived (#8 kept the code)
+    # #6: drug-class / cell-therapy keyword present, UNLESS the candidate is a bare
+    # R&D code (descriptor phrases were already rewritten to their code upstream)
     cand = cand.filter(~_has_class_keyword(f.col('candidate')) | f.col('candidate').rlike(CODE_REGEX))
 
     # #7: regimen suppression (candidate equals a known regimen token)
@@ -365,7 +419,8 @@ def mine_aact_synonyms(mol_df, entries):
     )
 
     anchored = _anchor_candidates(entries, name_index, parent_child)
-    cleaned = _apply_cleanup_rules(anchored, regimen_index, existing_per_id)
+    reclassified = _rewrite_and_reclassify_codes(anchored, name_index, parent_child)
+    cleaned = _apply_cleanup_rules(reclassified, regimen_index, existing_per_id)
 
     return (
         cleaned

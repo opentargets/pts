@@ -244,19 +244,6 @@ class TestCleanupRules:
         kept = {r['candidate'] for r in out.collect()}
         assert kept == {'g-csf'}
 
-    def test_descriptor_code_extraction(self, spark):
-        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
-        regimen = spark.createDataFrame(
-            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
-        )
-        existing = spark.createDataFrame(
-            [Row(id='CHEMBL1', existing=[])],
-            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
-        )
-        rows = [{'id': 'CHEMBL1', 'candidate': 'akt inhibitor mk2206', 'nct_id': 'N1', 'status': 'NOVEL'}]
-        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
-        assert out == {'mk2206'}
-
     def test_conflict_kept(self, spark):
         from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
@@ -287,19 +274,68 @@ class TestCleanupRules:
         out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
         assert out == {'nystatin', 'cellcept'}
 
-    def test_class_keyword_with_code_kept(self, spark):
-        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
-        regimen = spark.createDataFrame(
-            [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
+
+class TestRewriteAndReclassify:
+    def _cand(self, spark, rows):
+        schema = StructType([
+            StructField('id', StringType()),
+            StructField('candidate', StringType()),
+            StructField('nct_id', StringType()),
+            StructField('status', StringType()),
+        ])
+        return spark.createDataFrame([Row(**r) for r in rows], schema)
+
+    def _idx(self, spark, rows):
+        return spark.createDataFrame(
+            [Row(**r) for r in rows],
+            StructType([StructField('name_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
         )
-        existing = spark.createDataFrame(
-            [Row(id='CHEMBL1', existing=[])],
-            StructType([StructField('id', StringType()), StructField('existing', ArrayType(StringType()))]),
+
+    def _pc(self, spark, rows):
+        return spark.createDataFrame(
+            [Row(**r) for r in rows],
+            StructType([StructField('id', StringType()), StructField('related', ArrayType(StringType()))]),
         )
-        # #8 rewrites to the bare code; #6 must NOT then drop it
-        rows = [{'id': 'CHEMBL1', 'candidate': 'mek inhibitor pd0325901', 'nct_id': 'N1', 'status': 'NOVEL'}]
-        out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
-        assert out == {'pd0325901'}
+
+    def _run(self, spark, candidate, name_index_rows, pc_rows, status='NOVEL'):
+        from pts.pyspark.drug_utils.aact_synonyms import _rewrite_and_reclassify_codes
+        cand = self._cand(spark, [{'id': 'CHEMBL1', 'candidate': candidate, 'nct_id': 'N1', 'status': status}])
+        out = _rewrite_and_reclassify_codes(cand, self._idx(spark, name_index_rows), self._pc(spark, pc_rows))
+        return {(r['candidate'], r['status']) for r in out.collect()}
+
+    def test_descriptor_code_extraction(self, spark):
+        out = self._run(spark, 'akt inhibitor mk2206', [], [])
+        assert out == {('mk2206', 'NOVEL')}
+
+    def test_phrase_with_code_rewritten_and_kept(self, spark):
+        out = self._run(spark, 'mek inhibitor pd0325901', [], [])
+        assert out == {('pd0325901', 'NOVEL')}
+
+    def test_rewritten_code_already_on_anchor_dropped(self, spark):
+        # the extracted code is already a label of the anchor CHEMBL1 -> redundant -> dropped
+        out = self._run(spark, 'mek inhibitor pd0325901', [{'name_norm': 'pd0325901', 'ids': ['CHEMBL1']}], [])
+        assert out == set()
+
+    def test_rewritten_code_on_parent_child_reclassified(self, spark):
+        # the extracted code resolves to CHEMBL2, a child of the anchor CHEMBL1 -> PARENT_CHILD
+        # (this is the bug the reclassification fixes: it was stale NOVEL before)
+        out = self._run(
+            spark,
+            'mek inhibitor pd0325901',
+            [{'name_norm': 'pd0325901', 'ids': ['CHEMBL2']}],
+            [{'id': 'CHEMBL1', 'related': ['CHEMBL2']}],
+        )
+        assert out == {('pd0325901', 'PARENT_CHILD')}
+
+    def test_rewritten_code_unrelated_is_conflict(self, spark):
+        # the extracted code resolves to unrelated CHEMBL9 -> CONFLICT (kept, per design)
+        out = self._run(spark, 'mek inhibitor pd0325901', [{'name_norm': 'pd0325901', 'ids': ['CHEMBL9']}], [])
+        assert out == {('pd0325901', 'CONFLICT')}
+
+    def test_non_descriptor_candidate_passes_through(self, spark):
+        # 'g-csf' has no class keyword and no extractable code -> unchanged, stays NOVEL
+        out = self._run(spark, 'g-csf', [], [])
+        assert out == {('g-csf', 'NOVEL')}
 
 
 class TestMineAactSynonyms:
