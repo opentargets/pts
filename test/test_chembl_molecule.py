@@ -193,3 +193,39 @@ class TestProcessMolecules:
         """Adding molblock does not change the row count."""
         result = process_molecules(raw_molecule_df, raw_drugbank_df)
         assert result.count() == raw_molecule_df.count()
+
+
+class TestSynonymStructs:
+    def test_synonyms_are_label_source_structs(self, spark, raw_drugbank_df):
+        """ChEMBL synonyms become {label, source:'ChEMBL'} structs, sorted."""
+        data = [
+            Row(
+                molecule_chembl_id='CHEMBL10',
+                molecule_structures=Row(canonical_smiles=None, standard_inchi_key=None, molfile=None),
+                molecule_type='Small molecule',
+                pref_name='Aspirin',
+                cross_references=[],
+                molecule_hierarchy=Row(parent_chembl_id='CHEMBL10'),
+                molecule_synonyms=[
+                    Row(molecule_synonym='ASA', syn_type='OTHER'),
+                    Row(molecule_synonym='Bayer', syn_type='TRADE_NAME'),
+                ],
+            ),
+        ]
+        df = spark.createDataFrame(data, schema=RAW_MOLECULE_SCHEMA)
+        row = {r['id']: r for r in process_molecules(df, raw_drugbank_df).collect()}['CHEMBL10']
+        assert [(s['label'], s['source']) for s in row['synonyms']] == [('ASA', 'ChEMBL')]
+        assert [(t['label'], t['source']) for t in row['tradeNames']] == [('Bayer', 'ChEMBL')]
+
+    def test_empty_synonyms_are_empty_struct_array(self, raw_molecule_df, raw_drugbank_df):
+        """Molecules with no synonyms get an empty (not null) struct array."""
+        row = {r['id']: r for r in process_molecules(raw_molecule_df, raw_drugbank_df).collect()}['CHEMBL1']
+        assert row['synonyms'] == []
+        assert row['tradeNames'] == []
+
+    def test_synonyms_schema_is_struct(self, raw_molecule_df, raw_drugbank_df):
+        """synonyms column type is array<struct<label,source>>."""
+        result = process_molecules(raw_molecule_df, raw_drugbank_df)
+        field = result.schema['synonyms'].dataType
+        assert isinstance(field, ArrayType)
+        assert {f.name for f in field.elementType.fields} == {'label', 'source'}

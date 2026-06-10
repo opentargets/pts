@@ -9,9 +9,24 @@ from typing import Any
 import pyspark.sql.functions as f
 from loguru import logger
 from pyspark.sql import DataFrame
-from pyspark.sql.types import ArrayType, MapType, StringType
+from pyspark.sql.types import ArrayType, MapType, StringType, StructField, StructType
 
 from pts.pyspark.common.session import Session
+
+CHEMBL_SOURCE = 'ChEMBL'
+AACT_SOURCE = 'AACT'
+
+LABEL_SOURCE_SCHEMA = ArrayType(
+    StructType([
+        StructField('label', StringType()),
+        StructField('source', StringType()),
+    ])
+)
+
+
+def _as_label_source(label_col, source_val):
+    """Wrap a string column as a {label, source} struct."""
+    return f.struct(label_col.alias('label'), f.lit(source_val).alias('source'))
 
 
 def chembl_molecule(
@@ -84,12 +99,23 @@ def process_molecules(
         .join(hierarchy, on='id', how='left_outer')
     )
 
+    empty_label_source = f.array().cast(LABEL_SOURCE_SCHEMA)
+
     # Final processing - ensure name is populated and deduplicate
     return (
         mol_combined
+        .withColumn('synonyms', f.coalesce(f.col('synonyms'), empty_label_source))
+        .withColumn('tradeNames', f.coalesce(f.col('tradeNames'), empty_label_source))
         .withColumn(
             'name',
-            f.coalesce(f.col('name'), f.element_at(f.col('synonyms'), 1), f.col('id')),
+            f.coalesce(
+                f.col('name'),
+                f.element_at(
+                    f.filter(f.col('synonyms'), lambda s: s['source'] == CHEMBL_SOURCE),
+                    1,
+                )['label'],
+                f.col('id'),
+            ),
         )
         .drop('drugbank_id')
         .dropDuplicates(['id'])
@@ -162,23 +188,26 @@ def _process_molecule_synonyms(preprocessed_mols: DataFrame) -> DataFrame:
         synonyms
         .filter(f.col('syn_type') == 'TRADE_NAME')
         .groupBy('id')
-        .agg(f.collect_set('synonym').alias('tradeNames'))
+        .agg(f.collect_set('synonym').alias('_trade'))
     )
 
     other_synonyms = (
-        synonyms.filter(f.col('syn_type') != 'TRADE_NAME').groupBy('id').agg(f.collect_set('synonym').alias('synonyms'))
+        synonyms.filter(f.col('syn_type') != 'TRADE_NAME').groupBy('id').agg(f.collect_set('synonym').alias('_syn'))
     )
 
     full = trade_names.join(other_synonyms, on='id', how='full_outer')
 
-    # Ensure arrays are not null and are sorted
     return full.withColumn(
         'synonyms',
-        f.coalesce(f.array_sort(f.col('synonyms')), f.array()),
+        f.array_sort(
+            f.transform(f.coalesce(f.col('_syn'), f.array()), lambda c: _as_label_source(c, CHEMBL_SOURCE))
+        ).cast(LABEL_SOURCE_SCHEMA),
     ).withColumn(
         'tradeNames',
-        f.coalesce(f.array_sort(f.col('tradeNames')), f.array()),
-    )
+        f.array_sort(
+            f.transform(f.coalesce(f.col('_trade'), f.array()), lambda c: _as_label_source(c, CHEMBL_SOURCE))
+        ).cast(LABEL_SOURCE_SCHEMA),
+    ).drop('_syn', '_trade')
 
 
 def _process_molecule_hierarchy(preprocessed_mols: DataFrame) -> DataFrame:
