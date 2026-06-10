@@ -322,6 +322,44 @@ def _anchor_candidates(entries, name_index, parent_child):
     ).distinct()
 
 
+MIN_TRIALS = 2
+
+
+def _mine_aact_synonyms(mol_df, entries):
+    """Full AACT mining: anchor -> cleanup -> n_trials>=MIN_TRIALS -> DataFrame[id, label].
+
+    The stored label is the normalized candidate string (v1: normalized form, which
+    matches the anchor index; surface-form refinement is deferred).
+    """
+    name_index, regimen_index, parent_child = _build_chembl_indexes(mol_df)
+
+    # Per-molecule set of normalized existing names (name + synonym/tradeName labels),
+    # used by rule #11 plural suppression. Intentionally parallels the label collection
+    # in _build_chembl_indexes (different shape: grouped array vs exploded rows).
+    empty_ls = f.array().cast(LABEL_SOURCE_SCHEMA)
+    existing_per_id = mol_df.select(
+        'id',
+        f.array_union(
+            f.array(_normalize_name(f.col('name'))),
+            f.array_union(
+                f.transform(f.coalesce(f.col('synonyms'), empty_ls), lambda s: _normalize_name(s['label'])),
+                f.transform(f.coalesce(f.col('tradeNames'), empty_ls), lambda t: _normalize_name(t['label'])),
+            ),
+        ).alias('existing'),
+    )
+
+    anchored = _anchor_candidates(entries, name_index, parent_child)
+    cleaned = _apply_cleanup_rules(anchored, regimen_index, existing_per_id)
+
+    return (
+        cleaned
+        .groupBy('id', 'candidate')
+        .agg(f.countDistinct('nct_id').alias('n_trials'))
+        .filter(f.col('n_trials') >= MIN_TRIALS)
+        .select('id', f.col('candidate').alias('label'))
+    )
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,

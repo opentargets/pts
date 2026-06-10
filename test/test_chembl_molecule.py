@@ -522,3 +522,47 @@ class TestCleanupRules:
         rows = [{'id': 'CHEMBL1', 'candidate': 'mek inhibitor pd0325901', 'nct_id': 'N1', 'status': 'NOVEL'}]
         out = {r['candidate'] for r in _apply_cleanup_rules(self._df(spark, rows), regimen, existing).collect()}
         assert out == {'pd0325901'}
+
+
+class TestMineAactSynonyms:
+    def test_min_trials_gate_and_anchor(self, spark):
+        from pts.pyspark.chembl_molecule import _mine_aact_synonyms
+        mol = spark.createDataFrame(
+            [Row(id='CHEMBL1', name='Filgrastim', synonyms=[], tradeNames=[], parentId=None, childChemblIds=[])],
+            StructType([
+                StructField('id', StringType()), StructField('name', StringType()),
+                StructField('synonyms', LABEL_SOURCE_SCHEMA_T), StructField('tradeNames', LABEL_SOURCE_SCHEMA_T),
+                StructField('parentId', StringType()), StructField('childChemblIds', ArrayType(StringType())),
+            ]),
+        )
+        entries = spark.createDataFrame(
+            [
+                Row(nct_id='NCT1', members=['filgrastim', 'g-csf']),
+                Row(nct_id='NCT2', members=['filgrastim', 'g-csf']),   # g-csf seen in 2 trials -> kept
+                Row(nct_id='NCT3', members=['filgrastim', 'csa-once']),  # csa-once seen in 1 trial -> dropped
+            ],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        out = {(r['id'], r['label']) for r in _mine_aact_synonyms(mol, entries).collect()}
+        assert ('CHEMBL1', 'g-csf') in out
+        assert ('CHEMBL1', 'csa-once') not in out
+
+    def test_same_trial_duplicate_counts_once(self, spark):
+        from pts.pyspark.chembl_molecule import _mine_aact_synonyms
+        mol = spark.createDataFrame(
+            [Row(id='CHEMBL1', name='Filgrastim', synonyms=[], tradeNames=[], parentId=None, childChemblIds=[])],
+            StructType([
+                StructField('id', StringType()), StructField('name', StringType()),
+                StructField('synonyms', LABEL_SOURCE_SCHEMA_T), StructField('tradeNames', LABEL_SOURCE_SCHEMA_T),
+                StructField('parentId', StringType()), StructField('childChemblIds', ArrayType(StringType())),
+            ]),
+        )
+        entries = spark.createDataFrame(
+            [
+                Row(nct_id='NCT1', members=['filgrastim', 'g-csf']),
+                Row(nct_id='NCT1', members=['filgrastim', 'g-csf']),  # same trial, duplicate -> counts as 1
+            ],
+            StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
+        )
+        out = {(r['id'], r['label']) for r in _mine_aact_synonyms(mol, entries).collect()}
+        assert ('CHEMBL1', 'g-csf') not in out  # only 1 distinct trial -> below MIN_TRIALS
