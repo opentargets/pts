@@ -98,6 +98,64 @@ def _parse_aact_batch(batch_raw):
     )
 
 
+def _build_chembl_indexes(mol_df):
+    """Build (name_index, regimen_index, parent_child) from ChEMBL-source names.
+
+    name_index:    DataFrame[name_norm, ids: array<string>]
+    regimen_index: DataFrame[regimen_norm, ids: array<string>]  (suppression only)
+    parent_child:  DataFrame[id, related: array<string>]  (parent + children)
+    """
+    empty_ls = f.array().cast(LABEL_SOURCE_SCHEMA)
+    labels = (
+        mol_df
+        .select(
+            'id',
+            f.array_union(
+                f.array(f.col('name')),
+                f.array_union(
+                    f.transform(f.coalesce(f.col('synonyms'), empty_ls), lambda s: s['label']),  # noqa: FURB118
+                    f.transform(f.coalesce(f.col('tradeNames'), empty_ls), lambda t: t['label']),  # noqa: FURB118
+                ),
+            ).alias('labels'),
+        )
+        .select('id', f.explode('labels').alias('label'))
+        .withColumn('name_norm', _normalize_name(f.col('label')))
+        .filter(f.length('name_norm') > 0)
+    )
+
+    name_index = labels.groupBy('name_norm').agg(f.collect_set('id').alias('ids'))
+
+    # "<ingredient> COMPONENT OF <regimen>" -> regimen token (normalized text is lowercased)
+    regimen_index = (
+        labels
+        .withColumn(
+            'regimen_norm',
+            f.regexp_extract(f.col('name_norm'), r'\bcomponent of\s+(.+)$', 1),
+        )
+        .filter(f.length('regimen_norm') > 0)
+        .groupBy('regimen_norm')
+        .agg(f.collect_set('id').alias('ids'))
+    )
+
+    empty_str_arr = f.array().cast('array<string>')
+    children = mol_df.select(
+        'id',
+        f.coalesce(f.col('childChemblIds'), empty_str_arr).alias('related'),
+    )
+    parents = (
+        mol_df
+        .filter(f.col('parentId').isNotNull())
+        .select('id', f.array(f.col('parentId')).alias('related'))
+    )
+    parent_child = (
+        children.union(parents)
+        .groupBy('id')
+        .agg(f.array_distinct(f.flatten(f.collect_list('related'))).alias('related'))
+    )
+
+    return name_index, regimen_index, parent_child
+
+
 def chembl_molecule(
     source: dict[str, str],
     destination: str,

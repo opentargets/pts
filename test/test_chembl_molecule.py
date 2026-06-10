@@ -14,6 +14,11 @@ from pyspark.sql.types import (
 
 from pts.pyspark.chembl_molecule import _molecule_preprocess, process_molecules
 
+LABEL_SOURCE_SCHEMA_T = ArrayType(StructType([
+    StructField('label', StringType()),
+    StructField('source', StringType()),
+]))
+
 # --- Schemas matching the raw ChEMBL molecule input ---
 
 MOLECULE_STRUCTURES = StructType([
@@ -290,3 +295,48 @@ class TestParseAactBatch:
         from pts.pyspark.chembl_molecule import _parse_aact_batch
         out = _parse_aact_batch(self._batch_df(spark, 'not-valid-json')).collect()
         assert out == []
+
+
+class TestChemblIndexes:
+    def _mol_df(self, spark):
+        schema = StructType([
+            StructField('id', StringType()),
+            StructField('name', StringType()),
+            StructField('synonyms', LABEL_SOURCE_SCHEMA_T),
+            StructField('tradeNames', LABEL_SOURCE_SCHEMA_T),
+            StructField('parentId', StringType()),
+            StructField('childChemblIds', ArrayType(StringType())),
+        ])
+        data = [
+            Row(id='CHEMBL1', name='Filgrastim',
+                synonyms=[Row(label='Neupogen-syn', source='ChEMBL')],
+                tradeNames=[Row(label='Neupogen', source='ChEMBL')],
+                parentId=None, childChemblIds=['CHEMBL2']),
+            Row(id='CHEMBL9', name='Aspirin component of FOLFOX',
+                synonyms=[Row(label='ingredient X COMPONENT OF FOLFOX', source='ChEMBL')],
+                tradeNames=[], parentId=None, childChemblIds=[]),
+            Row(id='CHEMBL2', name='Sub', synonyms=[], tradeNames=[],
+                parentId='CHEMBL1', childChemblIds=[]),
+        ]
+        return spark.createDataFrame(data, schema)
+
+    def test_name_index_covers_name_syn_trade(self, spark):
+        from pts.pyspark.chembl_molecule import _build_chembl_indexes
+        name_idx, _regimen, _pc = _build_chembl_indexes(self._mol_df(spark))
+        got = {r['name_norm']: set(r['ids']) for r in name_idx.collect()}
+        assert got['filgrastim'] == {'CHEMBL1'}
+        assert got['neupogen'] == {'CHEMBL1'}
+        assert got['neupogen-syn'] == {'CHEMBL1'}
+
+    def test_regimen_index_extracts_regimen(self, spark):
+        from pts.pyspark.chembl_molecule import _build_chembl_indexes
+        _name, regimen_idx, _pc = _build_chembl_indexes(self._mol_df(spark))
+        got = {r['regimen_norm']: set(r['ids']) for r in regimen_idx.collect()}
+        assert got['folfox'] == {'CHEMBL9'}
+
+    def test_parent_child_includes_children(self, spark):
+        from pts.pyspark.chembl_molecule import _build_chembl_indexes
+        _name, _regimen, pc = _build_chembl_indexes(self._mol_df(spark))
+        got = {r['id']: set(r['related']) for r in pc.collect()}
+        assert 'CHEMBL2' in got['CHEMBL1']
+        assert 'CHEMBL1' in got['CHEMBL2']
