@@ -2,7 +2,7 @@
 
 Processes raw ChEMBL molecule data into the Open Targets molecule format,
 including synonyms, cross-references, and molecule hierarchy. Clinical-trial
-(AACT) synonym mining lives in :mod:`pts.pyspark.aact_synonyms`.
+(AACT) synonym mining lives in :mod:`pts.pyspark.drug_utils.aact_synonyms`.
 """
 
 from typing import Any
@@ -12,9 +12,9 @@ from loguru import logger
 from pyspark.sql import DataFrame
 from pyspark.sql.types import ArrayType, MapType, StringType
 
-from pts.pyspark.aact_synonyms import merge_aact_synonyms, mine_aact_synonyms, parse_aact_batch
-from pts.pyspark.common.labels import CHEMBL_SOURCE, LABEL_SOURCE_SCHEMA, as_label_source
 from pts.pyspark.common.session import Session
+from pts.pyspark.drug_utils.aact_synonyms import merge_aact_synonyms, mine_aact_synonyms, parse_aact_batch
+from pts.pyspark.drug_utils.labels import CHEMBL_SOURCE, LABEL_SOURCE_SCHEMA, as_label_source
 
 
 def chembl_molecule(

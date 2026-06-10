@@ -19,7 +19,7 @@ LABEL_SOURCE_SCHEMA_T = ArrayType(StructType([
 
 class TestNormalizeName:
     def test_normalization(self, spark):
-        from pts.pyspark.aact_synonyms import _normalize_name
+        from pts.pyspark.drug_utils.aact_synonyms import _normalize_name
         data = [
             Row(raw='  Revlimid®  '),
             Row(raw='G  CSF'),
@@ -56,7 +56,7 @@ class TestParseAactBatch:
         return spark.createDataFrame(data, outer_schema)
 
     def test_parse_extracts_all_roles(self, spark):
-        from pts.pyspark.aact_synonyms import parse_aact_batch
+        from pts.pyspark.drug_utils.aact_synonyms import parse_aact_batch
         payload = json.dumps({
             'investigated_drugs': [{'drug': 'Lenalidomide', 'synonyms': ['Revlimid', 'CC-5013']}],
             'comparator_drugs': [{'drug': 'Dexamethasone', 'synonyms': []}],
@@ -70,7 +70,7 @@ class TestParseAactBatch:
         assert all(r['nct_id'] == 'NCT01' for r in out)
 
     def test_malformed_json_dropped(self, spark):
-        from pts.pyspark.aact_synonyms import parse_aact_batch
+        from pts.pyspark.drug_utils.aact_synonyms import parse_aact_batch
         out = parse_aact_batch(self._batch_df(spark, 'not-valid-json')).collect()
         assert out == []
 
@@ -99,7 +99,7 @@ class TestChemblIndexes:
         return spark.createDataFrame(data, schema)
 
     def test_name_index_covers_name_syn_trade(self, spark):
-        from pts.pyspark.aact_synonyms import _build_chembl_indexes
+        from pts.pyspark.drug_utils.aact_synonyms import _build_chembl_indexes
         name_idx, _regimen, _pc = _build_chembl_indexes(self._mol_df(spark))
         got = {r['name_norm']: set(r['ids']) for r in name_idx.collect()}
         assert got['filgrastim'] == {'CHEMBL1'}
@@ -107,13 +107,13 @@ class TestChemblIndexes:
         assert got['neupogen-syn'] == {'CHEMBL1'}
 
     def test_regimen_index_extracts_regimen(self, spark):
-        from pts.pyspark.aact_synonyms import _build_chembl_indexes
+        from pts.pyspark.drug_utils.aact_synonyms import _build_chembl_indexes
         _name, regimen_idx, _pc = _build_chembl_indexes(self._mol_df(spark))
         got = {r['regimen_norm']: set(r['ids']) for r in regimen_idx.collect()}
         assert got['folfox'] == {'CHEMBL9'}
 
     def test_parent_child_includes_children(self, spark):
-        from pts.pyspark.aact_synonyms import _build_chembl_indexes
+        from pts.pyspark.drug_utils.aact_synonyms import _build_chembl_indexes
         _name, _regimen, pc = _build_chembl_indexes(self._mol_df(spark))
         got = {r['id']: set(r['related']) for r in pc.collect()}
         assert 'CHEMBL2' in got['CHEMBL1']
@@ -122,7 +122,7 @@ class TestChemblIndexes:
 
 class TestAnchorCandidates:
     def test_synonym_anchors_novel_candidate(self, spark):
-        from pts.pyspark.aact_synonyms import _anchor_candidates
+        from pts.pyspark.drug_utils.aact_synonyms import _anchor_candidates
         entries = spark.createDataFrame(
             [Row(nct_id='NCT1', members=['filgrastim', 'g-csf'])],
             StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
@@ -140,7 +140,7 @@ class TestAnchorCandidates:
         assert ('CHEMBL1', 'g-csf', 'NOVEL') in rows
 
     def test_over_ambiguous_member_skipped(self, spark):
-        from pts.pyspark.aact_synonyms import _anchor_candidates
+        from pts.pyspark.drug_utils.aact_synonyms import _anchor_candidates
         entries = spark.createDataFrame(
             [Row(nct_id='NCT1', members=['ssri', 'fluoxetine'])],
             StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
@@ -157,7 +157,7 @@ class TestAnchorCandidates:
         assert out == []
 
     def test_conflict_status(self, spark):
-        from pts.pyspark.aact_synonyms import _anchor_candidates
+        from pts.pyspark.drug_utils.aact_synonyms import _anchor_candidates
         # entry anchors CHEMBL1 (via 'filgrastim'); 'aspirin' resolves to unrelated CHEMBL5 -> CONFLICT for CHEMBL1
         entries = spark.createDataFrame(
             [Row(nct_id='NCT1', members=['filgrastim', 'aspirin'])],
@@ -175,7 +175,7 @@ class TestAnchorCandidates:
         assert ('CHEMBL1', 'aspirin', 'CONFLICT') in out
 
     def test_parent_child_status(self, spark):
-        from pts.pyspark.aact_synonyms import _anchor_candidates
+        from pts.pyspark.drug_utils.aact_synonyms import _anchor_candidates
         # entry anchors CHEMBL1; 'pegfilgrastim' resolves to CHEMBL2 which is a child of CHEMBL1 -> PARENT_CHILD
         entries = spark.createDataFrame(
             [Row(nct_id='NCT1', members=['filgrastim', 'pegfilgrastim'])],
@@ -193,7 +193,7 @@ class TestAnchorCandidates:
         assert ('CHEMBL1', 'pegfilgrastim', 'PARENT_CHILD') in out
 
     def test_exactly_cap_is_allowed(self, spark):
-        from pts.pyspark.aact_synonyms import _anchor_candidates
+        from pts.pyspark.drug_utils.aact_synonyms import _anchor_candidates
         entries = spark.createDataFrame(
             [Row(nct_id='NCT1', members=['generic', 'g-csf'])],
             StructType([StructField('nct_id', StringType()), StructField('members', ArrayType(StringType()))]),
@@ -221,7 +221,7 @@ class TestCleanupRules:
         return spark.createDataFrame([Row(**r) for r in rows], schema)
 
     def test_drops_parent_child_and_noise(self, spark):
-        from pts.pyspark.aact_synonyms import _apply_cleanup_rules
+        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
             [Row(regimen_norm='folfox', ids=['CHEMBLX'])],
             StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
@@ -245,7 +245,7 @@ class TestCleanupRules:
         assert kept == {'g-csf'}
 
     def test_descriptor_code_extraction(self, spark):
-        from pts.pyspark.aact_synonyms import _apply_cleanup_rules
+        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
             [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
         )
@@ -258,7 +258,7 @@ class TestCleanupRules:
         assert out == {'mk2206'}
 
     def test_conflict_kept(self, spark):
-        from pts.pyspark.aact_synonyms import _apply_cleanup_rules
+        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
             [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
         )
@@ -271,7 +271,7 @@ class TestCleanupRules:
         assert out == {'aspirin'}
 
     def test_word_boundary_not_substring(self, spark):
-        from pts.pyspark.aact_synonyms import _apply_cleanup_rules
+        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
             [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
         )
@@ -288,7 +288,7 @@ class TestCleanupRules:
         assert out == {'nystatin', 'cellcept'}
 
     def test_class_keyword_with_code_kept(self, spark):
-        from pts.pyspark.aact_synonyms import _apply_cleanup_rules
+        from pts.pyspark.drug_utils.aact_synonyms import _apply_cleanup_rules
         regimen = spark.createDataFrame(
             [], StructType([StructField('regimen_norm', StringType()), StructField('ids', ArrayType(StringType()))]),
         )
@@ -314,7 +314,7 @@ class TestMineAactSynonyms:
         )
 
     def test_min_trials_gate_and_anchor(self, spark):
-        from pts.pyspark.aact_synonyms import mine_aact_synonyms
+        from pts.pyspark.drug_utils.aact_synonyms import mine_aact_synonyms
         entries = spark.createDataFrame(
             [
                 Row(nct_id='NCT1', members=['filgrastim', 'g-csf']),
@@ -328,7 +328,7 @@ class TestMineAactSynonyms:
         assert ('CHEMBL1', 'csa-once') not in out
 
     def test_same_trial_duplicate_counts_once(self, spark):
-        from pts.pyspark.aact_synonyms import mine_aact_synonyms
+        from pts.pyspark.drug_utils.aact_synonyms import mine_aact_synonyms
         entries = spark.createDataFrame(
             [
                 Row(nct_id='NCT1', members=['filgrastim', 'g-csf']),
@@ -343,7 +343,7 @@ class TestMineAactSynonyms:
 class TestMergeAactSynonyms:
     def test_aact_label_already_in_chembl_synonyms_not_duplicated(self, spark):
         """An AACT label matching an existing ChEMBL synonym (case-insensitively) is not added again."""
-        from pts.pyspark.aact_synonyms import merge_aact_synonyms
+        from pts.pyspark.drug_utils.aact_synonyms import merge_aact_synonyms
         mol_combined = spark.createDataFrame(
             [Row(id='CHEMBL1', synonyms=[Row(label='G-CSF', source='ChEMBL')])],
             StructType([StructField('id', StringType()), StructField('synonyms', LABEL_SOURCE_SCHEMA_T)]),

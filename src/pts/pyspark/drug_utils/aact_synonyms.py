@@ -12,7 +12,7 @@ seen in ``MIN_TRIALS`` distinct trials → merge into the molecule synonyms.
 import pyspark.sql.functions as f
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
-from pts.pyspark.common.labels import AACT_SOURCE, LABEL_SOURCE_SCHEMA, as_label_source
+from pts.pyspark.drug_utils.labels import AACT_SOURCE, LABEL_SOURCE_SCHEMA, as_label_source
 
 # --- Tunables ---------------------------------------------------------------
 
