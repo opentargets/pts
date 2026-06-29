@@ -23,12 +23,11 @@ key columns) is added to both output datasets:
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import pyspark.sql.functions as f
 from loguru import logger
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql.types import BooleanType, IntegerType, LongType
 
 from pts.pyspark.common.session import Session
@@ -52,10 +51,6 @@ _SWAP_MAP: dict[str, str] = {
 }
 
 _BIDIRECTIONAL_SOURCES = ('reactome', 'intact', 'signor')
-
-# UDF: truncate a string at the first '_' or '-' character.
-# E.g. 'URS123-2_992' → 'URS123'.
-_GET_CODE = f.udf(lambda s: re.split(r'[_\-]', s.strip())[0] if s else s)
 
 # Evidence channel definitions for STRING data
 _STRING_EVIDENCE_CHANNELS = [
@@ -97,7 +92,17 @@ _DIMENSION_COLS: list[str] = [
 ]
 
 
-def _interaction_id_expr() -> 'f.Column':
+def _get_code(col_expr: Column) -> Column:
+    """Extract the identifier prefix before the first '_' or '-' character.
+
+    Native Spark SQL replacement for the former Python UDF; avoids JVM/Python
+    serialisation overhead and enables join optimisations.
+    E.g. 'URS123-2_992' → 'URS123'.
+    """
+    return f.split(f.trim(col_expr), r'[_\-]')[0]
+
+
+def _interaction_id_expr() -> Column:
     """Return a SHA-256 hash expression over the interaction uniqueness key columns.
 
     Null values are coalesced to empty strings so that nullable columns
@@ -514,11 +519,15 @@ def _generate_interactions(df: DataFrame, mapping_info: DataFrame) -> DataFrame:
         )
     )
 
+    # Broadcast mapping_info to convert both gene-mapping joins from sort-merge
+    # (shuffle on the large interaction table) to broadcast hash joins.
+    mapping_bc = f.broadcast(mapping_info)
+
     interaction_map_left = (
         interactions
         .join(
-            mapping_info,
-            _GET_CODE(f.col('intA')) == f.col('mapped_id'),
+            mapping_bc,
+            _get_code(f.col('intA')) == f.col('mapped_id'),
             'left',
         )
         .withColumn(
@@ -531,8 +540,8 @@ def _generate_interactions(df: DataFrame, mapping_info: DataFrame) -> DataFrame:
     interaction_mapped = (
         interaction_map_left
         .join(
-            mapping_info.alias('mapping'),
-            _GET_CODE(f.col('intB')) == f.col('mapping.mapped_id'),
+            mapping_bc.alias('mapping'),
+            _get_code(f.col('intB')) == f.col('mapping.mapped_id'),
             'left',
         )
         .withColumn(
@@ -751,30 +760,43 @@ def interaction(
     logger.info('Transforming STRING proteins (score_threshold=%d)', score_threshold)
     string_proteins = _transform_string_proteins(strings_raw, score_threshold, string_version)
     string_mapping = ensproteins_df.withColumnRenamed('protein_id', 'mapped_id').distinct()
-    string_interactions_df = _generate_interactions(string_proteins, string_mapping).filter(
-        f.col('evidences.evidence_score') > 0
+
+    # Cache the full interaction evidence DataFrames so that the three
+    # downstream write actions (aggregated, evidence, unmatched) all reuse
+    # the same materialised result instead of re-executing the expensive
+    # gene-mapping joins from scratch each time.
+    logger.info('Transforming STRING interactions')
+    string_interactions_df = (
+        _generate_interactions(string_proteins, string_mapping)
+        .filter(f.col('evidences.evidence_score') > 0)
+        .cache()
     )
 
-    # IntAct interactions
     logger.info('Transforming IntAct interactions')
-    intact_interactions_df = _generate_interactions(intact_raw, mapping_df)
+    intact_interactions_df = _generate_interactions(intact_raw, mapping_df).cache()
 
     # Filter: remove null targetA (keep for unmatched output)
     intact_valid = intact_interactions_df.filter(f.col('targetA').isNotNull())
     string_valid = string_interactions_df.filter(f.col('targetA').isNotNull())
 
+    # Select and flatten fields once; cache so both the aggregation and the
+    # evidence projection share a single materialised scan of the join output.
+    logger.info('Selecting interaction fields')
+    intact_fields = _select_interaction_fields(intact_valid).cache()
+    string_fields = _select_interaction_fields(string_valid).cache()
+
     # Aggregated interactions
     logger.info('Aggregating interaction pairs')
-    intact_agg = _generate_interactions_agg(_select_interaction_fields(intact_valid))
-    string_agg = _generate_interactions_agg(_select_interaction_fields(string_valid))
+    intact_agg = _generate_interactions_agg(intact_fields)
+    string_agg = _generate_interactions_agg(string_fields)
     interactions_parts = partition_count.get('interactions')
     aggregated_raw = rename_columns_to_camel_case(intact_agg.unionByName(string_agg))
     aggregated = aggregated_raw.coalesce(interactions_parts) if interactions_parts else aggregated_raw
 
     # Evidences — dimension columns replaced by interactionId
     logger.info('Generating interaction evidences')
-    intact_evidences = _select_evidence_fields(_select_interaction_fields(intact_valid))
-    string_evidences = _select_evidence_fields(_select_interaction_fields(string_valid)).withColumn(
+    intact_evidences = _select_evidence_fields(intact_fields)
+    string_evidences = _select_evidence_fields(string_fields).withColumn(
         'evidence_score', f.col('evidence_score') / 1000
     )
     evidence_parts = partition_count.get('interactions_evidence')
@@ -783,7 +805,7 @@ def interaction(
     )
     evidences = evidences_raw.coalesce(evidence_parts) if evidence_parts else evidences_raw
 
-    # Unmatched
+    # Unmatched — uses the pre-filter cached DataFrames
     logger.info('Collecting unmatched interactors')
     unmatched = _get_unmatched(intact_interactions_df, string_interactions_df)
 
@@ -795,3 +817,8 @@ def interaction(
 
     logger.info('Writing interactions_unmatched to %s', destination['interactions_unmatched'])
     unmatched.write.mode('overwrite').parquet(destination['interactions_unmatched'])
+
+    intact_fields.unpersist()
+    string_fields.unpersist()
+    intact_interactions_df.unpersist()
+    string_interactions_df.unpersist()
