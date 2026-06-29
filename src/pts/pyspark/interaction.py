@@ -7,6 +7,18 @@ interaction records and per-evidence records.
 Scala sources ported:
     - Interaction.scala (main assembly)
     - stringProtein/StringProtein.scala (STRING protein transformation)
+
+Schema design
+-------------
+A synthetic ``interactionId`` column (SHA-256 hash of the seven uniqueness
+key columns) is added to both output datasets:
+
+* ``interactions``         – one row per pair; carries all dimension/identity
+                             columns plus ``interactionId``, count, and scoring.
+* ``interactions_evidence``– one row per evidence entry; carries only
+                             ``interactionId`` (foreign key into interactions)
+                             plus the evidence-specific fields.  The identity
+                             columns are *not* duplicated here.
 """
 
 from __future__ import annotations
@@ -56,6 +68,46 @@ _STRING_EVIDENCE_CHANNELS = [
     ('database', ''),
     ('textmining', 'MI:0110'),
 ]
+
+# Columns that uniquely identify an interaction pair, used for interactionId.
+_INTERACTION_KEY_COLS: list[str] = [
+    'sourceDatabase',
+    'targetA',
+    'intA',
+    'intABiologicalRole',
+    'targetB',
+    'intB',
+    'intBBiologicalRole',
+]
+
+# Dimension/identity columns present in _select_interaction_fields output that
+# are dropped from the evidence dataset (replaced by interactionId).
+_DIMENSION_COLS: list[str] = [
+    'sourceDatabase',
+    'targetA',
+    'intA',
+    'intA_source',
+    'intABiologicalRole',
+    'targetB',
+    'intB',
+    'intB_source',
+    'intBBiologicalRole',
+    'speciesA',
+    'speciesB',
+]
+
+
+def _interaction_id_expr() -> 'f.Column':
+    """Return a SHA-256 hash expression over the interaction uniqueness key columns.
+
+    Null values are coalesced to empty strings so that nullable columns
+    (targetA, targetB) still produce a stable, deterministic identifier.
+    Fields are delimited by U+0001 to prevent cross-field hash collisions.
+    """
+    return f.sha2(
+        f.concat_ws('\x01', *[f.coalesce(f.col(c), f.lit('')) for c in _INTERACTION_KEY_COLS]),
+        256,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +445,10 @@ def _generate_interactions(df: DataFrame, mapping_info: DataFrame) -> DataFrame:
 
     Returns:
         DataFrame of interaction evidence records (one row per evidence entry,
-        after exploding the evidences array).
+        after exploding the evidences array).  ``sourceDatabase`` is retained
+        as a flat column alongside ``interactionResources`` so that downstream
+        steps can compute ``interactionId`` without re-extracting it from the
+        struct.
     """
     interactions = (
         df
@@ -499,21 +554,27 @@ def _generate_interactions(df: DataFrame, mapping_info: DataFrame) -> DataFrame:
 
     full_interactions = interaction_mapped.unionByName(reverse_interactions)
 
-    return full_interactions.withColumn('evidences', f.explode(f.col('evidencesList'))).drop(
-        'evidencesList', 'sourceDatabase'
-    )
+    # sourceDatabase is retained (not dropped) so that _interaction_id_expr()
+    # can reference it directly in downstream steps without re-extracting from
+    # the interactionResources struct.
+    return full_interactions.withColumn('evidences', f.explode(f.col('evidencesList'))).drop('evidencesList')
 
 
-def _select_fields(df: DataFrame) -> DataFrame:
-    """Select and flatten fields for the interaction_evidences index.
+def _select_interaction_fields(df: DataFrame) -> DataFrame:
+    """Select and flatten fields for the common interaction-evidence representation.
+
+    The output is used as shared input for both ``_generate_interactions_agg``
+    (which needs all dimension columns) and ``_select_evidence_fields`` (which
+    replaces them with ``interactionId``).
 
     Args:
-        df: Interaction evidence DataFrame.
+        df: Interaction evidence DataFrame from ``_generate_interactions``.
 
     Returns:
-        DataFrame with flattened evidence fields.
+        DataFrame with flattened dimension and evidence fields.
     """
     return df.selectExpr(
+        'sourceDatabase',
         'targetA',
         'intA',
         'intA_source',
@@ -530,17 +591,36 @@ def _select_fields(df: DataFrame) -> DataFrame:
     )
 
 
+def _select_evidence_fields(df: DataFrame) -> DataFrame:
+    """Produce the evidence-only projection, replacing dimension columns with interactionId.
+
+    The interaction identity columns listed in ``_DIMENSION_COLS`` are dropped;
+    they are encoded in ``interactionId`` so consumers can join back to the
+    interactions dataset when needed.
+
+    Args:
+        df: Output of ``_select_interaction_fields``.
+
+    Returns:
+        DataFrame with interactionId, interactionResources, interactionScore,
+        and all flattened evidence sub-fields.
+    """
+    return df.withColumn('interactionId', _interaction_id_expr()).drop(*_DIMENSION_COLS)
+
+
 def _generate_interactions_agg(df: DataFrame) -> DataFrame:
     """Aggregate interaction evidence rows into per-pair summary records.
 
     Groups by source database, targetA/B, intA/B, biological roles and species,
     and produces a count of evidence rows and the first interaction score.
+    Adds ``interactionId`` post-aggregation as the primary key for the dataset.
 
     Args:
-        df: Interaction evidence DataFrame (from _select_fields).
+        df: Interaction evidence DataFrame (from ``_select_interaction_fields``).
 
     Returns:
-        DataFrame with aggregated interaction records and sourceDatabase column.
+        DataFrame with aggregated interaction records, sourceDatabase column,
+        and interactionId.
     """
     return (
         df
@@ -560,6 +640,7 @@ def _generate_interactions_agg(df: DataFrame) -> DataFrame:
             f.first(f.col('interactionScore')).alias('scoring'),
         )
         .withColumnRenamed('source_database', 'sourceDatabase')
+        .withColumn('interactionId', _interaction_id_expr())
     )
 
 
@@ -617,6 +698,14 @@ def interaction(
     Reads target, RNACentral, Human Mapping, Ensembl protein, IntAct, and
     STRING inputs. Produces aggregated interaction records, per-evidence
     records, and a list of unmatched interactor IDs.
+
+    Output schema
+    ~~~~~~~~~~~~~
+    ``interactions``          — one row per (source, targetA, targetB) pair with
+                                ``interactionId``, dimension columns, count, scoring.
+    ``interactions_evidence`` — one row per evidence entry with ``interactionId``
+                                (FK) and evidence-specific fields only; dimension
+                                columns are not repeated.
 
     Args:
         source: Input paths keyed by 'targets', 'rnacentral', 'humanmapping',
@@ -676,29 +765,23 @@ def interaction(
 
     # Aggregated interactions
     logger.info('Aggregating interaction pairs')
-    intact_agg = _generate_interactions_agg(_select_fields(intact_valid))
-    string_agg = _generate_interactions_agg(_select_fields(string_valid))
+    intact_agg = _generate_interactions_agg(_select_interaction_fields(intact_valid))
+    string_agg = _generate_interactions_agg(_select_interaction_fields(string_valid))
     interactions_parts = partition_count.get('interactions')
     aggregated_raw = rename_columns_to_camel_case(intact_agg.unionByName(string_agg))
     aggregated = aggregated_raw.coalesce(interactions_parts) if interactions_parts else aggregated_raw
 
-    # Evidences
+    # Evidences — dimension columns replaced by interactionId
     logger.info('Generating interaction evidences')
-    intact_evidences = _select_fields(intact_valid)
-    string_evidences = _select_fields(string_valid).withColumn('evidence_score', f.col('evidence_score') / 1000)
-
-    # Union evidences (string first, then intact — match Scala unionDataframeDifferentSchema order)
-    all_columns = list(dict.fromkeys(string_evidences.columns + intact_evidences.columns))
-    for col_name in all_columns:
-        if col_name not in string_evidences.columns:
-            string_evidences = string_evidences.withColumn(col_name, f.lit(None))
-        if col_name not in intact_evidences.columns:
-            intact_evidences = intact_evidences.withColumn(col_name, f.lit(None))
-
-    evidences_raw = string_evidences.select(all_columns).unionByName(intact_evidences.select(all_columns))
+    intact_evidences = _select_evidence_fields(_select_interaction_fields(intact_valid))
+    string_evidences = _select_evidence_fields(_select_interaction_fields(string_valid)).withColumn(
+        'evidence_score', f.col('evidence_score') / 1000
+    )
     evidence_parts = partition_count.get('interactions_evidence')
-    evidences_renamed = rename_columns_to_camel_case(evidences_raw)
-    evidences = evidences_renamed.coalesce(evidence_parts) if evidence_parts else evidences_renamed
+    evidences_raw = rename_columns_to_camel_case(
+        string_evidences.unionByName(intact_evidences, allowMissingColumns=True)
+    )
+    evidences = evidences_raw.coalesce(evidence_parts) if evidence_parts else evidences_raw
 
     # Unmatched
     logger.info('Collecting unmatched interactors')
