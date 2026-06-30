@@ -10,12 +10,12 @@ Scala sources ported:
 
 Schema design
 -------------
-A synthetic ``interactionId`` column (SHA-256 hash of the seven uniqueness
-key columns) is added to both output datasets:
+A synthetic ``interactionId`` column (64-bit integer xxhash64 over the nine
+uniqueness key columns) is added to both output datasets:
 
-* ``interactions``         – one row per pair; carries all dimension/identity
+* ``interactions``         - one row per pair; carries all dimension/identity
                              columns plus ``interactionId``, count, and scoring.
-* ``interactions_evidence``– one row per evidence entry; carries only
+* ``interactions_evidence``- one row per evidence entry; carries only
                              ``interactionId`` (foreign key into interactions)
                              plus the evidence-specific fields.  The identity
                              columns are *not* duplicated here.
@@ -64,7 +64,12 @@ _STRING_EVIDENCE_CHANNELS = [
     ('textmining', 'MI:0110'),
 ]
 
-# Columns that uniquely identify an interaction pair, used for interactionId.
+# Columns that uniquely identify an interaction pair. SINGLE SOURCE OF TRUTH for
+# BOTH the aggregation groupBy (_generate_interactions_agg) and the interactionId
+# hash (_interaction_id_expr), so the two can never drift. speciesA/speciesB are
+# included because the aggregation groups by them; omitting them would let two
+# aggregate rows share one interactionId when species is not functionally
+# determined by the rest of the key.
 _INTERACTION_KEY_COLS: list[str] = [
     'sourceDatabase',
     'targetA',
@@ -73,6 +78,8 @@ _INTERACTION_KEY_COLS: list[str] = [
     'targetB',
     'intB',
     'intBBiologicalRole',
+    'speciesA',
+    'speciesB',
 ]
 
 # Dimension/identity columns present in _select_interaction_fields output that
@@ -103,15 +110,15 @@ def _get_code(col_expr: Column) -> Column:
 
 
 def _interaction_id_expr() -> Column:
-    """Return a SHA-256 hash expression over the interaction uniqueness key columns.
+    """Return a 64-bit integer (xxhash64) surrogate key over the interaction uniqueness key columns.
 
     Null values are coalesced to empty strings so that nullable columns
     (targetA, targetB) still produce a stable, deterministic identifier.
-    Fields are delimited by U+0001 to prevent cross-field hash collisions.
+    The `.cast('string')` renders speciesA/speciesB structs deterministically
+    and is a no-op for flat string columns.
     """
-    return f.sha2(
-        f.concat_ws('\x01', *[f.coalesce(f.col(c), f.lit('')) for c in _INTERACTION_KEY_COLS]),
-        256,
+    return f.xxhash64(
+        *[f.coalesce(f.col(c).cast('string'), f.lit('')) for c in _INTERACTION_KEY_COLS],
     )
 
 
@@ -633,22 +640,13 @@ def _generate_interactions_agg(df: DataFrame) -> DataFrame:
     """
     return (
         df
-        .groupBy(
-            'interactionResources.source_database',
-            'targetA',
-            'intA',
-            'intABiologicalRole',
-            'targetB',
-            'intB',
-            'intBBiologicalRole',
-            'speciesA',
-            'speciesB',
-        )
+        # _INTERACTION_KEY_COLS uses the flat ``sourceDatabase`` from
+        # _select_interaction_fields, so no rename of the nested struct field is needed.
+        .groupBy(*_INTERACTION_KEY_COLS)
         .agg(
             f.count('*').alias('count'),
             f.first(f.col('interactionScore')).alias('scoring'),
         )
-        .withColumnRenamed('source_database', 'sourceDatabase')
         .withColumn('interactionId', _interaction_id_expr())
     )
 
@@ -730,6 +728,9 @@ def interaction(
     score_threshold: int = int(settings.get('scorethreshold', 0))
     string_version: str = str(settings.get('string_version', '12'))
     partition_count = settings.get('partition_count') or {}
+    # Auto-scales with the cluster (cores across workers). Used to spread the
+    # non-splittable STRING gzip and to parallelise the cached IntAct frame.
+    cache_parts = spark.sparkContext.defaultParallelism
 
     logger.info('Loading target data from %s', source['targets'])
     target_df = spark.read.parquet(source['targets'])
@@ -750,7 +751,7 @@ def interaction(
     intact_raw = spark.read.json(source['intact'])
 
     logger.info('Loading STRING data from %s', source['strings'])
-    strings_raw = spark.read.option('sep', ' ').option('header', 'true').csv(source['strings'])
+    strings_raw = spark.read.option('sep', ' ').option('header', 'true').csv(source['strings']).repartition(cache_parts)
 
     # Build mapping lookup
     logger.info('Generating ID mapping table')
@@ -761,10 +762,11 @@ def interaction(
     string_proteins = _transform_string_proteins(strings_raw, score_threshold, string_version)
     string_mapping = ensproteins_df.withColumnRenamed('protein_id', 'mapped_id').distinct()
 
-    # Cache the full interaction evidence DataFrames so that the three
-    # downstream write actions (aggregated, evidence, unmatched) all reuse
-    # the same materialised result instead of re-executing the expensive
-    # gene-mapping joins from scratch each time.
+    # Cache the full interaction evidence DataFrames so the three downstream write
+    # actions (aggregated, evidence, unmatched) reuse the same materialised result
+    # instead of re-executing the expensive gene-mapping joins each time. STRING is
+    # already repartitioned at read (its gzip is non-splittable); IntAct is
+    # repartitioned here so its cached frame is read in parallel by all three actions.
     logger.info('Transforming STRING interactions')
     string_interactions_df = (
         _generate_interactions(string_proteins, string_mapping)
@@ -773,7 +775,7 @@ def interaction(
     )
 
     logger.info('Transforming IntAct interactions')
-    intact_interactions_df = _generate_interactions(intact_raw, mapping_df).cache()
+    intact_interactions_df = _generate_interactions(intact_raw, mapping_df).repartition(cache_parts).cache()
 
     # Filter: remove null targetA (keep for unmatched output)
     intact_valid = intact_interactions_df.filter(f.col('targetA').isNotNull())
@@ -791,7 +793,7 @@ def interaction(
     string_agg = _generate_interactions_agg(string_fields)
     interactions_parts = partition_count.get('interactions')
     aggregated_raw = rename_columns_to_camel_case(intact_agg.unionByName(string_agg))
-    aggregated = aggregated_raw.coalesce(interactions_parts) if interactions_parts else aggregated_raw
+    aggregated = aggregated_raw.repartition(interactions_parts) if interactions_parts else aggregated_raw
 
     # Evidences — dimension columns replaced by interactionId
     logger.info('Generating interaction evidences')
@@ -803,22 +805,23 @@ def interaction(
     evidences_raw = rename_columns_to_camel_case(
         string_evidences.unionByName(intact_evidences, allowMissingColumns=True)
     )
-    evidences = evidences_raw.coalesce(evidence_parts) if evidence_parts else evidences_raw
+    evidences = evidences_raw.repartition(evidence_parts) if evidence_parts else evidences_raw
 
     # Unmatched — uses the pre-filter cached DataFrames
     logger.info('Collecting unmatched interactors')
     unmatched = _get_unmatched(intact_interactions_df, string_interactions_df)
 
-    logger.info('Writing interactions to %s', destination['interactions'])
-    aggregated.write.mode('overwrite').parquet(destination['interactions'])
+    try:
+        logger.info('Writing interactions to %s', destination['interactions'])
+        aggregated.write.mode('overwrite').parquet(destination['interactions'])
 
-    logger.info('Writing interactions_evidence to %s', destination['interactions_evidence'])
-    evidences.write.mode('overwrite').parquet(destination['interactions_evidence'])
+        logger.info('Writing interactions_evidence to %s', destination['interactions_evidence'])
+        evidences.write.mode('overwrite').parquet(destination['interactions_evidence'])
 
-    logger.info('Writing interactions_unmatched to %s', destination['interactions_unmatched'])
-    unmatched.write.mode('overwrite').parquet(destination['interactions_unmatched'])
-
-    intact_fields.unpersist()
-    string_fields.unpersist()
-    intact_interactions_df.unpersist()
-    string_interactions_df.unpersist()
+        logger.info('Writing interactions_unmatched to %s', destination['interactions_unmatched'])
+        unmatched.write.mode('overwrite').parquet(destination['interactions_unmatched'])
+    finally:
+        intact_fields.unpersist()
+        string_fields.unpersist()
+        intact_interactions_df.unpersist()
+        string_interactions_df.unpersist()
