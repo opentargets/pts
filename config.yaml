@@ -1,5 +1,5 @@
 ---
-work_path: ../pipeline_work
+work_path: /Users/dsuveges/project_data/releases/26.06
 log_level: DEBUG
 pool_size: 4
 
@@ -424,6 +424,19 @@ steps:
         gene_code: input/target/gencode/gencode.gff3.gz
         ensembl: intermediate/target/ensembl/homo_sapiens.parquet
       destination: output/transcript
+  ##################################################################################################
+
+  #: SAFETY_LIABILITY STEP :#############################################################################
+  safety_liability:
+    - name: pyspark safety_liability
+      pyspark: safety_liability
+      settings:
+        partition_count: 2
+      source:
+        safety_evidence: intermediate/target/safety.parquet
+        target: output/target
+        diseases: output/disease
+      destination: output/safety_liability
   ##################################################################################################
 
   #: TARGET_SAFETY STEP :############### - part of target, pyspark tasks must run standalone for now
