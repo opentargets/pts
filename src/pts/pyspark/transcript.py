@@ -44,8 +44,9 @@ def transcript(
     ensembl_raw = spark.read.parquet(source['ensembl'])
 
     gff = _parse_gff3(gene_code_raw)
+    exon_lut = _parse_exons(gene_code_raw)
     uniprot_lut = _build_uniprot_lut(ensembl_raw)
-    result = _join_and_finalise(gff, uniprot_lut)
+    result = _join_and_finalise(gff, exon_lut, uniprot_lut)
 
     partition_count = (settings or {}).get('partition_count', 2)
     logger.info(f'writing transcript index to {destination} ({partition_count} partitions)')
@@ -154,6 +155,61 @@ def _build_flags(tags_col: Column) -> Column:
     return f.concat(static, appris)
 
 
+def _parse_exons(df: DataFrame) -> DataFrame:
+    """Parse exon rows from a GFF3 DataFrame and group them by transcript.
+
+    Filters to exon features, extracts identifiers and coordinates from the
+    attributes column, applies the same chromosome normalisation as
+    :func:`_parse_gff3`, and aggregates into a per-transcript exons array.
+
+    Args:
+        df: Raw GFF3 DataFrame (tab-separated, comment lines skipped).
+
+    Returns:
+        DataFrame with columns ``transcriptId`` and ``exons``
+        (``array<struct<exonId, chromosome, start, end, strand>>``).
+    """
+    attrs = f.col('_c8')
+
+    exons = (
+        df
+        .filter(f.col('_c2') == 'exon')
+        .select(
+            f.regexp_extract(attrs, r'transcript_id=([^;.]+)', 1).alias('transcriptId'),
+            f.regexp_extract(attrs, r'exon_id=([^;.]+)', 1).alias('exonId'),
+            f.regexp_extract(f.col('_c0'), r'([0-9]{1,2}|X|Y|M)$', 1).alias('_chrom_raw'),
+            f.col('_c3').cast(LongType()).alias('start'),
+            f.col('_c4').cast(LongType()).alias('end'),
+            f.col('_c6').alias('strand'),
+        )
+        .withColumn('chromosome',
+            f.when(f.col('_chrom_raw') == 'M', 'MT').otherwise(f.col('_chrom_raw'))
+        )
+        .filter(
+            f.col('chromosome').isin(INCLUDE_CHROMOSOMES)
+            & f.col('transcriptId').startswith('ENST')
+            & (f.col('exonId') != '')
+        )
+        .drop('_chrom_raw')
+    )
+
+    return (
+        exons
+        .groupBy('transcriptId')
+        .agg(
+            f.collect_list(
+                f.struct(
+                    f.col('exonId'),
+                    f.col('chromosome'),
+                    f.col('start'),
+                    f.col('end'),
+                    f.col('strand'),
+                )
+            ).alias('exons')
+        )
+    )
+
+
 def _build_uniprot_lut(ensembl_df: DataFrame) -> DataFrame:
     """Build a (targetId, transcriptId) → uniprotIds lookup from the Ensembl parquet.
 
@@ -183,11 +239,12 @@ def _build_uniprot_lut(ensembl_df: DataFrame) -> DataFrame:
     )
 
 
-def _join_and_finalise(gff: DataFrame, uniprot_lut: DataFrame) -> DataFrame:
-    """Join GFF3 transcript data with per-transcript UniProt IDs.
+def _join_and_finalise(gff: DataFrame, exon_lut: DataFrame, uniprot_lut: DataFrame) -> DataFrame:
+    """Join GFF3 transcript data with exons and per-transcript UniProt IDs.
 
     Args:
         gff: Parsed GFF3 DataFrame from :func:`_parse_gff3`.
+        exon_lut: Per-transcript exon arrays from :func:`_parse_exons`.
         uniprot_lut: Per-transcript UniProt lookup from :func:`_build_uniprot_lut`.
 
     Returns:
@@ -195,6 +252,7 @@ def _join_and_finalise(gff: DataFrame, uniprot_lut: DataFrame) -> DataFrame:
     """
     return (
         gff
+        .join(exon_lut, on='transcriptId', how='left')
         .join(uniprot_lut, on=['targetId', 'transcriptId'], how='left')
         .select(
             'targetId',
@@ -209,5 +267,6 @@ def _join_and_finalise(gff: DataFrame, uniprot_lut: DataFrame) -> DataFrame:
             'orientation',
             'transcriptionStartSite',
             'flags',
+            'exons',
         )
     )
