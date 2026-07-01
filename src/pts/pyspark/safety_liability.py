@@ -94,7 +94,9 @@ def _build_safety_liabilities(
         diseases_df: Disease index parquet from ``output/disease``.
 
     Returns:
-        DataFrame with columns ``targetId`` and ``safetyLiabilities``.
+        DataFrame with one row per safety liability record and columns
+        ``targetId``, ``event``, ``eventId``, ``effects``, ``biosamples``,
+        ``datasource``, ``literature``, ``url``, ``studies``.
     """
     # Resolve ENSG IDs for symbol-keyed entries (ToxCast provides targetFromSourceId)
     enriched = (
@@ -114,29 +116,21 @@ def _build_safety_liabilities(
         )
     )
 
-    enriched = (
+    return (
         enriched
         .join(disease_mapping, enriched['eventId'] == disease_mapping['obsoleteTerm'], 'left_outer')
         .withColumn('eventId', f.coalesce(f.col('diseaseId'), f.col('eventId')))
         .drop('obsoleteTerm', 'diseaseId')
-    )
-
-    return (
-        enriched
         .filter(f.col('id').isNotNull())
         .select(
             f.col('id').alias('targetId'),
-            f.struct(
-                'event',
-                'eventId',
-                'effects',
-                'biosamples',
-                'datasource',
-                'literature',
-                'url',
-                'studies',
-            ).alias('liability'),
+            'event',
+            'eventId',
+            'effects',
+            'biosamples',
+            'datasource',
+            'literature',
+            'url',
+            'studies',
         )
-        .groupBy('targetId')
-        .agg(f.collect_set('liability').alias('safetyLiabilities'))
     )

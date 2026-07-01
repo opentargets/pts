@@ -116,7 +116,7 @@ def test_build_ensg_lookup_output_columns(spark):
 
 
 def test_build_safety_liabilities_output_columns(spark):
-    """Output has exactly targetId and safetyLiabilities columns."""
+    """Output has one row per liability record with flat columns."""
     safety = spark.createDataFrame(
         [_safety_row(ensg='ENSG00000001')], SAFETY_SCHEMA
     )
@@ -128,11 +128,14 @@ def test_build_safety_liabilities_output_columns(spark):
     )
     ensg_lut = _build_ensg_lookup(target)
     result = _build_safety_liabilities(safety, ensg_lut, diseases)
-    assert set(result.columns) == {'targetId', 'safetyLiabilities'}
+    assert set(result.columns) == {
+        'targetId', 'event', 'eventId', 'effects', 'biosamples',
+        'datasource', 'literature', 'url', 'studies',
+    }
 
 
-def test_build_safety_liabilities_groups_by_target(spark):
-    """Multiple liabilities for the same target are collected into one row."""
+def test_build_safety_liabilities_one_row_per_liability(spark):
+    """Multiple liabilities for the same target produce separate rows."""
     safety = spark.createDataFrame([
         _safety_row(ensg='ENSG00000001', event='hepatotoxicity', event_id='EFO_0001'),
         _safety_row(ensg='ENSG00000001', event='cardiotoxicity', event_id='EFO_0002'),
@@ -145,9 +148,8 @@ def test_build_safety_liabilities_groups_by_target(spark):
     )
     ensg_lut = _build_ensg_lookup(target)
     result = _build_safety_liabilities(safety, ensg_lut, diseases)
-    assert result.count() == 1
-    row = result.first()
-    assert len(row.safetyLiabilities) == 2
+    assert result.count() == 2
+    assert result.filter('targetId = "ENSG00000001"').count() == 2
 
 
 def test_build_safety_liabilities_resolves_symbol_to_ensg(spark):
@@ -213,8 +215,7 @@ def test_build_safety_liabilities_remaps_obsolete_efo(spark):
     ], DISEASE_SCHEMA)
     ensg_lut = _build_ensg_lookup(target)
     result = _build_safety_liabilities(safety, ensg_lut, diseases)
-    row = result.first()
-    assert row.safetyLiabilities[0].eventId == 'EFO_CURRENT'
+    assert result.first().eventId == 'EFO_CURRENT'
 
 
 def test_build_safety_liabilities_keeps_current_efo_unchanged(spark):
@@ -230,8 +231,7 @@ def test_build_safety_liabilities_keeps_current_efo_unchanged(spark):
     ], DISEASE_SCHEMA)
     ensg_lut = _build_ensg_lookup(target)
     result = _build_safety_liabilities(safety, ensg_lut, diseases)
-    row = result.first()
-    assert row.safetyLiabilities[0].eventId == 'EFO_CURRENT'
+    assert result.first().eventId == 'EFO_CURRENT'
 
 
 def test_build_safety_liabilities_multiple_targets(spark):
