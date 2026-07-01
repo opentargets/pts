@@ -66,7 +66,7 @@ def _parse_gff3(df: DataFrame) -> DataFrame:
     Returns:
         DataFrame with one row per transcript on canonical chromosomes,
         containing targetId, transcriptId, biotype, proteinId, chromosome,
-        start, end, orientation, transcriptionStartSite, isEnsemblCanonical,
+        start, end, strand, transcriptionStartSite, isEnsemblCanonical,
         and flags columns.
     """
     attrs = f.col('_c8')
@@ -86,7 +86,7 @@ def _parse_gff3(df: DataFrame) -> DataFrame:
             f.regexp_extract(f.col('_c0'), r'([0-9]{1,2}|X|Y|M)$', 1).alias('_chrom_raw'),
             f.col('_c3').cast(LongType()).alias('start'),
             f.col('_c4').cast(LongType()).alias('end'),
-            f.col('_c6').alias('orientation'),
+            f.col('_c6').alias('strand'),
             f.coalesce(f.array_contains(tags, 'Ensembl_canonical'), f.lit(False)).alias('isEnsemblCanonical'),
             tags.alias('_tags'),
         )
@@ -99,10 +99,10 @@ def _parse_gff3(df: DataFrame) -> DataFrame:
             & f.col('transcriptId').startswith('ENST')
         )
         .withColumn('proteinId',
-            f.when(f.col('_proteinId_raw') != '', f.col('_proteinId_raw'))
+            f.when(f.col('_proteinId_raw') != '', f.col('_proteinId_raw'))  # noqa: PLC1901
         )
         .withColumn('transcriptionStartSite',
-            f.when(f.col('orientation') == '+', f.col('start'))
+            f.when(f.col('strand') == '+', f.col('start'))
             .otherwise(f.col('end'))
             .cast(IntegerType())
         )
@@ -188,7 +188,7 @@ def _parse_exons(df: DataFrame) -> DataFrame:
         .filter(
             f.col('chromosome').isin(INCLUDE_CHROMOSOMES)
             & f.col('transcriptId').startswith('ENST')
-            & (f.col('exonId') != '')
+            & (f.col('exonId') != '')  # noqa: PLC1901
         )
         .drop('_chrom_raw')
     )
@@ -264,7 +264,7 @@ def _join_and_finalise(gff: DataFrame, exon_lut: DataFrame, uniprot_lut: DataFra
             'chromosome',
             'start',
             'end',
-            'orientation',
+            'strand',
             'transcriptionStartSite',
             'flags',
             'exons',
