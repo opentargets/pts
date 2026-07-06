@@ -8,8 +8,13 @@ on:
 
 jobs:
   test:
-    name: Run tests
+    name: Run tests (shard ${{ matrix.group }}/${{ strategy.job-total }})
     runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4]
 
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +40,9 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: run tests
-        run: uv run pytest test --doctest-modules src/pts
+        run: >
+          uv run pytest test --doctest-modules src/pts
+          --splits ${{ strategy.job-total }} --group ${{ matrix.group }}
 
   lint:
     name: Check code style
