@@ -1,8 +1,9 @@
 """Target tractability dataset generation.
 
-Processes the Open Targets tractability TSV and produces per-target
-tractability bucket assessments across small molecule, antibody, and
-other modalities. Only targets present in output/target are retained.
+Processes the Open Targets tractability TSV and produces one row per
+tractability bucket assessment (flat schema) across small molecule,
+antibody, and other modalities. Only targets present in output/target are
+retained.
 """
 
 from __future__ import annotations
@@ -61,8 +62,8 @@ def _build_tractability(df: DataFrame, target_ids: DataFrame) -> DataFrame:
         target_ids: DataFrame with a single ``id`` column from output/target.
 
     Returns:
-        DataFrame with columns ``targetId`` and
-        ``tractability`` (``array<struct<modality, id, value>>``).
+        DataFrame with one row per tractability assessment and columns
+        ``targetId``, ``modality``, ``id``, ``value``.
     """
     bucket_cols = [c for c in df.columns if re.match(r'.*_B\d+_.*', c)]
     tractability = df.select('ensembl_gene_id', *bucket_cols)
@@ -87,4 +88,6 @@ def _build_tractability(df: DataFrame, target_ids: DataFrame) -> DataFrame:
         )
         .join(target_ids, f.col('targetId') == f.col('id'), 'inner')
         .drop('id')
+        .select('targetId', f.explode('tractability').alias('assessment'))
+        .select('targetId', 'assessment.modality', 'assessment.id', 'assessment.value')
     )
