@@ -66,7 +66,6 @@ REQUIRED_OUTPUT_COLUMNS = {
     'subcellularLocations',
     'targetClass',
     'hallmarks',
-    'chemicalProbes',
     'tep',
     'synonyms',
     'symbolSynonyms',
@@ -161,7 +160,6 @@ def target(
     tractability_raw = spark.read.option('sep', '\t').option('header', 'true').csv(source['tractability'])
     safety_raw = spark.read.parquet(source['safety_evidence'])
     diseases_raw = spark.read.parquet(source['diseases'])
-    chemical_probes_raw = spark.read.parquet(source['chemical_probes'])
     gene_essentiality_raw = spark.read.parquet(source['gene_essentiality'])
 
     # Uniprot is a gzipped XML flat-file — we read a pre-processed parquet
@@ -304,7 +302,6 @@ def target(
         .transform(lambda df: _add_tep(df, tep_df, ensg_lookup))
         .transform(_filter_and_sort_protein_ids)
         .transform(_remove_redundant_xrefs)
-        .transform(lambda df: _add_chemical_probes(df, chemical_probes_raw, ensg_lookup))
         .transform(lambda df: _add_orthologues(df, homology_df))
         .transform(lambda df: _add_tractability(df, tractability_df))
         .transform(lambda df: _add_ncbi_synonyms(df, ncbi_df))
@@ -1900,26 +1897,6 @@ def _remove_redundant_xrefs(df: DataFrame) -> DataFrame:
     cols = [c for c in df.columns if c != 'dbXrefs']
     cols.append("filter(dbXrefs, s -> s.source != 'GO' and s.source != 'Ensembl') as dbXrefs")
     return df.selectExpr(*cols)
-
-
-def _add_chemical_probes(df: DataFrame, cp_df: DataFrame, lookup: DataFrame) -> DataFrame:
-    """Join chemical probes using symbol lookup."""
-    cp_with_id = cp_df.join(lookup, f.array_contains(f.col('name'), f.col('targetFromSourceId'))).drop(*[
-        c for c in lookup.columns if c != 'ensgId'
-    ])
-
-    cp_cols = [c for c in cp_df.columns if c != 'ensgId']
-    cp_grouped = (
-        cp_with_id
-        .select(
-            f.col('ensgId').alias('id'),
-            f.struct(*cp_cols).alias('probe'),
-        )
-        .groupBy('id')
-        .agg(f.collect_list('probe').alias('chemicalProbes'))
-    )
-
-    return df.join(f.broadcast(cp_grouped), 'id', 'left_outer')
 
 
 def _add_orthologues(df: DataFrame, orthologs: DataFrame) -> DataFrame:
